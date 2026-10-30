@@ -1,0 +1,6 @@
+{
+  "name": "NETVISION – Smart Network Discovery & Monitoring",
+  "description": "Native Android & Material 3 network discovery and monitoring application for Ubiquiti, MikroTik, and enterprise network infrastructure.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

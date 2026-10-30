@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">NETVISION</string>
+    <string name="app_subtitle">اكتشاف ومراقبة الشبكات الذكية</string>
+    <string name="nav_dashboard">لوحة التحكم</string>
+    <string name="nav_devices">الأجهزة</string>
+    <string name="nav_scanner">فاحص الشبكة</string>
+    <string name="nav_monitoring">المراقبة</string>
+    <string name="nav_settings">الإعدادات</string>
+    
+    <string name="total_devices">إجمالي الأجهزة</string>
+    <string name="online_devices">أجهزة متصلة</string>
+    <string name="offline_devices">أجهزة غير متصلة</string>
+    <string name="ubnt_devices">أجهزة UBNT</string>
+    <string name="mikrotik_devices">أجهزة MikroTik</string>
+    <string name="network_health">سلامة الشبكة</string>
+    <string name="recent_activity">النشاط الأخير</string>
+    
+    <string name="start_scan">بدء الفحص</string>
+    <string name="stop_scan">إيقاف الفحص</string>
+    <string name="ip_range">نطاق عنوان IP</string>
+    <string name="scanning_progress">جارٍ فحص الشبكة…</string>
+    
+    <string name="language">اللغة</string>
+    <string name="language_ar">العربية</string>
+    <string name="language_en">English</string>
+    <string name="theme">المظهر</string>
+    <string name="theme_dark">داكن بحري</string>
+    <string name="theme_light">فاتح</string>
+    <string name="theme_system">تلقائي حسب النظام</string>
+</resources>
