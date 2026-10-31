@@ -403,7 +403,7 @@ object SnmpV2Client {
         timeoutMs: Int,
         attemptNumber: Int
     ): List<UbiquitiStationInfo> {
-        val tableRoot = "1.3.6.1.4.1.41112.1.4.7.1"
+        val tableRoot = "1.3.6.1.4.1.41112.1.4.7.1.1"
         var currentOid = encodeOidString(tableRoot)
         data class MutableStation(
             var mac: String? = null,
