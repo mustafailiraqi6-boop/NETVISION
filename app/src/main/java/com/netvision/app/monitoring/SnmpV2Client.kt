@@ -588,7 +588,7 @@ object SnmpV2Client {
                             when (column) {
                                 1 -> parsed.stringValue?.let { raw ->
                                     val hex = raw.trim().split(Regex("\\s+"))
-                                    if (hex.size == 6 && hex.all { it.toIntOrNull(16) in 0..255 }) {
+                                    if (hex.size == 6 && hex.all { token -> token.toIntOrNull(16)?.let { value -> value in 0..255 } == true }) {
                                         row.mac = hex.joinToString(":") { "%02X".format(it.toInt(16)) }
                                     }
                                 }
