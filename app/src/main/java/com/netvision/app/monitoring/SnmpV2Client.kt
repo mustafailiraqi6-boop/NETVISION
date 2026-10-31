@@ -419,23 +419,33 @@ object SnmpV2Client {
 
                     val parsed = parseSnmpResponse(responseData, reqId, community)
 
+                    var shouldExitLoop = false
                     if (!parsed.isSuccess || parsed.responseOid == null) {
                         // Error, endOfMibView, or noSuchInstance
                         if (step == 1) {
                             return TableWalkResult(isSupported = false, rowCount = 0)
                         } else {
-                            break
+                            shouldExitLoop = true
+                        }
+                    } else {
+                        val respOidStr = parsed.responseOid
+                        // Check if response OID still belongs to rootOidStr prefix
+                        if (!respOidStr.startsWith(rootOidStr)) {
+                            // Left table subtree!
+                            if (step == 1) {
+                                // If first GETNEXT immediately went past the prefix, table exists but is EMPTY
+                                isTableSupported = true
+                            }
+                            shouldExitLoop = true
+                        } else {
+                            // Table is supported! Add unique row identifier
+                            isTableSupported = true
+                            uniqueRows.add(respOidStr)
+                            // Advance next GETNEXT to returned OID bytes
+                            currentOidBytes = encodeOidString(respOidStr)
                         }
                     }
-
-                    val respOidStr = parsed.responseOid
-                    // Check if response OID still belongs to rootOidStr prefix
-                    if (!respOidStr.startsWith(rootOidStr)) {
-                        // Left table subtree!
-                        if (step == 1) {
-                            // If first GETNEXT immediately went past the prefix, table exists but is EMPTY
-                            isTableSupported = true
-                        }
+                    if (shouldExitLoop) {
                         break
                     }
 
