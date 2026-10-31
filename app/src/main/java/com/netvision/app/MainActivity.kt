@@ -30,6 +30,7 @@ import com.netvision.app.settings.AppThemeMode
 import com.netvision.app.ui.navigation.Screen
 import com.netvision.app.ui.navigation.bottomNavItems
 import com.netvision.app.ui.screens.DashboardScreen
+import com.netvision.app.ui.screens.DeviceSnmpDetailsScreen
 import com.netvision.app.ui.screens.DevicesScreen
 import com.netvision.app.ui.screens.MonitoringScreen
 import com.netvision.app.ui.screens.ScannerScreen
@@ -136,7 +137,18 @@ fun NetVisionApp(
                 ScannerScreen(isArabic = isArabic)
             }
             composable(Screen.Monitoring.route) {
-                MonitoringScreen(isArabic = isArabic)
+                MonitoringScreen(
+                    isArabic = isArabic,
+                    onViewDeviceDetails = { deviceId -> navController.navigate("device-details/$deviceId") }
+                )
+            }
+            composable("device-details/{deviceId}") { backStackEntry ->
+                val deviceId = backStackEntry.arguments?.getString("deviceId").orEmpty()
+                DeviceSnmpDetailsScreen(
+                    deviceId = deviceId,
+                    isArabic = isArabic,
+                    onBack = { navController.popBackStack() }
+                )
             }
             composable(Screen.Settings.route) {
                 SettingsScreen(
