@@ -2,14 +2,18 @@ package com.netvision.app.ui.viewmodels
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.netvision.app.NetVisionApplication
 import com.netvision.app.models.DeviceStatus
+import com.netvision.app.models.DeviceType
 import com.netvision.app.models.Manufacturer
 import com.netvision.app.models.NetworkDevice
 import com.netvision.app.repository.DeviceRepository
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.launch
 
 data class DevicesUiState(
     val devices: List<NetworkDevice> = emptyList(),
+    val totalCount: Int = 0,
     val searchQuery: String = "",
     val selectedManufacturer: Manufacturer? = null,
     val selectedStatus: DeviceStatus? = null,
@@ -17,7 +21,11 @@ data class DevicesUiState(
 )
 
 class DevicesViewModel(
-    private val repository: DeviceRepository = DeviceRepository()
+    private val repository: DeviceRepository = try {
+        NetVisionApplication.instance.deviceRepository
+    } catch (e: Exception) {
+        DeviceRepository()
+    }
 ) : ViewModel() {
 
     private val _searchQuery = MutableStateFlow("")
@@ -36,6 +44,7 @@ class DevicesViewModel(
             val matchesQuery = query.isEmpty() ||
                     dev.name.contains(query, ignoreCase = true) ||
                     dev.ipAddress.contains(query) ||
+                    dev.macAddress.contains(query, ignoreCase = true) ||
                     dev.model.contains(query, ignoreCase = true)
             val matchesVendor = vendor == null || dev.manufacturer == vendor
             val matchesStatus = status == null || dev.status == status
@@ -50,6 +59,7 @@ class DevicesViewModel(
 
         DevicesUiState(
             devices = filtered,
+            totalCount = devices.size,
             searchQuery = query,
             selectedManufacturer = vendor,
             selectedStatus = status,
@@ -75,5 +85,21 @@ class DevicesViewModel(
 
     fun onSortChange(sort: String) {
         _sortBy.value = sort
+    }
+
+    fun updateDevice(device: NetworkDevice, newName: String, newType: DeviceType) {
+        viewModelScope.launch {
+            val updated = device.copy(
+                name = newName.trim(),
+                deviceType = newType
+            )
+            repository.updateDevice(updated)
+        }
+    }
+
+    fun deleteDevice(device: NetworkDevice) {
+        viewModelScope.launch {
+            repository.deleteDevice(device)
+        }
     }
 }

@@ -1,8 +1,8 @@
 package com.netvision.app.ui.screens
 
-import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -16,115 +16,30 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.netvision.app.models.DeviceStatus
-import com.netvision.app.models.DeviceType
 import com.netvision.app.models.Manufacturer
 import com.netvision.app.models.NetworkDevice
 import com.netvision.app.models.NetworkRange
 import com.netvision.app.ui.theme.*
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
+import com.netvision.app.ui.viewmodels.ScannerViewModel
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ScannerScreen(
     isArabic: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    viewModel: ScannerViewModel = viewModel()
 ) {
-    val coroutineScope = rememberCoroutineScope()
+    val uiState by viewModel.uiState.collectAsState()
+    val savedRanges by viewModel.savedRanges.collectAsState()
 
-    var isScanning by remember { mutableStateOf(false) }
-    var scanProgress by remember { mutableStateOf(0f) }
-    var scannedCount by remember { mutableStateOf(0) }
-    var currentScannedIp by remember { mutableStateOf("192.168.1.1") }
-
-    val presetRanges = remember {
-        mutableStateListOf(
-            NetworkRange("r1", "192.168.1.0/24", "LAN Main", true),
-            NetworkRange("r2", "10.0.0.0/24", "Management VLAN", true),
-            NetworkRange("r3", "172.16.10.0/24", "Guest WiFi", false)
-        )
-    }
-
-    var customCidrInput by remember { mutableStateOf("192.168.1.0/24") }
-    val discoveredScanResults = remember { mutableStateListOf<NetworkDevice>() }
-
-    // Mock scanning loop
-    fun runMockScan() {
-        isScanning = true
-        scanProgress = 0f
-        scannedCount = 0
-        discoveredScanResults.clear()
-
-        coroutineScope.launch {
-            val totalSteps = 100
-            for (step in 1..totalSteps) {
-                if (!isScanning) break
-                delay(80)
-                scanProgress = step / 100f
-                scannedCount = (step * 2.54).toInt()
-                currentScannedIp = "192.168.1.$scannedCount"
-
-                if (step == 10) {
-                    discoveredScanResults.add(
-                        NetworkDevice(
-                            id = "disc-1",
-                            name = "UniFi Dream Machine Pro",
-                            ipAddress = "192.168.1.1",
-                            macAddress = "74:83:C2:11:44:88",
-                            manufacturer = Manufacturer.UBIQUITI,
-                            model = "UDM-Pro",
-                            deviceType = DeviceType.GATEWAY,
-                            status = DeviceStatus.ONLINE
-                        )
-                    )
-                } else if (step == 25) {
-                    discoveredScanResults.add(
-                        NetworkDevice(
-                            id = "disc-2",
-                            name = "MikroTik CCR2004",
-                            ipAddress = "192.168.1.2",
-                            macAddress = "48:8F:5A:23:BC:10",
-                            manufacturer = Manufacturer.MIKROTIK,
-                            model = "CCR2004-16G-2S+",
-                            deviceType = DeviceType.ROUTER,
-                            status = DeviceStatus.ONLINE
-                        )
-                    )
-                } else if (step == 50) {
-                    discoveredScanResults.add(
-                        NetworkDevice(
-                            id = "disc-3",
-                            name = "UniFi Switch Pro 24 PoE",
-                            ipAddress = "192.168.1.10",
-                            macAddress = "68:D7:9A:3C:99:E1",
-                            manufacturer = Manufacturer.UBIQUITI,
-                            model = "USW-Pro-24-PoE",
-                            deviceType = DeviceType.SWITCH,
-                            status = DeviceStatus.ONLINE
-                        )
-                    )
-                } else if (step == 75) {
-                    discoveredScanResults.add(
-                        NetworkDevice(
-                            id = "disc-4",
-                            name = "UniFi U6 Enterprise AP",
-                            ipAddress = "192.168.1.20",
-                            macAddress = "AC:8B:A9:72:3F:4A",
-                            manufacturer = Manufacturer.UBIQUITI,
-                            model = "U6-Enterprise",
-                            deviceType = DeviceType.ACCESS_POINT,
-                            status = DeviceStatus.ONLINE
-                        )
-                    )
-                }
-            }
-            isScanning = false
-        }
-    }
+    var newCidrInput by remember { mutableStateOf("") }
+    var newLabelInput by remember { mutableStateOf("") }
+    var showAddRangeDialog by remember { mutableStateOf(false) }
 
     LazyColumn(
         modifier = modifier
@@ -134,89 +49,54 @@ fun ScannerScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp),
         contentPadding = PaddingValues(top = 16.dp, bottom = 24.dp)
     ) {
-        // Screen Header & Mock Disclaimer
+        // Screen Header
         item {
             Column {
                 Text(
-                    text = if (isArabic) "فاحص الشبكة التلقائي" else "Network Scanner",
+                    text = if (isArabic) "فاحص الشبكات واكتشاف الأجهزة" else "Network Scanner & Discovery",
                     style = MaterialTheme.typography.headlineSmall,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                    text = if (isArabic) "اكتشاف بروتوكولات UBNT Discovery (10001) و MikroTik MNDP (5678)" else "Discovery via UBNT UDP 10001, MikroTik MNDP 5678, & ARP sweeps",
+                    text = if (isArabic) "فحص نطاقات CIDR واكتشاف أجهزة Ubiquiti و MikroTik عبر اتصال OpenVPN"
+                    else "Scan CIDR subnets & discover real Ubiquiti and MikroTik hardware over OpenVPN",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Spacer(modifier = Modifier.height(6.dp))
-                // Prototype notice as required
-                Surface(
-                    color = ElectricBlueContainer.copy(alpha = 0.5f),
-                    shape = RoundedCornerShape(8.dp),
-                    border = CardDefaults.outlinedCardBorder()
-                ) {
-                    Text(
-                        text = if (isArabic) "⚠️ بيئة فحص تجريبية تفاعلية: البيانات المعروضة تمثيلية للاختبار والتصميم قبل ربط حزم الشبكة الحقيقية."
-                        else "⚠️ Prototype Mock Scanner: Workflow running on simulated network data for architecture testing before low-level socket bindings.",
-                        fontSize = 11.sp,
-                        color = CyanAccent,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                    )
-                }
             }
         }
 
-        // Subnet CIDR Range Configuration
-        item {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(14.dp)),
-                shape = RoundedCornerShape(14.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-            ) {
-                Column(modifier = Modifier.padding(14.dp)) {
-                    Text(
-                        text = if (isArabic) "نطاقات الشبكة المستهدفة (CIDR)" else "Target Network Ranges (CIDR)",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    OutlinedTextField(
-                        value = customCidrInput,
-                        onValueChange = { customCidrInput = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text(if (isArabic) "إدخال نطاق IP" else "Enter CIDR Subnet") },
-                        singleLine = true,
-                        shape = RoundedCornerShape(10.dp)
-                    )
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    Text(
-                        text = if (isArabic) "النطاقات المحفوظة:" else "Active Subnets:",
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(presetRanges) { range ->
-                            FilterChip(
-                                selected = range.isEnabled,
-                                onClick = {
-                                    val idx = presetRanges.indexOf(range)
-                                    presetRanges[idx] = range.copy(isEnabled = !range.isEnabled)
-                                },
-                                label = { Text("${range.label} (${range.cidr})") }
-                            )
+        // Error message snackbar / card if any
+        if (uiState.errorMessage != null) {
+            item {
+                Surface(
+                    color = StatusRed.copy(alpha = 0.15f),
+                    shape = RoundedCornerShape(10.dp),
+                    border = CardDefaults.outlinedCardBorder()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.ErrorOutline, contentDescription = null, tint = StatusRed)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = uiState.errorMessage ?: "",
+                            fontSize = 12.sp,
+                            color = StatusRed,
+                            modifier = Modifier.weight(1f)
+                        )
+                        IconButton(onClick = { viewModel.clearError() }) {
+                            Icon(Icons.Default.Close, contentDescription = null, tint = StatusRed)
                         }
                     }
                 }
             }
         }
 
-        // Scan Action Controls & Progress
+        // Subnet CIDR Ranges Management Card
         item {
             Card(
                 modifier = Modifier
@@ -231,23 +111,118 @@ fun ScannerScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column {
+                        Text(
+                            text = if (isArabic) "نطاقات الشبكة CIDR المحفوظة" else "Configured CIDR Subnets",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        TextButton(onClick = { showAddRangeDialog = true }) {
+                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp), tint = CyanAccent)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(if (isArabic) "إضافة نطاق" else "Add Subnet", color = CyanAccent)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    if (savedRanges.isEmpty()) {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(14.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = if (isArabic) "لا توجد نطاقات CIDR محفوظة حالياً." else "No CIDR subnets configured yet.",
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = if (isArabic) "أمثلة: 192.168.1.0/24 أو 10.197.56.224/27 أو 10.10.10.0/24"
+                                    else "Examples: 192.168.1.0/24, 10.197.56.224/27, 10.10.10.0/24",
+                                    fontSize = 11.sp,
+                                    color = CyanAccent
+                                )
+                            }
+                        }
+                    } else {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            savedRanges.forEach { range ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                        Checkbox(
+                                            checked = range.isEnabled,
+                                            onCheckedChange = { viewModel.toggleRange(range.id, it) }
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Column {
+                                            Text(text = range.label, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface)
+                                            Text(text = range.cidr, fontSize = 11.sp, color = CyanAccent)
+                                        }
+                                    }
+
+                                    IconButton(onClick = { viewModel.deleteRange(range.id) }) {
+                                        Icon(
+                                            Icons.Default.DeleteOutline,
+                                            contentDescription = "Delete",
+                                            tint = StatusRed.copy(alpha = 0.8f),
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Quick Scan Input & Action Controls
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(14.dp)),
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = if (isScanning) (if (isArabic) "جاري الفحص..." else "Scanning in Progress...")
-                                else (if (isArabic) "الفاحص جاهز" else "Scanner Ready"),
+                                text = if (uiState.isScanning) (if (isArabic) "جاري الفحص المباشر عبر VPN..." else "Live Probing in Progress...")
+                                else (if (isArabic) "حالة الفاحص: جاهز" else "Scanner Status: Ready"),
                                 style = MaterialTheme.typography.titleMedium,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
-                            Text(
-                                text = if (isScanning) "Probing: $currentScannedIp" else "Subnet: $customCidrInput",
-                                fontSize = 12.sp,
-                                color = CyanAccent
-                            )
+                            if (uiState.isScanning && uiState.currentScannedIp.isNotEmpty()) {
+                                Text(
+                                    text = if (isArabic) "فحص الهدف: ${uiState.currentScannedIp}" else "Probing: ${uiState.currentScannedIp}",
+                                    fontSize = 12.sp,
+                                    color = CyanAccent
+                                )
+                            }
                         }
 
-                        if (!isScanning) {
+                        if (!uiState.isScanning) {
                             Button(
-                                onClick = { runMockScan() },
+                                onClick = { viewModel.startScan() },
                                 colors = ButtonDefaults.buttonColors(containerColor = CyanAccent, contentColor = NavyDark),
                                 shape = RoundedCornerShape(10.dp)
                             ) {
@@ -257,7 +232,7 @@ fun ScannerScreen(
                             }
                         } else {
                             Button(
-                                onClick = { isScanning = false },
+                                onClick = { viewModel.stopScan() },
                                 colors = ButtonDefaults.buttonColors(containerColor = StatusRed, contentColor = Color.White),
                                 shape = RoundedCornerShape(10.dp)
                             ) {
@@ -268,10 +243,10 @@ fun ScannerScreen(
                         }
                     }
 
-                    if (isScanning || scanProgress > 0f) {
+                    if (uiState.isScanning || uiState.progress > 0f) {
                         Spacer(modifier = Modifier.height(14.dp))
                         LinearProgressIndicator(
-                            progress = { scanProgress },
+                            progress = { uiState.progress },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(8.dp)
@@ -285,12 +260,13 @@ fun ScannerScreen(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text(
-                                text = "${(scanProgress * 100).toInt()}% completed",
+                                text = "${(uiState.progress * 100).toInt()}% (${uiState.scannedHostsCount} / ${uiState.totalHostsCount})",
                                 fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Text(
-                                text = if (isArabic) "${discoveredScanResults.size} أجهزة تم اكتشافها" else "${discoveredScanResults.size} Discovered",
+                                text = if (isArabic) "${uiState.discoveredDevices.size} جهاز تم اكتشافه فعلياً"
+                                else "${uiState.discoveredDevices.size} Discovered",
                                 fontSize = 11.sp,
                                 color = CyanAccent
                             )
@@ -308,38 +284,228 @@ fun ScannerScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = if (isArabic) "الأجهزة المكتشفة (${discoveredScanResults.size})" else "Discovered Equipment (${discoveredScanResults.size})",
+                    text = if (isArabic) "نتائج الاكتشاف الحقيقية (${uiState.discoveredDevices.size})"
+                    else "Discovered Hardware (${uiState.discoveredDevices.size})",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface
                 )
             }
         }
 
-        // Discovered Device Cards
-        if (discoveredScanResults.isEmpty()) {
+        // Empty state or Discovered Device Cards
+        if (uiState.discoveredDevices.isEmpty()) {
             item {
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(10.dp),
-                    color = MaterialTheme.colorScheme.surface
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    border = CardDefaults.outlinedCardBorder()
                 ) {
                     Column(
-                        modifier = Modifier.padding(24.dp),
+                        modifier = Modifier.padding(28.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(32.dp))
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Icon(
+                            imageVector = Icons.Default.Search,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(36.dp)
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
                         Text(
-                            text = if (isArabic) "اضغط على 'بدء الفحص' لبدء محاكاة اكتشاف الأجهزة" else "Tap 'Start Scan' to trigger discovery simulation",
+                            text = if (uiState.progress >= 1f) {
+                                if (isArabic) "لم يتم العثور على أجهزة تستجيب في النطاق المحدد.\nتأكد من اتصال OpenVPN وأن مسارات الشبكة متاحة."
+                                else "No responding devices discovered in target CIDR range.\nVerify OpenVPN connection and route access."
+                            } else {
+                                if (isArabic) "حدد نطاق CIDR واضغط على 'بدء الفحص' لاكتشاف أجهزة UBNT و MikroTik الحقيقية."
+                                else "Select CIDR subnet and tap 'Start Scan' to discover genuine devices."
+                            },
                             fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
                         )
                     }
                 }
             }
         } else {
-            items(discoveredScanResults) { dev ->
-                DeviceCardItem(device = dev, isArabic = isArabic)
+            items(uiState.discoveredDevices, key = { it.id }) { dev ->
+                val isAlreadyAdded = uiState.addedDeviceIds.contains(dev.id) || uiState.addedDeviceIds.contains(dev.ipAddress)
+                DiscoveredDeviceCard(
+                    device = dev,
+                    isArabic = isArabic,
+                    isAdded = isAlreadyAdded,
+                    onAddClick = { viewModel.addDeviceToMonitoring(dev) }
+                )
+            }
+        }
+    }
+
+    // Add Range Dialog
+    if (showAddRangeDialog) {
+        AlertDialog(
+            onDismissRequest = { showAddRangeDialog = false },
+            title = {
+                Text(text = if (isArabic) "إضافة نطاق شبكة جديد (CIDR)" else "Add New CIDR Subnet")
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(
+                        value = newCidrInput,
+                        onValueChange = { newCidrInput = it },
+                        label = { Text(if (isArabic) "نطاق CIDR (مثال: 10.197.56.224/27)" else "CIDR (e.g. 10.197.56.224/27)") },
+                        placeholder = { Text("192.168.1.0/24") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = newLabelInput,
+                        onValueChange = { newLabelInput = it },
+                        label = { Text(if (isArabic) "اسم أو وصف النطاق (اختياري)" else "Subnet Label (Optional)") },
+                        placeholder = { Text(if (isArabic) "شبكة الأجهزة الرئيسية" else "Core Routers Subnet") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (newCidrInput.isNotBlank()) {
+                            viewModel.addRange(newCidrInput, newLabelInput)
+                            newCidrInput = ""
+                            newLabelInput = ""
+                            showAddRangeDialog = false
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = CyanAccent, contentColor = NavyDark)
+                ) {
+                    Text(if (isArabic) "حفظ النطاق" else "Save Subnet")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddRangeDialog = false }) {
+                    Text(if (isArabic) "إلغاء" else "Cancel")
+                }
+            }
+        )
+    }
+}
+
+@Composable
+fun DiscoveredDeviceCard(
+    device: NetworkDevice,
+    isArabic: Boolean,
+    isAdded: Boolean,
+    onAddClick: () -> Unit
+) {
+    val vendorColor = when (device.manufacturer) {
+        Manufacturer.UBIQUITI -> ElectricBlue
+        Manufacturer.MIKROTIK -> CyanAccent
+        Manufacturer.CISCO -> Color(0xFF38BDF8)
+        Manufacturer.GENERIC -> TextMutedDark
+    }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(12.dp)),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            // Header: Name & Vendor Badge
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                    Box(
+                        modifier = Modifier
+                            .size(10.dp)
+                            .clip(CircleShape)
+                            .background(StatusGreen)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = device.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+
+                Surface(
+                    color = vendorColor.copy(alpha = 0.15f),
+                    shape = RoundedCornerShape(6.dp)
+                ) {
+                    Text(
+                        text = device.manufacturer.displayName,
+                        fontSize = 11.sp,
+                        color = vendorColor,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            // Details: Model & Type & Latency
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(text = device.model, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
+                Text(text = "•", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    text = if (isArabic) device.deviceType.labelAr else device.deviceType.labelEn,
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(text = "•", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    text = "${device.metrics.pingLatencyMs} ms",
+                    fontSize = 12.sp,
+                    color = CyanAccent
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // IP & MAC Row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(text = "IP: ${device.ipAddress}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
+                    Text(text = "MAC: ${device.macAddress}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+
+                if (isAdded) {
+                    FilledTonalButton(
+                        onClick = {},
+                        enabled = false,
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                    ) {
+                        Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp), tint = StatusGreen)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(if (isArabic) "مضاف للمراقبة" else "Monitored", fontSize = 12.sp, color = StatusGreen)
+                    }
+                } else {
+                    Button(
+                        onClick = onAddClick,
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = CyanAccent, contentColor = NavyDark),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(if (isArabic) "إضافة للمراقبة" else "Add to Monitoring", fontSize = 12.sp)
+                    }
+                }
             }
         }
     }

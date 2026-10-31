@@ -19,45 +19,28 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.netvision.app.models.DeviceStatus
 import com.netvision.app.models.DeviceType
 import com.netvision.app.models.Manufacturer
 import com.netvision.app.models.NetworkDevice
-import com.netvision.app.repository.DeviceRepository
 import com.netvision.app.ui.theme.*
+import com.netvision.app.ui.viewmodels.DevicesViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DevicesScreen(
     isArabic: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    viewModel: DevicesViewModel = viewModel()
 ) {
-    val repository = remember { DeviceRepository() }
-    val allDevices by repository.getAllDevices().collectAsState(initial = emptyList())
+    val uiState by viewModel.uiState.collectAsState()
 
-    var searchQuery by remember { mutableStateOf("") }
-    var selectedManufacturer by remember { mutableStateOf<Manufacturer?>(null) }
-    var selectedStatus by remember { mutableStateOf<DeviceStatus?>(null) }
-    var sortBy by remember { mutableStateOf("name") } // "name", "ip", "latency"
+    var deviceToEdit by remember { mutableStateOf<NetworkDevice?>(null) }
+    var deviceToDelete by remember { mutableStateOf<NetworkDevice?>(null) }
 
-    val filteredDevices = remember(allDevices, searchQuery, selectedManufacturer, selectedStatus, sortBy) {
-        allDevices.filter { device ->
-            val matchesQuery = searchQuery.isEmpty() ||
-                    device.name.contains(searchQuery, ignoreCase = true) ||
-                    device.ipAddress.contains(searchQuery) ||
-                    device.macAddress.contains(searchQuery, ignoreCase = true) ||
-                    device.model.contains(searchQuery, ignoreCase = true)
-            val matchesVendor = selectedManufacturer == null || device.manufacturer == selectedManufacturer
-            val matchesStatus = selectedStatus == null || device.status == selectedStatus
-            matchesQuery && matchesVendor && matchesStatus
-        }.sortedWith { a, b ->
-            when (sortBy) {
-                "ip" -> a.ipAddress.compareTo(b.ipAddress)
-                "latency" -> a.metrics.pingLatencyMs.compareTo(b.metrics.pingLatencyMs)
-                else -> a.name.compareTo(b.name, ignoreCase = true)
-            }
-        }
-    }
+    var editNameInput by remember { mutableStateOf("") }
+    var editTypeSelection by remember { mutableStateOf(DeviceType.ROUTER) }
 
     LazyColumn(
         modifier = modifier
@@ -71,105 +54,268 @@ fun DevicesScreen(
         item {
             Column {
                 Text(
-                    text = if (isArabic) "أجهزة الشبكة" else "Network Devices",
+                    text = if (isArabic) "أجهزة المراقبة المحفوظة" else "Monitored Devices",
                     style = MaterialTheme.typography.headlineSmall,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                    text = if (isArabic) "إجمالي الأجهزة المعروضة: ${filteredDevices.size}" else "Discovered Devices (${filteredDevices.size})",
+                    text = if (isArabic) "إجمالي الأجهزة المحفوظة في قاعدة البيانات: ${uiState.totalCount}"
+                    else "Saved in local Room Database: ${uiState.totalCount}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
 
-        // Search Field
-        item {
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
-                modifier = Modifier.fillMaxWidth(),
-                placeholder = {
-                    Text(
-                        text = if (isArabic) "بحث بالاسم، IP، MAC أو الموديل..." else "Search by name, IP, MAC or model...",
-                        fontSize = 13.sp
-                    )
-                },
-                leadingIcon = {
-                    Icon(imageVector = Icons.Default.Search, contentDescription = null, tint = CyanAccent)
-                },
-                trailingIcon = {
-                    if (searchQuery.isNotEmpty()) {
-                        IconButton(onClick = { searchQuery = "" }) {
-                            Icon(imageVector = Icons.Default.Close, contentDescription = null)
+        // Search Field (shown if there are devices)
+        if (uiState.totalCount > 0) {
+            item {
+                OutlinedTextField(
+                    value = uiState.searchQuery,
+                    onValueChange = { viewModel.onSearchQueryChange(it) },
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = {
+                        Text(
+                            text = if (isArabic) "بحث بالاسم، IP، MAC أو الموديل..." else "Search by name, IP, MAC or model...",
+                            fontSize = 13.sp
+                        )
+                    },
+                    leadingIcon = {
+                        Icon(imageVector = Icons.Default.Search, contentDescription = null, tint = CyanAccent)
+                    },
+                    trailingIcon = {
+                        if (uiState.searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { viewModel.onSearchQueryChange("") }) {
+                                Icon(imageVector = Icons.Default.Close, contentDescription = null)
+                            }
                         }
-                    }
-                },
-                singleLine = true,
-                shape = RoundedCornerShape(12.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = CyanAccent,
-                    unfocusedBorderColor = MaterialTheme.colorScheme.outline,
-                    focusedContainerColor = MaterialTheme.colorScheme.surface,
-                    unfocusedContainerColor = MaterialTheme.colorScheme.surface
+                    },
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = CyanAccent,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                        focusedContainerColor = MaterialTheme.colorScheme.surface,
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surface
+                    )
                 )
-            )
-        }
+            }
 
-        // Filter Chips (Manufacturer)
-        item {
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                item {
-                    FilterChip(
-                        selected = selectedManufacturer == null,
-                        onClick = { selectedManufacturer = null },
-                        label = { Text(if (isArabic) "جميع المصنعين" else "All Vendors") }
-                    )
-                }
-                item {
-                    FilterChip(
-                        selected = selectedManufacturer == Manufacturer.UBIQUITI,
-                        onClick = {
-                            selectedManufacturer = if (selectedManufacturer == Manufacturer.UBIQUITI) null else Manufacturer.UBIQUITI
-                        },
-                        label = { Text("Ubiquiti (UBNT)") }
-                    )
-                }
-                item {
-                    FilterChip(
-                        selected = selectedManufacturer == Manufacturer.MIKROTIK,
-                        onClick = {
-                            selectedManufacturer = if (selectedManufacturer == Manufacturer.MIKROTIK) null else Manufacturer.MIKROTIK
-                        },
-                        label = { Text("MikroTik") }
-                    )
-                }
-                item {
-                    FilterChip(
-                        selected = selectedManufacturer == Manufacturer.CISCO,
-                        onClick = {
-                            selectedManufacturer = if (selectedManufacturer == Manufacturer.CISCO) null else Manufacturer.CISCO
-                        },
-                        label = { Text("Cisco") }
-                    )
+            // Filter Chips (Manufacturer)
+            item {
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    item {
+                        FilterChip(
+                            selected = uiState.selectedManufacturer == null,
+                            onClick = { viewModel.onManufacturerSelected(null) },
+                            label = { Text(if (isArabic) "جميع المصنعين" else "All Vendors") }
+                        )
+                    }
+                    item {
+                        FilterChip(
+                            selected = uiState.selectedManufacturer == Manufacturer.UBIQUITI,
+                            onClick = {
+                                viewModel.onManufacturerSelected(
+                                    if (uiState.selectedManufacturer == Manufacturer.UBIQUITI) null else Manufacturer.UBIQUITI
+                                )
+                            },
+                            label = { Text("Ubiquiti (UBNT)") }
+                        )
+                    }
+                    item {
+                        FilterChip(
+                            selected = uiState.selectedManufacturer == Manufacturer.MIKROTIK,
+                            onClick = {
+                                viewModel.onManufacturerSelected(
+                                    if (uiState.selectedManufacturer == Manufacturer.MIKROTIK) null else Manufacturer.MIKROTIK
+                                )
+                            },
+                            label = { Text("MikroTik") }
+                        )
+                    }
+                    item {
+                        FilterChip(
+                            selected = uiState.selectedManufacturer == Manufacturer.CISCO,
+                            onClick = {
+                                viewModel.onManufacturerSelected(
+                                    if (uiState.selectedManufacturer == Manufacturer.CISCO) null else Manufacturer.CISCO
+                                )
+                            },
+                            label = { Text("Cisco") }
+                        )
+                    }
                 }
             }
         }
 
-        // Device Items List
-        items(filteredDevices, key = { it.id }) { device ->
-            DeviceCardItem(device = device, isArabic = isArabic)
+        // Empty state when DB is empty
+        if (uiState.totalCount == 0) {
+            item {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    border = CardDefaults.outlinedCardBorder()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(32.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.DevicesOther,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(40.dp)
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = if (isArabic) "لا توجد أجهزة مضافة للمراقبة حالياً."
+                            else "No devices saved for monitoring yet.",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = if (isArabic) "انتقل إلى قسم 'فاحص الشبكة' لتحديد نطاق CIDR، واكتشاف أجهزة UBNT و MikroTik وإضافتها هنا للمراقبة الدائمة."
+                            else "Go to the Network Scanner tab to probe your CIDR subnets and add real devices for permanent monitoring.",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                    }
+                }
+            }
+        } else if (uiState.devices.isEmpty()) {
+            item {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(10.dp),
+                    color = MaterialTheme.colorScheme.surface
+                ) {
+                    Text(
+                        text = if (isArabic) "لا توجد أجهزة مطابقة لمعايير البحث الحالية."
+                        else "No devices matched your search or filter.",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(20.dp)
+                    )
+                }
+            }
+        } else {
+            // Device Items List
+            items(uiState.devices, key = { it.id }) { device ->
+                SavedDeviceCardItem(
+                    device = device,
+                    isArabic = isArabic,
+                    onEditClick = {
+                        deviceToEdit = device
+                        editNameInput = device.name
+                        editTypeSelection = device.deviceType
+                    },
+                    onDeleteClick = {
+                        deviceToDelete = device
+                    }
+                )
+            }
         }
+    }
+
+    // Edit Device Dialog
+    if (deviceToEdit != null) {
+        val target = deviceToEdit!!
+        AlertDialog(
+            onDismissRequest = { deviceToEdit = null },
+            title = { Text(if (isArabic) "تعديل بيانات الجهاز" else "Edit Device Details") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedTextField(
+                        value = editNameInput,
+                        onValueChange = { editNameInput = it },
+                        label = { Text(if (isArabic) "اسم الجهاز" else "Device Name") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Text(
+                        text = if (isArabic) "نوع الجهاز:" else "Device Type:",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        listOf(DeviceType.ROUTER, DeviceType.SWITCH, DeviceType.ACCESS_POINT).forEach { type ->
+                            FilterChip(
+                                selected = editTypeSelection == type,
+                                onClick = { editTypeSelection = type },
+                                label = { Text(if (isArabic) type.labelAr else type.labelEn, fontSize = 11.sp) }
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.updateDevice(target, editNameInput, editTypeSelection)
+                        deviceToEdit = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = CyanAccent, contentColor = NavyDark)
+                ) {
+                    Text(if (isArabic) "حفظ التغييرات" else "Save Changes")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { deviceToEdit = null }) {
+                    Text(if (isArabic) "إلغاء" else "Cancel")
+                }
+            }
+        )
+    }
+
+    // Delete Device Dialog
+    if (deviceToDelete != null) {
+        val target = deviceToDelete!!
+        AlertDialog(
+            onDismissRequest = { deviceToDelete = null },
+            title = { Text(if (isArabic) "حذف الجهاز من المراقبة" else "Remove Device from Monitoring") },
+            text = {
+                Text(
+                    text = if (isArabic) "هل أنت متأكد من حذف الجهاز '${target.name}' (${target.ipAddress}) من قائمة المراقبة وقاعدة البيانات؟"
+                    else "Are you sure you want to remove '${target.name}' (${target.ipAddress}) from monitoring and local storage?"
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.deleteDevice(target)
+                        deviceToDelete = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = StatusRed, contentColor = Color.White)
+                ) {
+                    Text(if (isArabic) "تأكيد الحذف" else "Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { deviceToDelete = null }) {
+                    Text(if (isArabic) "إلغاء" else "Cancel")
+                }
+            }
+        )
     }
 }
 
 @Composable
-fun DeviceCardItem(
+fun SavedDeviceCardItem(
     device: NetworkDevice,
-    isArabic: Boolean
+    isArabic: Boolean,
+    onEditClick: () -> Unit,
+    onDeleteClick: () -> Unit
 ) {
     val statusColor = when (device.status) {
         DeviceStatus.ONLINE -> StatusGreen
@@ -192,7 +338,7 @@ fun DeviceCardItem(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
-            // Header Row: Name & Status
+            // Header: Name & Status & Actions
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -212,11 +358,21 @@ fun DeviceCardItem(
                         color = MaterialTheme.colorScheme.onSurface
                     )
                 }
-                Text(
-                    text = if (isArabic) device.status.labelAr else device.status.labelEn,
-                    fontSize = 11.sp,
-                    color = statusColor
-                )
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = if (isArabic) device.status.labelAr else device.status.labelEn,
+                        fontSize = 11.sp,
+                        color = statusColor
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    IconButton(onClick = onEditClick, modifier = Modifier.size(28.dp)) {
+                        Icon(Icons.Default.Edit, contentDescription = "Edit", modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    IconButton(onClick = onDeleteClick, modifier = Modifier.size(28.dp)) {
+                        Icon(Icons.Default.DeleteOutline, contentDescription = "Delete", modifier = Modifier.size(16.dp), tint = StatusRed.copy(alpha = 0.8f))
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.height(6.dp))
@@ -259,19 +415,25 @@ fun DeviceCardItem(
                     Text(text = "MAC: ${device.macAddress}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
 
-                if (device.status != DeviceStatus.OFFLINE) {
-                    Column(horizontalAlignment = Alignment.End) {
+                Column(horizontalAlignment = Alignment.End) {
+                    if (device.status == DeviceStatus.ONLINE) {
                         Text(
                             text = "${device.metrics.pingLatencyMs} ms",
                             fontSize = 13.sp,
-                            color = if (device.metrics.pingLatencyMs > 30) StatusAmber else CyanAccent
+                            color = CyanAccent
                         )
+                    } else {
                         Text(
-                            text = "CPU ${device.metrics.cpuUsagePercent}%",
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            text = if (isArabic) "غير متصل" else "Offline",
+                            fontSize = 12.sp,
+                            color = StatusRed
                         )
                     }
+                    Text(
+                        text = if (device.metrics.uptimeFormatted.isNotBlank() && device.metrics.uptimeFormatted != "N/A") "Uptime: ${device.metrics.uptimeFormatted}" else "",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }

@@ -19,28 +19,29 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.netvision.app.models.DeviceStatus
 import com.netvision.app.models.Manufacturer
 import com.netvision.app.models.NetworkDevice
-import com.netvision.app.repository.DeviceRepository
 import com.netvision.app.ui.theme.*
+import com.netvision.app.ui.viewmodels.MonitoringViewModel
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @Composable
 fun MonitoringScreen(
     isArabic: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    viewModel: MonitoringViewModel = viewModel()
 ) {
-    val repository = remember { DeviceRepository() }
-    val allDevices by repository.getAllDevices().collectAsState(initial = emptyList())
-    var selectedDevice by remember { mutableStateOf<NetworkDevice?>(null) }
+    val savedDevices by viewModel.savedDevices.collectAsState()
+    val uiState by viewModel.uiState.collectAsState()
 
-    LaunchedEffect(allDevices) {
-        if (selectedDevice == null && allDevices.isNotEmpty()) {
-            selectedDevice = allDevices.first()
-        }
-    }
+    val activeDevice = savedDevices.find { it.id == uiState.selectedDeviceId } ?: savedDevices.firstOrNull()
+    val snmpInfo = activeDevice?.let { uiState.snmpStatusByDevice[it.id] }
 
-    val active = selectedDevice ?: allDevices.firstOrNull()
+    val dateFormat = remember { SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.getDefault()) }
 
     LazyColumn(
         modifier = modifier
@@ -53,238 +54,267 @@ fun MonitoringScreen(
         // Screen Header
         item {
             Column {
-                Text(
-                    text = if (isArabic) "مراقبة الأجهزة الحية" else "Device Telemetry & Monitoring",
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = if (isArabic) "مؤشرات SNMP v2c/v3 وواجهات قياس الأداء" else "Real-time metrics, bandwidth utilization, and latency counters",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                // Clearly identified placeholder values notice per prompt instructions
-                Surface(
-                    color = ElectricBlueContainer.copy(alpha = 0.5f),
-                    shape = RoundedCornerShape(8.dp),
-                    border = CardDefaults.outlinedCardBorder()
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = if (isArabic) "ℹ️ قيم قياس أولية: يتم استخدام قيم قياس استرشادية حتى اكتمال الربط المباشر بمكتبة بروتوكول SNMP."
-                        else "ℹ️ Prototype SNMP Telemetry: Placeholder metric counters displayed prior to live socket SNMP daemon polling.",
-                        fontSize = 11.sp,
-                        color = CyanAccent,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = if (isArabic) "مراقبة الأجهزة الحية" else "Live Device Monitoring",
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = if (isArabic) "مراقبة دورية فورية عبر ICMP / TCP Connect و SNMP v2c/v3"
+                            else "Periodic live polling via ICMP/TCP Connect & SNMP v2c/v3",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    FilledTonalButton(
+                        onClick = { viewModel.refreshNow() },
+                        enabled = !uiState.isPollingNow && savedDevices.isNotEmpty(),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        if (uiState.isPollingNow) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = CyanAccent)
+                        } else {
+                            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                        }
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(if (isArabic) "تحديث الآن" else "Refresh")
+                    }
                 }
             }
         }
 
-        // Device Selector Row
-        item {
-            Column {
-                Text(
-                    text = if (isArabic) "اختر الجهاز للمراقبة:" else "Select Monitored Device:",
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(allDevices) { dev ->
-                        val isSelected = active?.id == dev.id
-                        FilterChip(
-                            selected = isSelected,
-                            onClick = { selectedDevice = dev },
-                            label = { Text(dev.name) },
-                            leadingIcon = {
-                                Box(
-                                    modifier = Modifier
-                                        .size(8.dp)
-                                        .clip(CircleShape)
-                                        .background(if (dev.status == DeviceStatus.ONLINE) StatusGreen else StatusRed)
-                                )
-                            }
+        // Empty state when no devices are saved
+        if (savedDevices.isEmpty()) {
+            item {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    border = CardDefaults.outlinedCardBorder()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(32.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.MonitorHeart,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(40.dp)
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = if (isArabic) "لا توجد أجهزة مضافة للمراقبة حالياً."
+                            else "No devices saved for monitoring.",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = if (isArabic) "انتقل إلى قسم 'فاحص الشبكة' لتشغيل الفحص وإضافة أجهزة Ubiquiti أو MikroTik لقائمة المراقبة."
+                            else "Navigate to the Network Scanner tab to discover and add real Ubiquiti or MikroTik hardware.",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
                         )
                     }
                 }
             }
-        }
-
-        if (active != null) {
-            // Selected Device Overview Header Card
+        } else {
+            // Device Selector Row
             item {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(14.dp)),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column {
-                                Text(
-                                    text = active.name,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Text(
-                                    text = "${active.manufacturer.displayName} • ${active.model} (${active.ipAddress})",
-                                    fontSize = 12.sp,
-                                    color = CyanAccent
-                                )
-                            }
-                            Text(
-                                text = "SNMP v2c",
-                                fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                Column {
+                    Text(
+                        text = if (isArabic) "اختر الجهاز لعرض تفاصيل المراقبة:" else "Select Monitored Device:",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(savedDevices) { dev ->
+                            val isSelected = activeDevice?.id == dev.id
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = { viewModel.selectDevice(dev.id) },
+                                label = { Text(dev.name) },
+                                leadingIcon = {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(8.dp)
+                                            .clip(CircleShape)
+                                            .background(if (dev.status == DeviceStatus.ONLINE) StatusGreen else StatusRed)
+                                    )
+                                }
                             )
                         }
                     }
                 }
             }
 
-            // Metric Cards Grid
-            // 1. Ping Latency & Uptime
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    MetricDashboardCard(
-                        modifier = Modifier.weight(1f),
-                        title = if (isArabic) "زمن الاستجابة (Ping)" else "Ping Latency",
-                        value = "${active.metrics.pingLatencyMs} ms",
-                        subtext = if (active.metrics.pingLatencyMs < 10) "Stable ICMP echo" else "High jitter noticed",
-                        icon = Icons.Default.Speed,
-                        tint = if (active.metrics.pingLatencyMs < 20) StatusGreen else StatusAmber
-                    )
-                    MetricDashboardCard(
-                        modifier = Modifier.weight(1f),
-                        title = if (isArabic) "مدة التشغيل (Uptime)" else "Device Uptime",
-                        value = active.metrics.uptimeFormatted,
-                        subtext = "Continuous operation",
-                        icon = Icons.Default.Timer,
-                        tint = ElectricBlue
-                    )
-                }
-            }
+            if (activeDevice != null) {
+                val dev = activeDevice
+                val isOnline = dev.status == DeviceStatus.ONLINE
 
-            // 2. CPU Usage & Memory Usage
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    MetricDashboardCard(
-                        modifier = Modifier.weight(1f),
-                        title = if (isArabic) "استهلاك المعالج" else "CPU Load",
-                        value = "${active.metrics.cpuUsagePercent}%",
-                        subtext = "Quad-core ARM Cortex",
-                        icon = Icons.Default.Memory,
-                        tint = if (active.metrics.cpuUsagePercent > 70) StatusAmber else CyanAccent
-                    )
-                    MetricDashboardCard(
-                        modifier = Modifier.weight(1f),
-                        title = if (isArabic) "استهلاك الذاكرة" else "Memory Usage",
-                        value = "${active.metrics.memoryUsagePercent}%",
-                        subtext = "4GB DDR4 allocated",
-                        icon = Icons.Default.Storage,
-                        tint = CyanAccent
-                    )
-                }
-            }
-
-            // 3. Traffic TX / RX
-            item {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(14.dp)),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = if (isArabic) "حركة البيانات (TX / RX Traffic)" else "Interface Bandwidth (TX/RX)",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Icon(Icons.Default.SwapVert, contentDescription = null, tint = CyanAccent)
-                        }
-                        Spacer(modifier = Modifier.height(14.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Column {
-                                Text(
-                                    text = if (isArabic) "معدل الإرسال (TX)" else "Transmit (TX)",
-                                    fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Text(
-                                    text = "${active.metrics.txRateMbps} Mbps",
-                                    fontSize = 20.sp,
-                                    color = ElectricBlue
-                                )
-                            }
-                            Column(horizontalAlignment = Alignment.End) {
-                                Text(
-                                    text = if (isArabic) "معدل الاستقبال (RX)" else "Receive (RX)",
-                                    fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Text(
-                                    text = "${active.metrics.rxRateMbps} Mbps",
-                                    fontSize = 20.sp,
-                                    color = CyanAccent
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            // 4. Wireless Signal Strength (dBm) for APs / Radios
-            item {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(14.dp)),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                ) {
-                    Row(
+                // Active Device Card
+                item {
+                    Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(16.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(14.dp)),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                     ) {
-                        Column {
-                            Text(
-                                text = if (isArabic) "قوة الإشارة اللاسلكية" else "RF Signal Strength",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = "RSSI: ${active.metrics.signalDbm} dBm (Good Link Quality)",
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(12.dp)
+                                            .clip(CircleShape)
+                                            .background(if (isOnline) StatusGreen else StatusRed)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Column {
+                                        Text(
+                                            text = dev.name,
+                                            style = MaterialTheme.typography.titleMedium,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Text(
+                                            text = "${dev.manufacturer.displayName} • ${dev.model} (${dev.ipAddress})",
+                                            fontSize = 12.sp,
+                                            color = CyanAccent
+                                        )
+                                    }
+                                }
+
+                                Surface(
+                                    color = if (isOnline) StatusGreen.copy(alpha = 0.15f) else StatusRed.copy(alpha = 0.15f),
+                                    shape = RoundedCornerShape(6.dp)
+                                ) {
+                                    Text(
+                                        text = if (isArabic) dev.status.labelAr else dev.status.labelEn,
+                                        fontSize = 11.sp,
+                                        color = if (isOnline) StatusGreen else StatusRed,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    )
+                                }
+                            }
                         }
-                        Icon(Icons.Default.Wifi, contentDescription = null, tint = StatusGreen, modifier = Modifier.size(28.dp))
+                    }
+                }
+
+                // Metric Cards: Ping Latency & Last Seen
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        RealMetricCard(
+                            modifier = Modifier.weight(1f),
+                            title = if (isArabic) "زمن الاستجابة (Latency)" else "Response Time",
+                            value = if (isOnline) "${dev.metrics.pingLatencyMs} ms" else "N/A",
+                            subtext = if (isOnline) "ICMP / TCP Connect" else (if (isArabic) "انقطع الاتصال" else "Host unreachable"),
+                            icon = Icons.Default.Speed,
+                            tint = if (isOnline) CyanAccent else StatusRed
+                        )
+
+                        RealMetricCard(
+                            modifier = Modifier.weight(1f),
+                            title = if (isArabic) "آخر مشاهدة" else "Last Seen",
+                            value = dateFormat.format(Date(dev.lastSeenTimestamp)),
+                            subtext = if (isArabic) "تاريخ آخر استجابة" else "Timestamp",
+                            icon = Icons.Default.AccessTime,
+                            tint = ElectricBlue
+                        )
+                    }
+                }
+
+                // SNMP Card (Real values only)
+                item {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(14.dp)),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.SettingsEthernet, contentDescription = null, tint = CyanAccent, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = if (isArabic) "معلومات بروتوكول SNMP" else "SNMP Telemetry Details",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+
+                                Surface(
+                                    color = if (snmpInfo != null) StatusGreen.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant,
+                                    shape = RoundedCornerShape(6.dp)
+                                ) {
+                                    Text(
+                                        text = if (snmpInfo != null) "SNMP v2c Active"
+                                        else (if (isArabic) "SNMP غير مفعل" else "SNMP Inactive"),
+                                        fontSize = 11.sp,
+                                        color = if (snmpInfo != null) StatusGreen else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            if (snmpInfo != null) {
+                                snmpInfo.sysName?.let { name ->
+                                    Text(
+                                        text = "sysName: $name",
+                                        fontSize = 12.sp,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                }
+                                snmpInfo.uptimeFormatted?.let { uptime ->
+                                    Text(
+                                        text = "${if (isArabic) "مدة تشغيل الجهاز (Uptime):" else "Device Uptime:"} $uptime",
+                                        fontSize = 12.sp,
+                                        color = CyanAccent
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                }
+                                snmpInfo.sysDescr?.let { descr ->
+                                    Text(
+                                        text = "sysDescr: $descr",
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            } else {
+                                Text(
+                                    text = if (isArabic) "الجهاز متصل ومراقب عبر ICMP/TCP. للحصول على مدة التشغيل والتفاصيل البرمجية، يرجى تفعيل SNMP على الجهاز بمجتمع 'public'."
+                                    else "Device is monitored via ICMP/TCP ping. To pull uptime and system info, enable SNMP on the device with community 'public'.",
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -293,7 +323,7 @@ fun MonitoringScreen(
 }
 
 @Composable
-fun MetricDashboardCard(
+fun RealMetricCard(
     title: String,
     value: String,
     subtext: String,
@@ -316,7 +346,7 @@ fun MetricDashboardCard(
                 Icon(imageVector = icon, contentDescription = null, tint = tint, modifier = Modifier.size(16.dp))
             }
             Spacer(modifier = Modifier.height(6.dp))
-            Text(text = value, fontSize = 20.sp, color = MaterialTheme.colorScheme.onSurface)
+            Text(text = value, fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurface)
             Spacer(modifier = Modifier.height(2.dp))
             Text(text = subtext, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
