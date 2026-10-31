@@ -29,6 +29,7 @@ data class SnmpDeviceInfo(
     val connectedClientsCount: Int? = null,
     val connectedStationsMacs: List<String> = emptyList(),
     val connectedStations: List<UbiquitiStationInfo> = emptyList(),
+    val connectedMikrotikStations: List<MikrotikStationInfo> = emptyList(),
     val errorMessage: String? = null,
     val communityUsed: String = "netvision",
     val latencyMs: Long = 0,
@@ -51,6 +52,15 @@ data class UbiquitiStationInfo(
     val rxRate: Int? = null,
     val connectionTime: String? = null,
     val latencyMs: Int? = null
+)
+
+data class MikrotikStationInfo(
+    val macAddress: String,
+    val deviceName: String? = null,
+    val signalDbm: Int? = null,
+    val txRateMbps: Double? = null,
+    val rxRateMbps: Double? = null,
+    val connectionTime: String? = null
 )
 
 data class SnmpDiagnosticRecord(
@@ -247,6 +257,12 @@ object SnmpV2Client {
                 val isUbiquiti = stationResult.source.contains("Ubiquiti", ignoreCase = true) ||
                     sysObjRes.stringValue?.contains("41112") == true ||
                     descrRes.stringValue?.let { it.contains("AirOS", true) || it.contains("UBNT", true) || it.contains("Ubiquiti", true) } == true
+                val isMikroTik = stationResult.source.contains("MikroTik", ignoreCase = true) ||
+                    sysObjRes.stringValue?.contains("14988") == true ||
+                    descrRes.stringValue?.let { it.contains("RouterOS", true) || it.contains("MikroTik", true) } == true
+                val detailedMikrotikStations = if (isMikroTik) {
+                    walkMikrotikStations(targetIp, community, port, currentVersion, 800, attemptNumber)
+                } else emptyList()
                 val detailedStations = if (isUbiquiti) {
                     walkUbiquitiStations(
                         ip = targetIp,
@@ -285,6 +301,7 @@ object SnmpV2Client {
                         connectedClientsCount = clientCount,
                         connectedStationsMacs = if (detailedStations.isNotEmpty()) detailedStations.map { it.macAddress } else stationResult.macAddresses,
                         connectedStations = detailedStations,
+                        connectedMikrotikStations = detailedMikrotikStations,
                         communityUsed = community,
                         latencyMs = totalLatency,
                         networkInterface = lastInterface,
@@ -505,6 +522,102 @@ object SnmpV2Client {
                 rxRate = row.rxRate,
                 connectionTime = row.connectionTicks?.let { formatTimeTicks(it) },
                 latencyMs = row.latency
+            )
+        }
+    }
+
+    /**
+     * Reads MikroTik wireless registration entries. Index format is
+     * <interfaceIndex>.<six MAC octets>; columns are read by their table OID.
+     */
+    private fun walkMikrotikStations(
+        ip: String,
+        community: String,
+        port: Int,
+        version: String,
+        timeoutMs: Int,
+        attemptNumber: Int
+    ): List<MikrotikStationInfo> {
+        val tableRoot = "1.3.6.1.4.1.14988.1.1.1.2.1"
+        var currentOid = encodeOidString(tableRoot)
+        data class MutableStation(
+            var mac: String? = null,
+            var name: String? = null,
+            var signal: Int? = null,
+            var txRate: Long? = null,
+            var rxRate: Long? = null,
+            var uptimeTicks: Long? = null
+        )
+        val rows = linkedMapOf<String, MutableStation>()
+
+        for (step in 1..500) {
+            val requestId = requestIdCounter.incrementAndGet()
+            val versionInt = if (version.equals("v1", ignoreCase = true)) 0 else 1
+            val packet = buildGetNextRequest(requestId, community, currentOid, versionInt)
+            var shouldStop = false
+            try {
+                DatagramSocket().use { socket ->
+                    socket.soTimeout = timeoutMs
+                    val vpnInfo = resolveVpnNetwork()
+                    if (vpnInfo.first != null) {
+                        try { vpnInfo.first!!.bindSocket(socket) } catch (_: Exception) { }
+                    }
+                    val address = InetAddress.getByName(ip)
+                    socket.send(DatagramPacket(packet, packet.size, address, port))
+                    val buffer = ByteArray(2048)
+                    val received = DatagramPacket(buffer, buffer.size)
+                    socket.receive(received)
+                    val parsed = parseSnmpResponse(buffer.copyOf(received.length), requestId, community)
+                    val oid = parsed.responseOid
+                    if (!parsed.isSuccess || oid == null || !oid.startsWith("$tableRoot.")) {
+                        shouldStop = true
+                    } else {
+                        val parts = oid.removePrefix("$tableRoot.").split('.')
+                        // Column + interface index + six MAC octets.
+                        if (parts.size < 8) {
+                            shouldStop = true
+                        } else {
+                            val column = parts[0].toIntOrNull()
+                            val indexParts = parts.drop(1)
+                            val index = indexParts.joinToString(".")
+                            val macOctets = indexParts.takeLast(6).mapNotNull { it.toIntOrNull() }
+                            val row = rows.getOrPut(index) { MutableStation() }
+                            if (macOctets.size == 6 && macOctets.all { it in 0..255 }) {
+                                row.mac = macOctets.joinToString(":") { "%02X".format(it) }
+                            }
+                            when (column) {
+                                1 -> parsed.stringValue?.let { raw ->
+                                    val hex = raw.trim().split(Regex("\\s+"))
+                                    if (hex.size == 6 && hex.all { it.toIntOrNull(16) in 0..255 }) {
+                                        row.mac = hex.joinToString(":") { "%02X".format(it.toInt(16)) }
+                                    }
+                                }
+                                3 -> row.signal = parsed.intValue
+                                8 -> row.txRate = parsed.longValue
+                                9 -> row.rxRate = parsed.longValue
+                                11 -> row.uptimeTicks = parsed.longValue
+                                20 -> row.name = parsed.stringValue?.takeIf { it.isNotBlank() }
+                            }
+                            currentOid = encodeOidString(oid)
+                        }
+                    }
+                }
+            } catch (_: Exception) {
+                shouldStop = true
+            }
+            if (shouldStop) break
+        }
+
+        return rows.values.mapNotNull { row ->
+            val mac = row.mac?.takeIf { it.matches(Regex("^(?:[0-9A-F]{2}:){5}[0-9A-F]{2}$")) }
+                ?: return@mapNotNull null
+            MikrotikStationInfo(
+                macAddress = mac,
+                deviceName = row.name,
+                signalDbm = row.signal,
+                txRateMbps = row.txRate?.div(1_000_000.0),
+                rxRateMbps = row.rxRate?.div(1_000_000.0),
+                connectionTime = row.uptimeTicks?.let { formatTimeTicks(it) }
             )
         }
     }
