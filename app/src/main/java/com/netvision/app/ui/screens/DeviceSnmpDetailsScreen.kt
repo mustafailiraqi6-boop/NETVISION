@@ -28,6 +28,10 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -165,6 +169,10 @@ private fun SnmpDetailRow(label: String, value: String) {
 @Composable
 private fun UbiquitiStationCard(station: UbiquitiStationInfo, isArabic: Boolean) {
     val clipboard = LocalClipboardManager.current
+    var expanded by remember(station.macAddress) { mutableStateOf(false) }
+    val stationName = station.deviceName?.takeIf { it.isNotBlank() }
+        ?: (if (isArabic) "اسم المحطة غير متاح" else "Station name unavailable")
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
@@ -172,52 +180,63 @@ private fun UbiquitiStationCard(station: UbiquitiStationInfo, isArabic: Boolean)
     ) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(9.dp)
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Text(
-                station.deviceName?.takeIf { it.isNotBlank() } ?: (if (isArabic) "اسم المحطة غير متاح" else "Station name unavailable"),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(Modifier.weight(1f)) {
-                    Text("MAC", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(station.macAddress, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                    station.lastIpAddress?.takeIf { it.isNotBlank() }?.let {
-                        Text("IP: $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-                OutlinedButton(onClick = { clipboard.setText(AnnotatedString(station.macAddress)) }) {
-                    Icon(Icons.Default.ContentCopy, contentDescription = null)
-                    Text(if (isArabic) "نسخ" else "Copy")
+                Text(
+                    stationName,
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                OutlinedButton(onClick = { expanded = !expanded }) {
+                    Text(
+                        if (expanded) {
+                            if (isArabic) "إخفاء التفاصيل" else "Hide details"
+                        } else {
+                            if (isArabic) "عرض التفاصيل" else "View details"
+                        }
+                    )
                 }
             }
-            Divider()
-            val metrics = listOf(
-                (if (isArabic) "الإشارة" else "Signal") to station.signalDbm?.let { "$it dBm" },
-                (if (isArabic) "التشويش" else "Noise") to station.noiseDbm?.let { "$it dBm" },
-                "CCQ" to station.ccqPercent?.let { "$it%" },
-                (if (isArabic) "جودة airMAX" else "airMAX quality") to station.airMaxQualityPercent?.let { "$it%" },
-                (if (isArabic) "سعة airMAX" else "airMAX capacity") to station.airMaxCapacityPercent?.let { "$it%" },
-                (if (isArabic) "المسافة" else "Distance") to station.distance?.toString(),
-                (if (isArabic) "TX rate" else "TX rate") to station.txRate?.let { "$it Mbps" },
-                (if (isArabic) "RX rate" else "RX rate") to station.rxRate?.let { "$it Mbps" },
-                (if (isArabic) "مدة الاتصال" else "Connection time") to station.connectionTime,
-                (if (isArabic) "زمن التأخير" else "Latency") to station.latencyMs?.let { "$it ms" }
-            ).filter { !it.second.isNullOrBlank() }
-            metrics.chunked(2).forEach { pair ->
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    pair.forEach { (label, value) ->
-                        Column(Modifier.weight(1f)) {
-                            Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(value.orEmpty(), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-                        }
+
+            if (expanded) {
+                Divider()
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("MAC Address", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(station.macAddress, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                     }
-                    if (pair.size == 1) Spacer(Modifier.weight(1f))
+                    OutlinedButton(onClick = { clipboard.setText(AnnotatedString(station.macAddress)) }) {
+                        Icon(Icons.Default.ContentCopy, contentDescription = null)
+                        Text(if (isArabic) "نسخ" else "Copy")
+                    }
+                }
+                Divider()
+                val metrics = listOf(
+                    (if (isArabic) "إشارة الجهاز" else "Signal") to station.signalDbm?.let { "$it dBm" },
+                    "CCQ" to station.ccqPercent?.let { "$it%" },
+                    (if (isArabic) "Data Rate (TX)" else "Data Rate (TX)") to station.txRate?.let { "$it Mbps" },
+                    (if (isArabic) "Data Rate (RX)" else "Data Rate (RX)") to station.rxRate?.let { "$it Mbps" }
+                )
+                metrics.chunked(2).forEach { pair ->
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        pair.forEach { (label, value) ->
+                            Column(Modifier.weight(1f)) {
+                                Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(value ?: "—", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                            }
+                        }
+                        if (pair.size == 1) Spacer(Modifier.weight(1f))
+                    }
                 }
             }
         }
@@ -227,23 +246,26 @@ private fun UbiquitiStationCard(station: UbiquitiStationInfo, isArabic: Boolean)
 @Composable
 private fun StationMacCard(mac: String, isArabic: Boolean) {
     val clipboard = LocalClipboardManager.current
+    var expanded by remember(mac) { mutableStateOf(false) }
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text(if (isArabic) "عنوان MAC للمحطة" else "Station MAC", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(mac, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text(if (isArabic) "محطة غير معروفة" else "Unknown station", modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                OutlinedButton(onClick = { expanded = !expanded }) {
+                    Text(if (expanded) { if (isArabic) "إخفاء التفاصيل" else "Hide details" } else { if (isArabic) "عرض التفاصيل" else "View details" })
+                }
             }
-            OutlinedButton(onClick = { clipboard.setText(AnnotatedString(mac)) }) {
-                Icon(Icons.Default.ContentCopy, contentDescription = null)
-                Text(if (isArabic) "نسخ" else "Copy")
+            if (expanded) {
+                Text(mac, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                OutlinedButton(onClick = { clipboard.setText(AnnotatedString(mac)) }) {
+                    Icon(Icons.Default.ContentCopy, contentDescription = null)
+                    Text(if (isArabic) "نسخ MAC" else "Copy MAC")
+                }
+                Text(if (isArabic) "بقية التفاصيل غير متاحة لهذه المحطة." else "Other station details are unavailable.")
             }
         }
     }
