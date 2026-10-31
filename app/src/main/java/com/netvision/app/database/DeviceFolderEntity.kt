@@ -21,7 +21,7 @@ data class DeviceFolderEntity(
 
     companion object {
         const val DEFAULT_FOLDER_ID = "uncategorized"
-        const val DEFAULT_FOLDER_NAME = "غير مصنف"
+        const val DEFAULT_FOLDER_NAME = "أجهزة غير تابعة لبرج"
 
         fun defaultFolder(): DeviceFolderEntity {
             return DeviceFolderEntity(

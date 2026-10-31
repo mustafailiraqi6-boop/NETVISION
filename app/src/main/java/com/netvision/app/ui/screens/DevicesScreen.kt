@@ -65,13 +65,13 @@ fun DevicesScreen(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = if (isArabic) "أجهزة المراقبة المحفوظة" else "Monitored Devices",
+                            text = if (isArabic) "الأبراج وأجهزة المراقبة" else "Towers & Monitored Devices",
                             style = MaterialTheme.typography.headlineSmall,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = if (isArabic) "إجمالي الأجهزة: ${uiState.totalCount} • الحافظات: ${uiState.folders.size}"
-                            else "Total Devices: ${uiState.totalCount} • Folders: ${uiState.folders.size}",
+                            text = if (isArabic) "إجمالي الأجهزة: ${uiState.totalCount} • الأبراج: ${uiState.folders.size}"
+                            else "Total Devices: ${uiState.totalCount} • Towers: ${uiState.folders.size}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -83,9 +83,9 @@ fun DevicesScreen(
                             shape = RoundedCornerShape(8.dp),
                             contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
                         ) {
-                            Icon(Icons.Default.CreateNewFolder, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Icon(Icons.Default.CellTower, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text(if (isArabic) "+ حافظة" else "+ Folder", fontSize = 12.sp)
+                            Text(if (isArabic) "+ برج" else "+ Tower", fontSize = 12.sp)
                         }
 
                         Button(
@@ -103,7 +103,7 @@ fun DevicesScreen(
             }
         }
 
-        // Section 1: Device Folders System (نظام الحافظات)
+        // Section 1: Towers System (نظام الأبراج)
         item {
             Card(
                 modifier = Modifier
@@ -119,10 +119,10 @@ fun DevicesScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.FolderSpecial, contentDescription = null, tint = CyanAccent, modifier = Modifier.size(18.dp))
+                            Icon(Icons.Default.CellTower, contentDescription = null, tint = CyanAccent, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = if (isArabic) "حافظات الأبراج والمواقع" else "Tower & Location Folders",
+                                text = if (isArabic) "نظام الأبراج والم مواقع" else "Towers & Location Network",
                                 style = MaterialTheme.typography.titleSmall,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
@@ -130,10 +130,14 @@ fun DevicesScreen(
 
                         Text(
                             text = if (uiState.selectedFolderId == null) {
-                                if (isArabic) "عرض الكل" else "Viewing All"
+                                if (isArabic) "جميع الأبراج" else "All Towers"
                             } else {
                                 val current = uiState.folders.find { it.id == uiState.selectedFolderId }
-                                current?.name ?: ""
+                                if (current?.id == DeviceFolderEntity.DEFAULT_FOLDER_ID) {
+                                    if (isArabic) "أجهزة غير تابعة لبرج" else "Unassigned Devices"
+                                } else {
+                                    current?.name ?: ""
+                                }
                             },
                             fontSize = 11.sp,
                             color = CyanAccent
@@ -153,32 +157,37 @@ fun DevicesScreen(
                                 onClick = { viewModel.selectFolder(null) },
                                 label = {
                                     Text(
-                                        text = "${if (isArabic) "جميع الأجهزة" else "All Devices"} (${uiState.totalCount})",
+                                        text = "${if (isArabic) "جميع الأبراج" else "All Towers"} (${uiState.totalCount})",
                                         fontSize = 12.sp
                                     )
                                 },
                                 leadingIcon = {
-                                    Icon(Icons.Default.FolderShared, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Icon(Icons.Default.CellTower, contentDescription = null, modifier = Modifier.size(16.dp))
                                 }
                             )
                         }
 
-                        // Each Folder with device count badge
+                        // Each Tower with device count badge
                         items(uiState.folders) { folder ->
                             val isSelected = uiState.selectedFolderId == folder.id
                             val isDefault = folder.id == DeviceFolderEntity.DEFAULT_FOLDER_ID
+                            val folderDisplayName = if (isDefault) {
+                                if (isArabic) "أجهزة غير تابعة لبرج" else "Unassigned Devices"
+                            } else {
+                                folder.name
+                            }
 
                             FilterChip(
                                 selected = isSelected,
                                 onClick = { viewModel.selectFolder(folder.id) },
                                 label = {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text("${folder.name} (${folder.deviceCount})", fontSize = 12.sp)
+                                        Text("$folderDisplayName (${folder.deviceCount})", fontSize = 12.sp)
                                         if (!isDefault) {
                                             Spacer(modifier = Modifier.width(4.dp))
                                             Icon(
                                                 imageVector = Icons.Default.Edit,
-                                                contentDescription = "Edit Folder",
+                                                contentDescription = "Edit Tower",
                                                 modifier = Modifier
                                                     .size(12.dp)
                                                     .clickable { folderToEdit = folder },
@@ -187,7 +196,7 @@ fun DevicesScreen(
                                             Spacer(modifier = Modifier.width(2.dp))
                                             Icon(
                                                 imageVector = Icons.Default.Close,
-                                                contentDescription = "Delete Folder",
+                                                contentDescription = "Delete Tower",
                                                 modifier = Modifier
                                                     .size(12.dp)
                                                     .clickable { folderToDelete = folder },
@@ -198,7 +207,7 @@ fun DevicesScreen(
                                 },
                                 leadingIcon = {
                                     Icon(
-                                        imageVector = if (isDefault) Icons.Default.FolderOpen else Icons.Default.Folder,
+                                        imageVector = if (isDefault) Icons.Default.FolderOpen else Icons.Default.CellTower,
                                         contentDescription = null,
                                         modifier = Modifier.size(16.dp),
                                         tint = if (isSelected) CyanAccent else MaterialTheme.colorScheme.onSurfaceVariant
@@ -308,14 +317,14 @@ fun DevicesScreen(
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = if (isArabic) "لا توجد أجهزة مطابقة في هذه الحافظة."
-                            else "No matching devices found in this folder.",
+                            text = if (isArabic) "لا توجد أجهزة مطابقة في هذا البرج."
+                            else "No matching devices found in this tower.",
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = if (isArabic) "يمكنك إضافة جهاز يدوياً بالضغط على زر '+ جهاز' أو إجراء فحص تلقائي عبر فاحص الشبكة."
+                            text = if (isArabic) "يمكنك إضافة جهاز يدوياً بالضغط على '+ جهاز' أو إجراء فحص تلقائي عبر فاحص الشبكة."
                             else "Add a device manually via '+ Device' or run automatic discovery in Network Scanner.",
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -327,12 +336,16 @@ fun DevicesScreen(
         } else {
             // Devices List
             items(uiState.devices, key = { it.id }) { device ->
-                val folderName = uiState.folders.find { it.id == device.folderId }?.name
-                    ?: (if (device.folderId == DeviceFolderEntity.DEFAULT_FOLDER_ID) "غير مصنف" else device.folderId)
+                val towerObj = uiState.folders.find { it.id == device.folderId }
+                val towerName = if (device.folderId == DeviceFolderEntity.DEFAULT_FOLDER_ID || towerObj?.id == DeviceFolderEntity.DEFAULT_FOLDER_ID) {
+                    if (isArabic) "أجهزة غير تابعة لبرج" else "Unassigned Devices"
+                } else {
+                    towerObj?.name ?: device.folderId
+                }
 
                 SavedDeviceCardItem(
                     device = device,
-                    folderName = folderName,
+                    folderName = towerName,
                     isArabic = isArabic,
                     onEditClick = { deviceToEdit = device },
                     onDeleteClick = { deviceToDelete = device }
@@ -342,7 +355,7 @@ fun DevicesScreen(
     }
 
     // -------------------------------------------------------------
-    // Add / Edit Device Dialog (نافذة إضافة وتعديل الجهاز المطوّرة)
+    // Add / Edit Device Dialog
     // -------------------------------------------------------------
     if (showAddDeviceDialog || deviceToEdit != null) {
         val isEditing = deviceToEdit != null
@@ -395,7 +408,7 @@ fun DevicesScreen(
                         shape = RoundedCornerShape(10.dp)
                     )
 
-                    // Field 3: Manufacturer (الشركة المصنعة)
+                    // Field 3: Manufacturer
                     Text(
                         text = if (isArabic) "الشركة المصنعة:" else "Manufacturer:",
                         fontSize = 12.sp,
@@ -414,7 +427,7 @@ fun DevicesScreen(
                         }
                     }
 
-                    // Field 4: Device Type (نوع الجهاز)
+                    // Field 4: Device Type
                     Text(
                         text = if (isArabic) "نوع الجهاز:" else "Device Type:",
                         fontSize = 12.sp,
@@ -433,9 +446,9 @@ fun DevicesScreen(
                         }
                     }
 
-                    // Field 5: Assigned Folder (الحافظة التابعة له)
+                    // Field 5: Assigned Tower
                     Text(
-                        text = if (isArabic) "الحافظة التابعة له (البرج / الموقع):" else "Assigned Folder (Tower/Site):",
+                        text = if (isArabic) "البرج التابع له:" else "Assigned Tower:",
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -444,12 +457,23 @@ fun DevicesScreen(
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         items(uiState.folders) { folder ->
+                            val isUnassigned = folder.id == DeviceFolderEntity.DEFAULT_FOLDER_ID
+                            val folderLabel = if (isUnassigned) {
+                                if (isArabic) "أجهزة غير تابعة لبرج" else "Unassigned Devices"
+                            } else {
+                                folder.name
+                            }
+
                             FilterChip(
                                 selected = selectedFolder == folder.id,
                                 onClick = { selectedFolder = folder.id },
-                                label = { Text(folder.name, fontSize = 11.sp) },
+                                label = { Text(folderLabel, fontSize = 11.sp) },
                                 leadingIcon = {
-                                    Icon(Icons.Default.Folder, contentDescription = null, modifier = Modifier.size(14.dp))
+                                    Icon(
+                                        imageVector = if (isUnassigned) Icons.Default.FolderOpen else Icons.Default.CellTower,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(14.dp)
+                                    )
                                 }
                             )
                         }
@@ -497,18 +521,18 @@ fun DevicesScreen(
     }
 
     // -------------------------------------------------------------
-    // Create Folder Dialog (إنشاء حافظة جديدة)
+    // Create Tower Dialog (إضافة برج جديد)
     // -------------------------------------------------------------
     if (showCreateFolderDialog) {
         var folderNameInput by remember { mutableStateOf("") }
         AlertDialog(
             onDismissRequest = { showCreateFolderDialog = false },
-            title = { Text(if (isArabic) "إنشاء حافظة جديدة" else "Create New Folder") },
+            title = { Text(if (isArabic) "إضافة برج جديد" else "Create New Tower") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        text = if (isArabic) "أدخل اسم البرج أو الموقع لتنظيم أجهزة الشبكة داخله (مثلاً: برج داقوق، برج المركز):"
-                        else "Enter the tower or location name to organize network devices (e.g. Tower North, Site Central):",
+                        text = if (isArabic) "أدخل اسم البرج أو الموقع لتنظيم أجهزة الشبكة داخله (مثلاً: برج المركز، برج داقوق):"
+                        else "Enter tower or site name to organize network devices (e.g. Tower Central, Tower North):",
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -516,7 +540,7 @@ fun DevicesScreen(
                         value = folderNameInput,
                         onValueChange = { folderNameInput = it },
                         modifier = Modifier.fillMaxWidth(),
-                        label = { Text(if (isArabic) "اسم الحافظة / البرج" else "Folder / Tower Name") },
+                        label = { Text(if (isArabic) "اسم البرج" else "Tower Name") },
                         singleLine = true,
                         shape = RoundedCornerShape(10.dp)
                     )
@@ -533,7 +557,7 @@ fun DevicesScreen(
                     enabled = folderNameInput.isNotBlank(),
                     colors = ButtonDefaults.buttonColors(containerColor = CyanAccent, contentColor = NavyDark)
                 ) {
-                    Text(if (isArabic) "إنشاء" else "Create")
+                    Text(if (isArabic) "إنشاء البرج" else "Create")
                 }
             },
             dismissButton = {
@@ -545,20 +569,20 @@ fun DevicesScreen(
     }
 
     // -------------------------------------------------------------
-    // Edit Folder Dialog (تعديل اسم الحافظة)
+    // Edit Tower Dialog (تعديل اسم البرج)
     // -------------------------------------------------------------
     if (folderToEdit != null) {
         val target = folderToEdit!!
         var editName by remember { mutableStateOf(target.name) }
         AlertDialog(
             onDismissRequest = { folderToEdit = null },
-            title = { Text(if (isArabic) "تعديل اسم الحافظة" else "Rename Folder") },
+            title = { Text(if (isArabic) "تعديل اسم البرج" else "Rename Tower") },
             text = {
                 OutlinedTextField(
                     value = editName,
                     onValueChange = { editName = it },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text(if (isArabic) "الاسم الجديد للحافظة" else "New Folder Name") },
+                    label = { Text(if (isArabic) "الاسم الجديد للبرج" else "New Tower Name") },
                     singleLine = true,
                     shape = RoundedCornerShape(10.dp)
                 )
@@ -585,17 +609,17 @@ fun DevicesScreen(
     }
 
     // -------------------------------------------------------------
-    // Delete Folder Dialog (حذف الحافظة مع حماية الأجهزة)
+    // Delete Tower Dialog (حذف البرج مع نقل الأجهزة للأجهزة غير التابعة لبرج)
     // -------------------------------------------------------------
     if (folderToDelete != null) {
         val target = folderToDelete!!
         AlertDialog(
             onDismissRequest = { folderToDelete = null },
-            title = { Text(if (isArabic) "حذف الحافظة" else "Delete Folder") },
+            title = { Text(if (isArabic) "حذف البرج" else "Delete Tower") },
             text = {
                 Text(
-                    text = if (isArabic) "هل أنت متأكد من حذف الحافظة '${target.name}'؟\n\nتنبيه أمان: لن يتم حذف أي جهاز نهائياً، وسيتم نقل جميع الأجهزة التابعة لهذه الحافظة (${target.deviceCount} جهاز) تلقائياً إلى حافظة 'غير مصنف' لحمايتها."
-                    else "Are you sure you want to delete '${target.name}'?\n\nSafety Note: No devices will be deleted. All ${target.deviceCount} devices in this folder will be safely moved to 'Uncategorized'."
+                    text = if (isArabic) "هل أنت متأكد من حذف البرج '${target.name}'؟\n\nتنبيه أمان: لن يتم حذف أي جهاز نهائياً، وسيتم نقل جميع الأجهزة التابعة لهذا البرج (${target.deviceCount} جهاز) تلقائياً إلى 'أجهزة غير تابعة لبرج' لحمايتها."
+                    else "Are you sure you want to delete tower '${target.name}'?\n\nSafety Note: No devices will be deleted. All ${target.deviceCount} devices in this tower will be safely moved to 'Unassigned Devices'."
                 )
             },
             confirmButton = {
@@ -617,9 +641,7 @@ fun DevicesScreen(
         )
     }
 
-    // -------------------------------------------------------------
     // Delete Device Dialog
-    // -------------------------------------------------------------
     if (deviceToDelete != null) {
         val target = deviceToDelete!!
         AlertDialog(
@@ -720,7 +742,7 @@ fun SavedDeviceCardItem(
 
             Spacer(modifier = Modifier.height(6.dp))
 
-            // Subtitle: Manufacturer & Model & Type & Folder Badge
+            // Subtitle: Manufacturer & Model & Type
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -747,7 +769,7 @@ fun SavedDeviceCardItem(
 
             Spacer(modifier = Modifier.height(6.dp))
 
-            // Folder Indicator Badge
+            // Tower Indicator Badge
             Surface(
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
                 shape = RoundedCornerShape(6.dp)
@@ -757,7 +779,7 @@ fun SavedDeviceCardItem(
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Folder,
+                        imageVector = Icons.Default.CellTower,
                         contentDescription = null,
                         modifier = Modifier.size(12.dp),
                         tint = CyanAccent

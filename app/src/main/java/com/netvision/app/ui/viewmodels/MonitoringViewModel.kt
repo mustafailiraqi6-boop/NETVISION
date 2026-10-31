@@ -3,6 +3,7 @@ package com.netvision.app.ui.viewmodels
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.netvision.app.NetVisionApplication
+import com.netvision.app.models.DeviceFolder
 import com.netvision.app.models.DeviceStatus
 import com.netvision.app.models.NetworkDevice
 import com.netvision.app.monitoring.SnmpDeviceInfo
@@ -25,6 +26,8 @@ import kotlinx.coroutines.withContext
 
 data class MonitoringUiState(
     val selectedDeviceId: String? = null,
+    val selectedFolderId: String? = null,
+    val searchQuery: String = "",
     val isAutoPolling: Boolean = true,
     val refreshIntervalSec: Int = 10,
     val lastRefreshedTime: Long = 0L,
@@ -54,6 +57,13 @@ class MonitoringViewModel(
             initialValue = emptyList()
         )
 
+    val savedFolders: StateFlow<List<DeviceFolder>> = repository.getAllFolders()
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
     private val _uiState = MutableStateFlow(MonitoringUiState())
     val uiState: StateFlow<MonitoringUiState> = _uiState.asStateFlow()
 
@@ -65,6 +75,14 @@ class MonitoringViewModel(
 
     fun selectDevice(deviceId: String) {
         _uiState.value = _uiState.value.copy(selectedDeviceId = deviceId)
+    }
+
+    fun selectFolder(folderId: String?) {
+        _uiState.value = _uiState.value.copy(selectedFolderId = folderId)
+    }
+
+    fun setSearchQuery(query: String) {
+        _uiState.value = _uiState.value.copy(searchQuery = query)
     }
 
     fun toggleAutoPolling(enabled: Boolean) {
@@ -113,7 +131,7 @@ class MonitoringViewModel(
         val snmpPort = settings.snmpPort
 
         for (device in currentDevices) {
-            // Check reachability via TCP port 80 (WebFig / Web UI), 443, 8291, 8728, etc. and fallback to ICMP
+            // Check reachability via TCP Connect / ICMP
             val reachability = reachabilityService.checkHostReachability(device.ipAddress)
             val isOnline = reachability.isReachable
             val latencyMs = reachability.latencyMs.toInt().coerceAtLeast(0)

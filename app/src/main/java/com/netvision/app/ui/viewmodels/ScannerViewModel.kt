@@ -3,6 +3,8 @@ package com.netvision.app.ui.viewmodels
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.netvision.app.NetVisionApplication
+import com.netvision.app.database.DeviceFolderEntity
+import com.netvision.app.models.DeviceFolder
 import com.netvision.app.models.NetworkDevice
 import com.netvision.app.models.NetworkRange
 import com.netvision.app.network.CidrUtils
@@ -45,6 +47,13 @@ class ScannerViewModel(
         )
 
     val savedDevices: StateFlow<List<NetworkDevice>> = repository.getAllDevices()
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
+    val savedFolders: StateFlow<List<DeviceFolder>> = repository.getAllFolders()
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
@@ -183,9 +192,10 @@ class ScannerViewModel(
         _uiState.value = _uiState.value.copy(isScanning = false)
     }
 
-    fun addDeviceToMonitoring(device: NetworkDevice) {
+    fun addDeviceToMonitoring(device: NetworkDevice, folderId: String = DeviceFolderEntity.DEFAULT_FOLDER_ID) {
         viewModelScope.launch {
-            repository.saveDevice(device)
+            val deviceWithFolder = device.copy(folderId = folderId)
+            repository.saveDevice(deviceWithFolder)
             val updated = _uiState.value.addedDeviceIds.toMutableSet()
             updated.add(device.id)
             updated.add(device.ipAddress)

@@ -2,7 +2,6 @@ package com.netvision.app.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -20,7 +19,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.netvision.app.models.DeviceStatus
+import com.netvision.app.database.DeviceFolderEntity
+import com.netvision.app.models.DeviceFolder
 import com.netvision.app.models.Manufacturer
 import com.netvision.app.models.NetworkDevice
 import com.netvision.app.models.NetworkRange
@@ -36,10 +36,16 @@ fun ScannerScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val savedRanges by viewModel.savedRanges.collectAsState()
+    val savedDevices by viewModel.savedDevices.collectAsState()
+    val savedFolders by viewModel.savedFolders.collectAsState()
 
     var newCidrInput by remember { mutableStateOf("") }
     var newLabelInput by remember { mutableStateOf("") }
     var showAddRangeDialog by remember { mutableStateOf(false) }
+
+    // Dialog State for adding device to monitoring
+    var deviceToAdd by remember { mutableStateOf<NetworkDevice?>(null) }
+    var duplicateDeviceWarning by remember { mutableStateOf<Pair<NetworkDevice, String>?>(null) }
 
     LazyColumn(
         modifier = modifier
@@ -66,7 +72,7 @@ fun ScannerScreen(
             }
         }
 
-        // Error message snackbar / card if any
+        // Error message card
         if (uiState.errorMessage != null) {
             item {
                 Surface(
@@ -329,15 +335,141 @@ fun ScannerScreen(
             }
         } else {
             items(uiState.discoveredDevices, key = { it.id }) { dev ->
-                val isAlreadyAdded = uiState.addedDeviceIds.contains(dev.id) || uiState.addedDeviceIds.contains(dev.ipAddress)
+                val existingDevice = savedDevices.find { it.ipAddress == dev.ipAddress || it.id == dev.id }
+                val isAlreadyAdded = existingDevice != null || uiState.addedDeviceIds.contains(dev.id) || uiState.addedDeviceIds.contains(dev.ipAddress)
+
                 DiscoveredDeviceCard(
                     device = dev,
                     isArabic = isArabic,
                     isAdded = isAlreadyAdded,
-                    onAddClick = { viewModel.addDeviceToMonitoring(dev) }
+                    onAddClick = {
+                        if (existingDevice != null) {
+                            val towerName = savedFolders.find { it.id == existingDevice.folderId }?.name
+                                ?: if (existingDevice.folderId == DeviceFolderEntity.DEFAULT_FOLDER_ID) {
+                                    if (isArabic) "أجهزة غير تابعة لبرج" else "Unassigned Devices"
+                                } else existingDevice.folderId
+                            duplicateDeviceWarning = Pair(dev, towerName)
+                        } else {
+                            deviceToAdd = dev
+                        }
+                    }
                 )
             }
         }
+    }
+
+    // -------------------------------------------------------------
+    // Add Device to Tower Modal Dialog (إضافة الجهاز للمراقبة)
+    // -------------------------------------------------------------
+    if (deviceToAdd != null) {
+        val target = deviceToAdd!!
+        var selectedFolderId by remember { mutableStateOf(DeviceFolderEntity.DEFAULT_FOLDER_ID) }
+
+        AlertDialog(
+            onDismissRequest = { deviceToAdd = null },
+            title = {
+                Text(text = if (isArabic) "إضافة الجهاز للمراقبة" else "Add Device to Monitoring")
+            },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = "${target.name} (${target.ipAddress})",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = CyanAccent
+                    )
+                    Text(
+                        text = "${target.manufacturer.displayName} • ${target.model}",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Text(
+                        text = if (isArabic) "اختر البرج التابع له الجهاز:" else "Select Assigned Tower:",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Medium
+                    )
+
+                    LazyRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        items(savedFolders) { folder ->
+                            val isUnassigned = folder.id == DeviceFolderEntity.DEFAULT_FOLDER_ID
+                            val folderLabel = if (isUnassigned) {
+                                if (isArabic) "أجهزة غير تابعة لبرج" else "Unassigned Devices"
+                            } else {
+                                folder.name
+                            }
+
+                            FilterChip(
+                                selected = selectedFolderId == folder.id,
+                                onClick = { selectedFolderId = folder.id },
+                                label = { Text(folderLabel, fontSize = 11.sp) },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = if (isUnassigned) Icons.Default.FolderOpen else Icons.Default.CellTower,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.addDeviceToMonitoring(target, selectedFolderId)
+                        deviceToAdd = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = CyanAccent, contentColor = NavyDark)
+                ) {
+                    Text(if (isArabic) "حفظ وإضافة للمراقبة" else "Save & Add")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { deviceToAdd = null }) {
+                    Text(if (isArabic) "إلغاء" else "Cancel")
+                }
+            }
+        )
+    }
+
+    // -------------------------------------------------------------
+    // Duplicate Device Alert Warning Dialog
+    // -------------------------------------------------------------
+    if (duplicateDeviceWarning != null) {
+        val (dupDev, dupTower) = duplicateDeviceWarning!!
+        AlertDialog(
+            onDismissRequest = { duplicateDeviceWarning = null },
+            icon = {
+                Icon(Icons.Default.Warning, contentDescription = null, tint = StatusAmber)
+            },
+            title = {
+                Text(text = if (isArabic) "الجهاز مضاف بالفعل" else "Device Already Monitored")
+            },
+            text = {
+                Text(
+                    text = if (isArabic) "الجهاز '${dupDev.name}' (${dupDev.ipAddress}) موجود بالفعل في قائمة المراقبة تحت [${dupTower}]."
+                    else "The device '${dupDev.name}' (${dupDev.ipAddress}) is already present in monitoring under [${dupTower}]."
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = { duplicateDeviceWarning = null },
+                    colors = ButtonDefaults.buttonColors(containerColor = CyanAccent, contentColor = NavyDark)
+                ) {
+                    Text(if (isArabic) "موافق" else "OK")
+                }
+            }
+        )
     }
 
     // Add Range Dialog
@@ -486,8 +618,7 @@ fun DiscoveredDeviceCard(
 
                 if (isAdded) {
                     FilledTonalButton(
-                        onClick = {},
-                        enabled = false,
+                        onClick = onAddClick,
                         shape = RoundedCornerShape(8.dp),
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                     ) {
