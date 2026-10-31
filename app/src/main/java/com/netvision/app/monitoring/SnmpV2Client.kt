@@ -53,6 +53,12 @@ data class SnmpDiagnosticRecord(
     val attemptNumber: Int = 1
 )
 
+data class StationCountResult(
+    val isSupported: Boolean,
+    val count: Int = 0,
+    val source: String = "None"
+)
+
 object SnmpV2Client {
 
     private const val TAG = "NetVision_SNMP"
@@ -70,6 +76,8 @@ object SnmpV2Client {
 
     // 1.3.6.1.2.1.1.1.0 (sysDescr)
     val OID_SYS_DESCR = byteArrayOf(0x2b, 0x06, 0x01, 0x02, 0x01, 0x01, 0x01, 0x00)
+    // 1.3.6.1.2.1.1.2.0 (sysObjectID)
+    val OID_SYS_OBJECT_ID = byteArrayOf(0x2b, 0x06, 0x01, 0x02, 0x01, 0x01, 0x02, 0x00)
     // 1.3.6.1.2.1.1.3.0 (sysUpTime)
     val OID_SYS_UPTIME = byteArrayOf(0x2b, 0x06, 0x01, 0x02, 0x01, 0x01, 0x03, 0x00)
     // 1.3.6.1.2.1.1.5.0 (sysName)
@@ -77,42 +85,51 @@ object SnmpV2Client {
     // 1.3.6.1.2.1.2.1.0 (ifNumber)
     val OID_IF_NUMBER = byteArrayOf(0x2b, 0x06, 0x01, 0x02, 0x01, 0x02, 0x01, 0x00)
 
-    // Wireless Station Count OIDs (for Ubiquiti AirOS / MikroTik Wireless Registration Table):
-    // Ubiquiti ubntAirMaxStationCount (1.3.6.1.4.1.41112.1.4.5.1.15.1)
-    val OID_UBNT_STA_COUNT = byteArrayOf(0x2b, 0x06, 0x01, 0x04, 0x01, 0x82.toByte(), 0xc1.toByte(), 0x28, 0x01, 0x04, 0x05, 0x01, 0x0f, 0x01)
-    // IEEE 802.11 dot11AssociatedStationCount (1.2.840.10036.1.1.1.9.1)
-    val OID_DOT11_STA_COUNT = byteArrayOf(0x2a, 0x86.toByte(), 0x48, 0x82.toByte(), 0x8e.toByte(), 0x24, 0x01, 0x01, 0x01, 0x09, 0x01)
-    // MikroTik Wireless Registration Table entries count (1.3.6.1.4.1.14988.1.1.1.3.1.6)
-    val OID_MIKROTIK_WLAN_COUNT = byteArrayOf(0x2b, 0x06, 0x01, 0x04, 0x01, 0xf5.toByte(), 0x0c, 0x01, 0x01, 0x01, 0x03, 0x01, 0x06)
+    // Table OIDs for wireless stations walk:
+    // MikroTik Wireless Registration Table MAC Address Column: 1.3.6.1.4.1.14988.1.1.1.2.1.1
+    val OID_MIKROTIK_REG_TABLE_MAC_STR = "1.3.6.1.4.1.14988.1.1.1.2.1.1"
+    val OID_MIKROTIK_REG_TABLE_MAC_BYTES = encodeOidString(OID_MIKROTIK_REG_TABLE_MAC_STR)
 
-    fun extractModel(descr: String?): String {
-        if (descr.isNullOrBlank()) return "Unknown"
-        val clean = descr.trim()
-        if (clean.contains("RouterOS", ignoreCase = true)) {
-            val rbMatch = Regex("""(RB\w+(-\w+)?|CRS\w+|CCR\w+|hEX\w*|hAP\w*|NetMetal\w*|BaseBox\w*|LHG\w*|cAP\w*|OmniTIK\w*|SXT\w*)""", RegexOption.IGNORE_CASE).find(clean)
-            if (rbMatch != null) return "MikroTik ${rbMatch.value}"
-            return clean.take(30)
-        }
-        val ubntKeywords = listOf("LiteBeam", "PowerBeam", "NanoStation", "Rocket", "AirGrid", "NanoBeam", "Bullet", "IsoStation", "GigaBeam", "UniFi", "EdgeRouter", "EdgeSwitch")
-        for (kw in ubntKeywords) {
-            if (clean.contains(kw, ignoreCase = true)) {
-                val idx = clean.indexOf(kw, ignoreCase = true)
-                val extracted = clean.substring(idx).split('\n', ',', ';').firstOrNull()?.trim()?.take(28) ?: kw
-                return "Ubiquiti $extracted"
+    // Ubiquiti AirOS Station Table MAC Address Column: 1.3.6.1.4.1.41112.1.4.7.1.1.1
+    val OID_UBNT_STA_TABLE_MAC_STR = "1.3.6.1.4.1.41112.1.4.7.1.1.1"
+    val OID_UBNT_STA_TABLE_MAC_BYTES = encodeOidString(OID_UBNT_STA_TABLE_MAC_STR)
+
+    // Scalar Fallbacks:
+    // Ubiquiti ubntAirMaxStationCount (1.3.6.1.4.1.41112.1.4.5.1.15.1)
+    val OID_UBNT_STA_COUNT_BYTES = byteArrayOf(0x2b, 0x06, 0x01, 0x04, 0x01, 0x82.toByte(), 0xc1.toByte(), 0x28, 0x01, 0x04, 0x05, 0x01, 0x0f, 0x01, 0x00)
+    // IEEE 802.11 dot11AssociatedStationCount (1.2.840.10036.1.1.1.9.1.0)
+    val OID_DOT11_STA_COUNT_BYTES = byteArrayOf(0x2a, 0x86.toByte(), 0x48, 0x82.toByte(), 0x8e.toByte(), 0x24, 0x01, 0x01, 0x01, 0x09, 0x01, 0x00)
+    // MikroTik Wireless Registration Table count scalar (1.3.6.1.4.1.14988.1.1.1.3.1.6.1)
+    val OID_MIKROTIK_WLAN_COUNT_BYTES = byteArrayOf(0x2b, 0x06, 0x01, 0x04, 0x01, 0xf5.toByte(), 0x0c, 0x01, 0x01, 0x01, 0x03, 0x01, 0x06, 0x01)
+
+    fun extractModel(descr: String?, sysObjId: String? = null): String {
+        val cleanDescr = descr?.trim() ?: ""
+        val cleanObjId = sysObjId?.trim() ?: ""
+
+        // 1. Check Ubiquiti markers first
+        if (cleanObjId.contains("41112") || cleanDescr.contains("AirOS", ignoreCase = true) || cleanDescr.contains("UBNT", ignoreCase = true) || cleanDescr.contains("Ubiquiti", ignoreCase = true)) {
+            val ubntKeywords = listOf("LiteBeam", "PowerBeam", "NanoStation", "Rocket", "AirGrid", "NanoBeam", "Bullet", "IsoStation", "GigaBeam", "UniFi", "EdgeRouter", "EdgeSwitch")
+            for (kw in ubntKeywords) {
+                if (cleanDescr.contains(kw, ignoreCase = true)) {
+                    val idx = cleanDescr.indexOf(kw, ignoreCase = true)
+                    val extracted = cleanDescr.substring(idx).split('\n', ',', ';').firstOrNull()?.trim()?.take(28) ?: kw
+                    return "Ubiquiti $extracted"
+                }
             }
-        }
-        if (clean.contains("AirOS", ignoreCase = true)) {
             return "Ubiquiti AirOS"
         }
-        return clean.take(30)
+
+        // 2. Check MikroTik markers
+        if (cleanObjId.contains("14988") || cleanDescr.contains("RouterOS", ignoreCase = true) || cleanDescr.contains("MikroTik", ignoreCase = true)) {
+            val rbMatch = Regex("""(RB\w+(-\w+)?|CRS\w+|CCR\w+|hEX\w*|hAP\w*|NetMetal\w*|BaseBox\w*|LHG\w*|cAP\w*|OmniTIK\w*|SXT\w*)""", RegexOption.IGNORE_CASE).find(cleanDescr)
+            if (rbMatch != null) return "MikroTik ${rbMatch.value}"
+            return "MikroTik RouterOS"
+        }
+
+        if (cleanDescr.isNotBlank()) return cleanDescr.take(30)
+        return "Unknown Device"
     }
 
-    /**
-     * Queries device SNMP information with intelligent auto-negotiation and fallback:
-     * - Tests preferred SNMP version first (or v2c if none saved).
-     * - If attempt 1 fails/times out, seamlessly tests alternative version (v1 <-> v2c).
-     * - Persists and returns the working version for future polling.
-     */
     suspend fun queryDeviceInfo(
         targetIp: String,
         community: String = "netvision",
@@ -122,7 +139,6 @@ object SnmpV2Client {
     ): Result<SnmpDeviceInfo> = withContext(Dispatchers.IO) {
         val totalStart = System.currentTimeMillis()
 
-        // Determine sequence of SNMP versions to try:
         val versionsToTry = if (preferredVersion?.equals("v1", ignoreCase = true) == true) {
             listOf("v1", "v2c")
         } else {
@@ -136,7 +152,7 @@ object SnmpV2Client {
             val currentVersion = versionsToTry[index]
             val attemptNumber = index + 1
 
-            // 1. Probe sysDescr with current version
+            // Probe sysDescr
             val descrRes = querySingleOid(
                 ip = targetIp,
                 community = community,
@@ -150,7 +166,18 @@ object SnmpV2Client {
             lastInterface = descrRes.networkInterface
 
             if (descrRes.isSuccess) {
-                // Succeeded! Query remaining standard OIDs with this same verified version
+                // Query sysObjectID
+                val sysObjRes = querySingleOid(
+                    ip = targetIp,
+                    community = community,
+                    port = port,
+                    oidBytes = OID_SYS_OBJECT_ID,
+                    oidName = "sysObjectID",
+                    version = currentVersion,
+                    timeoutMs = timeoutMs,
+                    attemptNumber = attemptNumber
+                )
+
                 val nameRes = querySingleOid(
                     ip = targetIp,
                     community = community,
@@ -184,58 +211,26 @@ object SnmpV2Client {
                     attemptNumber = attemptNumber
                 )
 
-                // Query Wireless Station / Registration Table count (NOT interface count)
-                // Try Ubiquiti first, then Dot11, then MikroTik WLAN count
-                var clientCount: Int? = null
-                val staRes = querySingleOid(
+                // Query wireless connected stations count using GETNEXT table walk
+                val stationResult = queryWirelessStationCount(
                     ip = targetIp,
                     community = community,
                     port = port,
-                    oidBytes = OID_UBNT_STA_COUNT,
-                    oidName = "ubntStaCount",
                     version = currentVersion,
-                    timeoutMs = 600,
+                    timeoutMs = 800,
                     attemptNumber = attemptNumber
                 )
-                if (staRes.isSuccess && staRes.intValue != null) {
-                    clientCount = staRes.intValue
-                } else {
-                    val dot11Res = querySingleOid(
-                        ip = targetIp,
-                        community = community,
-                        port = port,
-                        oidBytes = OID_DOT11_STA_COUNT,
-                        oidName = "dot11StaCount",
-                        version = currentVersion,
-                        timeoutMs = 600,
-                        attemptNumber = attemptNumber
-                    )
-                    if (dot11Res.isSuccess && dot11Res.intValue != null) {
-                        clientCount = dot11Res.intValue
-                    } else {
-                        val mtxWlanRes = querySingleOid(
-                            ip = targetIp,
-                            community = community,
-                            port = port,
-                            oidBytes = OID_MIKROTIK_WLAN_COUNT,
-                            oidName = "mtxWlanCount",
-                            version = currentVersion,
-                            timeoutMs = 600,
-                            attemptNumber = attemptNumber
-                        )
-                        if (mtxWlanRes.isSuccess && mtxWlanRes.intValue != null) {
-                            clientCount = mtxWlanRes.intValue
-                        }
-                    }
-                }
+
+                val clientCount: Int? = if (stationResult.isSupported) stationResult.count else null
 
                 val totalLatency = System.currentTimeMillis() - totalStart
                 val descr = descrRes.stringValue
+                val sysObjId = sysObjRes.stringValue
                 val name = nameRes.stringValue
                 val uptimeTicks = uptimeRes.longValue
                 val uptimeFormatted = uptimeTicks?.let { formatTimeTicks(it) }
                 val ifCount = ifRes.intValue
-                val modelName = extractModel(descr)
+                val modelName = extractModel(descr, sysObjId)
 
                 val negSummary = if (attemptNumber == 1) {
                     if (preferredVersion != null) "SNMP $currentVersion (Saved)" else "SNMP $currentVersion (Primary)"
@@ -262,11 +257,9 @@ object SnmpV2Client {
                 )
             } else {
                 lastErrorMessage = descrRes.errorMessage
-                // Fallback will trigger next iteration
             }
         }
 
-        // All attempts exhausted
         val totalLatency = System.currentTimeMillis() - totalStart
         val primaryError = lastErrorMessage
             ?: "Timeout - No response from $targetIp:$port (Tried ${versionsToTry.joinToString(" & ")}, Community: '${maskCommunity(community)}')"
@@ -284,6 +277,185 @@ object SnmpV2Client {
                 negotiationSummary = negSummary
             )
         )
+    }
+
+    /**
+     * Walks SNMP wireless station tables (MikroTik / Ubiquiti) or queries fallback scalars
+     */
+    private fun queryWirelessStationCount(
+        ip: String,
+        community: String,
+        port: Int,
+        version: String,
+        timeoutMs: Int,
+        attemptNumber: Int
+    ): StationCountResult {
+        // 1. Try MikroTik Wireless Registration Table (1.3.6.1.4.1.14988.1.1.1.2.1.1)
+        val mtxWalk = walkTable(
+            ip = ip,
+            community = community,
+            port = port,
+            rootOidStr = OID_MIKROTIK_REG_TABLE_MAC_STR,
+            oidName = "mtxRegistrationTable",
+            version = version,
+            maxRows = 200,
+            timeoutMs = timeoutMs,
+            attemptNumber = attemptNumber
+        )
+        if (mtxWalk.isSupported) {
+            return StationCountResult(isSupported = true, count = mtxWalk.rowCount, source = "MikroTik Registration Table")
+        }
+
+        // 2. Try Ubiquiti AirOS Station Table (1.3.6.1.4.1.41112.1.4.7.1.1.1)
+        val ubntWalk = walkTable(
+            ip = ip,
+            community = community,
+            port = port,
+            rootOidStr = OID_UBNT_STA_TABLE_MAC_STR,
+            oidName = "ubntStationTable",
+            version = version,
+            maxRows = 200,
+            timeoutMs = timeoutMs,
+            attemptNumber = attemptNumber
+        )
+        if (ubntWalk.isSupported) {
+            return StationCountResult(isSupported = true, count = ubntWalk.rowCount, source = "Ubiquiti AirOS Station Table")
+        }
+
+        // 3. Fallback: Ubiquiti ubntAirMaxStationCount scalar
+        val ubntStaScalar = querySingleOid(
+            ip = ip, community = community, port = port,
+            oidBytes = OID_UBNT_STA_COUNT_BYTES, oidName = "ubntStaCountScalar",
+            version = version, timeoutMs = 500, attemptNumber = attemptNumber
+        )
+        if (ubntStaScalar.isSuccess && ubntStaScalar.intValue != null) {
+            return StationCountResult(isSupported = true, count = ubntStaScalar.intValue.coerceAtLeast(0), source = "Ubiquiti Scalar")
+        }
+
+        // 4. Fallback: IEEE 802.11 dot11AssociatedStationCount
+        val dot11StaScalar = querySingleOid(
+            ip = ip, community = community, port = port,
+            oidBytes = OID_DOT11_STA_COUNT_BYTES, oidName = "dot11StaCountScalar",
+            version = version, timeoutMs = 500, attemptNumber = attemptNumber
+        )
+        if (dot11StaScalar.isSuccess && dot11StaScalar.intValue != null) {
+            return StationCountResult(isSupported = true, count = dot11StaScalar.intValue.coerceAtLeast(0), source = "dot11 Scalar")
+        }
+
+        // 5. Fallback: MikroTik WLAN count scalar
+        val mtxWlanScalar = querySingleOid(
+            ip = ip, community = community, port = port,
+            oidBytes = OID_MIKROTIK_WLAN_COUNT_BYTES, oidName = "mtxWlanCountScalar",
+            version = version, timeoutMs = 500, attemptNumber = attemptNumber
+        )
+        if (mtxWlanScalar.isSuccess && mtxWlanScalar.intValue != null) {
+            return StationCountResult(isSupported = true, count = mtxWlanScalar.intValue.coerceAtLeast(0), source = "MikroTik Scalar")
+        }
+
+        // Table / MIB not supported on this device
+        return StationCountResult(isSupported = false, count = 0, source = "Unsupported")
+    }
+
+    data class TableWalkResult(
+        val isSupported: Boolean,
+        val rowCount: Int = 0
+    )
+
+    /**
+     * Executes GETNEXT walk starting at rootOidStr until the returned OID leaves rootOidStr prefix or maxRows is reached.
+     */
+    fun walkTable(
+        ip: String,
+        community: String,
+        port: Int,
+        rootOidStr: String,
+        oidName: String,
+        version: String = "v2c",
+        maxRows: Int = 200,
+        timeoutMs: Int = 800,
+        attemptNumber: Int = 1
+    ): TableWalkResult {
+        var currentOidBytes = encodeOidString(rootOidStr)
+        val uniqueRows = mutableSetOf<String>()
+        var isTableSupported = false
+
+        for (step in 1..maxRows) {
+            val reqId = requestIdCounter.incrementAndGet()
+            val versionInt = if (version.equals("v1", ignoreCase = true)) 0 else 1
+            val packetBytes = buildGetNextRequest(reqId, community, currentOidBytes, versionInt)
+            val maskedComm = maskCommunity(community)
+
+            var timeSent = 0L
+            var timeReceived = 0L
+            var ifaceName = "Default"
+
+            try {
+                DatagramSocket().use { socket ->
+                    socket.soTimeout = timeoutMs
+
+                    val vpnInfo = resolveVpnNetwork()
+                    ifaceName = vpnInfo.second
+                    if (vpnInfo.first != null) {
+                        try {
+                            vpnInfo.first!!.bindSocket(socket)
+                        } catch (e: Exception) {
+                            // Ignored
+                        }
+                    }
+
+                    val address = InetAddress.getByName(ip)
+                    val sendPacket = DatagramPacket(packetBytes, packetBytes.size, address, port)
+
+                    timeSent = System.currentTimeMillis()
+                    socket.send(sendPacket)
+
+                    val buffer = ByteArray(2048)
+                    val receivePacket = DatagramPacket(buffer, buffer.size)
+
+                    socket.receive(receivePacket)
+                    timeReceived = System.currentTimeMillis()
+                    val latency = timeReceived - timeSent
+                    val responseData = buffer.copyOf(receivePacket.length)
+
+                    val parsed = parseSnmpResponse(responseData, reqId, community)
+
+                    if (!parsed.isSuccess || parsed.responseOid == null) {
+                        // Error, endOfMibView, or noSuchInstance
+                        if (step == 1) {
+                            return TableWalkResult(isSupported = false, rowCount = 0)
+                        } else {
+                            break
+                        }
+                    }
+
+                    val respOidStr = parsed.responseOid
+                    // Check if response OID still belongs to rootOidStr prefix
+                    if (!respOidStr.startsWith(rootOidStr)) {
+                        // Left table subtree!
+                        if (step == 1) {
+                            // If first GETNEXT immediately went past the prefix, table exists but is EMPTY
+                            isTableSupported = true
+                        }
+                        break
+                    }
+
+                    // Table is supported! Add unique row identifier
+                    isTableSupported = true
+                    uniqueRows.add(respOidStr)
+
+                    // Advance next GETNEXT to returned OID bytes
+                    currentOidBytes = encodeOidString(respOidStr)
+                }
+            } catch (e: Exception) {
+                if (step == 1) {
+                    return TableWalkResult(isSupported = false, rowCount = 0)
+                } else {
+                    break
+                }
+            }
+        }
+
+        return TableWalkResult(isSupported = isTableSupported, rowCount = uniqueRows.size)
     }
 
     data class SingleOidResult(
@@ -321,17 +493,14 @@ object SnmpV2Client {
             DatagramSocket().use { socket ->
                 socket.soTimeout = timeoutMs
 
-                // Bind to active Android VPN network interface if available
                 val vpnInfo = resolveVpnNetwork()
                 ifaceName = vpnInfo.second
                 if (vpnInfo.first != null) {
                     try {
                         vpnInfo.first!!.bindSocket(socket)
-                        Log.d(TAG, "Socket bound to Network ($ifaceName) for target $ip")
                     } catch (e: Exception) {
-                        Log.w(TAG, "Could not bind socket to network: ${e.message}")
                         if (ifaceName.contains("VPN", ignoreCase = true) || ifaceName.startsWith("tun")) {
-                            throw IOException("VPN is active ($ifaceName) but failed to bind socket to VPN tunnel: ${e.message}")
+                            throw IOException("VPN active ($ifaceName) but socket bind failed: ${e.message}")
                         }
                     }
                 }
@@ -450,9 +619,6 @@ object SnmpV2Client {
         Log.i(TAG, "SNMP [${entry.oidName} - ${entry.version} (Att ${entry.attemptNumber})] to ${entry.targetIp}:${entry.port} via ${entry.networkInterface} | Success: ${entry.isSuccess} | Latency: ${entry.latencyMs}ms | ${entry.resultSummary}")
     }
 
-    /**
-     * Resolves the active VPN network interface using Android ConnectivityManager
-     */
     private fun resolveVpnNetwork(): Pair<Network?, String> {
         try {
             val app = try { NetVisionApplication.instance } catch (e: Exception) { null } ?: return Pair(null, "No AppContext")
@@ -486,28 +652,15 @@ object SnmpV2Client {
         }
     }
 
-    /**
-     * Builds a standard SNMP GetRequest packet strictly adhering to ASN.1 BER (RFC 1157, RFC 1905).
-     *
-     * Format:
-     * SEQUENCE {
-     *   INTEGER version (0 = v1, 1 = v2c)
-     *   OCTET STRING community
-     *   GetRequest-PDU [0xA0] {
-     *     INTEGER request-id
-     *     INTEGER error-status (0)
-     *     INTEGER error-index (0)
-     *     VarBindList SEQUENCE {
-     *       VarBind SEQUENCE {
-     *         OBJECT IDENTIFIER oid
-     *         NULL
-     *       }
-     *     }
-     *   }
-     * }
-     */
     fun buildGetRequest(reqId: Int, community: String, oidBytes: ByteArray, version: Int = 1): ByteArray {
-        // 1. VarBind: SEQUENCE { ObjectName (0x06), ObjectSyntax (NULL 0x05 0x00) }
+        return buildPduMessage(reqId, community, oidBytes, pduTag = 0xA0, version = version)
+    }
+
+    fun buildGetNextRequest(reqId: Int, community: String, oidBytes: ByteArray, version: Int = 1): ByteArray {
+        return buildPduMessage(reqId, community, oidBytes, pduTag = 0xA1, version = version)
+    }
+
+    private fun buildPduMessage(reqId: Int, community: String, oidBytes: ByteArray, pduTag: Int, version: Int = 1): ByteArray {
         val varBindInner = ByteArrayOutputStream()
         varBindInner.write(0x06) // OBJECT IDENTIFIER tag
         writeLength(varBindInner, oidBytes.size)
@@ -516,42 +669,39 @@ object SnmpV2Client {
 
         val varBindBytes = varBindInner.toByteArray()
         val varBindSeq = ByteArrayOutputStream()
-        varBindSeq.write(0x30) // VarBind SEQUENCE tag
+        varBindSeq.write(0x30)
         writeLength(varBindSeq, varBindBytes.size)
         varBindSeq.write(varBindBytes)
 
-        // 2. VarBindList: SEQUENCE OF VarBind
         val varBindListBytes = varBindSeq.toByteArray()
         val varBindListSeq = ByteArrayOutputStream()
-        varBindListSeq.write(0x30) // VarBindList SEQUENCE tag
+        varBindListSeq.write(0x30)
         writeLength(varBindListSeq, varBindListBytes.size)
         varBindListSeq.write(varBindListBytes)
 
-        // 3. GetRequest PDU: tag 0xA0
         val pduInner = ByteArrayOutputStream()
         writeBerInteger(pduInner, reqId)
-        writeBerInteger(pduInner, 0) // error-status = 0
-        writeBerInteger(pduInner, 0) // error-index = 0
+        writeBerInteger(pduInner, 0)
+        writeBerInteger(pduInner, 0)
         pduInner.write(varBindListSeq.toByteArray())
 
         val pduBytes = pduInner.toByteArray()
         val pduSeq = ByteArrayOutputStream()
-        pduSeq.write(0xA0) // GetRequest-PDU tag
+        pduSeq.write(pduTag) // 0xA0 (Get) or 0xA1 (GetNext)
         writeLength(pduSeq, pduBytes.size)
         pduSeq.write(pduBytes)
 
-        // 4. Message: SEQUENCE { version (INTEGER 0 or 1), community (OCTET STRING), PDU }
         val msgInner = ByteArrayOutputStream()
-        writeBerInteger(msgInner, version) // 0 = SNMPv1, 1 = SNMPv2c
+        writeBerInteger(msgInner, version)
         val commBytes = community.toByteArray(Charsets.US_ASCII)
-        msgInner.write(0x04) // OCTET STRING
+        msgInner.write(0x04)
         writeLength(msgInner, commBytes.size)
         msgInner.write(commBytes)
         msgInner.write(pduSeq.toByteArray())
 
         val msgBytes = msgInner.toByteArray()
         val finalSeq = ByteArrayOutputStream()
-        finalSeq.write(0x30) // Top Message SEQUENCE
+        finalSeq.write(0x30)
         writeLength(finalSeq, msgBytes.size)
         finalSeq.write(msgBytes)
 
@@ -561,6 +711,7 @@ object SnmpV2Client {
     data class ParsedResponse(
         val isSuccess: Boolean,
         val versionDecoded: String = "v2c",
+        val responseOid: String? = null,
         val stringValue: String? = null,
         val longValue: Long? = null,
         val intValue: Int? = null,
@@ -568,9 +719,6 @@ object SnmpV2Client {
         val errorDetail: String? = null
     )
 
-    /**
-     * Strict ASN.1 BER parser for SNMP GetResponse (0xA2) across SNMP v1 and v2c
-     */
     fun parseSnmpResponse(data: ByteArray, expectedReqId: Int, expectedCommunity: String): ParsedResponse {
         try {
             var i = 0
@@ -632,7 +780,6 @@ object SnmpV2Client {
             }
             i = reqNext + reqLen
 
-            // Request ID verification
             if (responseReqId != expectedReqId) {
                 return ParsedResponse(
                     false,
@@ -665,12 +812,12 @@ object SnmpV2Client {
             if (errorStatus != 0) {
                 val errName = when (errorStatus) {
                     1 -> "tooBig"
-                    2 -> "noSuchName (OID not supported on device)"
+                    2 -> "noSuchName"
                     3 -> "badValue"
                     4 -> "readOnly"
                     5 -> "genErr"
-                    16 -> "authorizationError (Check Community name)"
-                    else -> "SNMP Error code $errorStatus"
+                    16 -> "authorizationError"
+                    else -> "Error code $errorStatus"
                 }
                 return ParsedResponse(false, versionDecoded = versionDecoded, summary = "SNMP Error: $errName", errorDetail = errName)
             }
@@ -697,6 +844,7 @@ object SnmpV2Client {
             }
             i++
             val (oidLen, oidNext) = readLength(data, i)
+            val respOidString = decodeOidBytes(data, oidNext, oidLen)
             i = oidNext + oidLen
 
             // 11. Value Tag
@@ -707,48 +855,125 @@ object SnmpV2Client {
             when (valTag) {
                 0x04 -> { // OCTET STRING
                     val str = String(data, vDataNext, vDataLen, Charsets.UTF_8).trim()
-                    return ParsedResponse(true, versionDecoded = versionDecoded, stringValue = str, summary = "String: ${str.take(40)}")
+                    val hexStr = data.sliceArray(vDataNext until (vDataNext + vDataLen)).joinToString(":") { "%02x".format(it) }
+                    val displayStr = if (vDataLen == 6) hexStr else str
+                    return ParsedResponse(
+                        isSuccess = true,
+                        versionDecoded = versionDecoded,
+                        responseOid = respOidString,
+                        stringValue = displayStr,
+                        summary = "String: ${displayStr.take(40)}"
+                    )
                 }
                 0x43 -> { // TimeTicks (1/100 sec)
                     var ticks = 0L
                     for (k in 0 until vDataLen) {
                         ticks = (ticks shl 8) or (data[vDataNext + k].toLong() and 0xFFL)
                     }
-                    return ParsedResponse(true, versionDecoded = versionDecoded, longValue = ticks, summary = "TimeTicks: $ticks (${formatTimeTicks(ticks)})")
+                    return ParsedResponse(
+                        isSuccess = true,
+                        versionDecoded = versionDecoded,
+                        responseOid = respOidString,
+                        longValue = ticks,
+                        intValue = ticks.toInt(),
+                        summary = "TimeTicks: $ticks (${formatTimeTicks(ticks)})"
+                    )
                 }
                 0x02 -> { // INTEGER
                     var num = 0
                     for (k in 0 until vDataLen) {
                         num = (num shl 8) or (data[vDataNext + k].toInt() and 0xFF)
                     }
-                    return ParsedResponse(true, versionDecoded = versionDecoded, intValue = num, summary = "Integer: $num")
+                    return ParsedResponse(
+                        isSuccess = true,
+                        versionDecoded = versionDecoded,
+                        responseOid = respOidString,
+                        intValue = num,
+                        longValue = num.toLong(),
+                        summary = "Integer: $num"
+                    )
                 }
-                0x41, 0x42 -> { // Counter32 / Gauge32
+                0x41, 0x42, 0x46 -> { // Counter32 / Gauge32 / Counter64 (Unsigned)
                     var num = 0L
                     for (k in 0 until vDataLen) {
                         num = (num shl 8) or (data[vDataNext + k].toLong() and 0xFFL)
                     }
-                    return ParsedResponse(true, versionDecoded = versionDecoded, longValue = num, summary = "Counter/Gauge: $num")
+                    val safePositiveNum = if (num < 0) (num and Long.MAX_VALUE) else num
+                    return ParsedResponse(
+                        isSuccess = true,
+                        versionDecoded = versionDecoded,
+                        responseOid = respOidString,
+                        longValue = safePositiveNum,
+                        intValue = safePositiveNum.toInt(),
+                        summary = "Counter/Gauge: $safePositiveNum"
+                    )
                 }
                 0x40 -> { // IpAddress (4 bytes)
                     if (vDataLen == 4) {
-                        val ip = "${data[vDataNext].toInt() and 0xFF}.${data[vDataNext + 1].toInt() and 0xFF}.${data[vDataNext + 2].toInt() and 0xFF}.${data[vDataNext + 3].toInt() and 0xFF}"
-                        return ParsedResponse(true, versionDecoded = versionDecoded, stringValue = ip, summary = "IpAddress: $ip")
+                        val ipStr = "${data[vDataNext].toInt() and 0xFF}.${data[vDataNext + 1].toInt() and 0xFF}.${data[vDataNext + 2].toInt() and 0xFF}.${data[vDataNext + 3].toInt() and 0xFF}"
+                        return ParsedResponse(isSuccess = true, versionDecoded = versionDecoded, responseOid = respOidString, stringValue = ipStr, summary = "IpAddress: $ipStr")
                     } else {
-                        return ParsedResponse(true, versionDecoded = versionDecoded, stringValue = "IpAddress", summary = "IpAddress")
+                        return ParsedResponse(isSuccess = true, versionDecoded = versionDecoded, responseOid = respOidString, stringValue = "IpAddress", summary = "IpAddress")
                     }
                 }
-                0x80 -> return ParsedResponse(false, versionDecoded = versionDecoded, summary = "noSuchObject", errorDetail = "noSuchObject (OID not found in MIB)")
-                0x81 -> return ParsedResponse(false, versionDecoded = versionDecoded, summary = "noSuchInstance", errorDetail = "noSuchInstance (Instance does not exist)")
-                0x82 -> return ParsedResponse(false, versionDecoded = versionDecoded, summary = "endOfMibView", errorDetail = "endOfMibView")
+                0x80 -> return ParsedResponse(false, versionDecoded = versionDecoded, responseOid = respOidString, summary = "noSuchObject", errorDetail = "noSuchObject")
+                0x81 -> return ParsedResponse(false, versionDecoded = versionDecoded, responseOid = respOidString, summary = "noSuchInstance", errorDetail = "noSuchInstance")
+                0x82 -> return ParsedResponse(false, versionDecoded = versionDecoded, responseOid = respOidString, summary = "endOfMibView", errorDetail = "endOfMibView")
                 else -> {
                     val rawHex = data.sliceArray(vDataNext until (vDataNext + vDataLen)).joinToString("") { "%02x".format(it) }
-                    return ParsedResponse(true, versionDecoded = versionDecoded, stringValue = rawHex, summary = "Raw Tag 0x${Integer.toHexString(valTag)}: $rawHex")
+                    return ParsedResponse(isSuccess = true, versionDecoded = versionDecoded, responseOid = respOidString, stringValue = rawHex, summary = "Raw Tag 0x${Integer.toHexString(valTag)}: $rawHex")
                 }
             }
         } catch (e: Exception) {
             return ParsedResponse(false, summary = "Parse Failure", errorDetail = "Malformed ASN.1 payload: ${e.message}")
         }
+    }
+
+    fun encodeOidString(oidStr: String): ByteArray {
+        val parts = oidStr.trim().removePrefix(".").split('.').mapNotNull { it.toIntOrNull() }
+        if (parts.size < 2) return byteArrayOf()
+        val out = ByteArrayOutputStream()
+        out.write((parts[0] * 40 + parts[1]))
+        for (i in 2 until parts.size) {
+            val valInt = parts[i]
+            if (valInt < 128) {
+                out.write(valInt)
+            } else {
+                val list = mutableListOf<Int>()
+                var v = valInt
+                list.add(v and 0x7F)
+                v = v ushr 7
+                while (v > 0) {
+                    list.add(0, (v and 0x7F) or 0x80)
+                    v = v ushr 7
+                }
+                for (b in list) {
+                    out.write(b)
+                }
+            }
+        }
+        return out.toByteArray()
+    }
+
+    fun decodeOidBytes(data: ByteArray, offset: Int, length: Int): String {
+        if (length == 0) return ""
+        val sb = StringBuilder()
+        var pos = offset
+        val first = data[pos].toInt() and 0xFF
+        sb.append(first / 40).append('.').append(first % 40)
+        pos++
+        var value = 0L
+        val end = offset + length
+        while (pos < end) {
+            val b = data[pos].toInt() and 0xFF
+            value = (value shl 7) or (b and 0x7F).toLong()
+            if ((b and 0x80) == 0) {
+                sb.append('.').append(value)
+                value = 0L
+            }
+            pos++
+        }
+        return sb.toString()
     }
 
     private fun writeBerInteger(out: ByteArrayOutputStream, value: Int) {

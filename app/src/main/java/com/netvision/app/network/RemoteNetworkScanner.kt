@@ -208,28 +208,28 @@ class RemoteNetworkScanner(
         val host = (hostname ?: "").lowercase()
         val macLower = (mac ?: "").lowercase()
 
-        // Check MikroTik
-        if (openPort == 8291 || openPort == 8728 || openPort == 80 ||
-            descr.contains("mikrotik") || descr.contains("routeros") ||
+        // 1. Explicit Ubiquiti indicators (sysDescr, hostname, MAC OUI, Ubiquiti ports)
+        if (descr.contains("ubiquiti") || descr.contains("ubnt") || descr.contains("unifi") || descr.contains("airos") || descr.contains("airmax") || descr.contains("litebeam") || descr.contains("powerbeam") || descr.contains("nanostation") || descr.contains("rocket") ||
+            host.contains("ubnt") || host.contains("unifi") || host.contains("airos") || host.contains("airmax") ||
+            macLower.startsWith("74:83:c2") || macLower.startsWith("ac:8b:a9") || macLower.startsWith("68:d7:9a") || macLower.startsWith("24:a4:3c") || macLower.startsWith("00:27:22") || macLower.startsWith("04:18:d6") || macLower.startsWith("18:e8:29") || macLower.startsWith("80:2a:a8") || macLower.startsWith("b4:fb:e4") || macLower.startsWith("d8:b6:b7") || macLower.startsWith("e8:de:27") || macLower.startsWith("f0:9f:c2") ||
+            openPort == 8080 || openPort == 8443
+        ) {
+            val devType = if (descr.contains("switch") || host.contains("sw")) DeviceType.SWITCH else DeviceType.ACCESS_POINT
+            val model = if (snmpDescr != null && snmpDescr.length > 5) snmpDescr.take(25) else "AirOS / Ubiquiti"
+            return Triple(Manufacturer.UBIQUITI, devType, model)
+        }
+
+        // 2. Explicit MikroTik indicators (RouterOS, Winbox 8291, API 8728, MAC OUI)
+        if (descr.contains("mikrotik") || descr.contains("routeros") ||
             host.contains("mikrotik") || host.contains("rb") ||
-            macLower.startsWith("48:8f:5a") || macLower.startsWith("cc:2d:e0") || macLower.startsWith("08:55:31")
+            macLower.startsWith("48:8f:5a") || macLower.startsWith("cc:2d:e0") || macLower.startsWith("08:55:31") || macLower.startsWith("b8:69:f4") || macLower.startsWith("d4:ca:6d") || macLower.startsWith("e4:8d:8c") || macLower.startsWith("2c:c8:1b") || macLower.startsWith("64:d1:54") ||
+            openPort == 8291 || openPort == 8728
         ) {
             val model = if (snmpDescr != null && snmpDescr.length > 5) snmpDescr.take(25) else "RouterOS"
             return Triple(Manufacturer.MIKROTIK, DeviceType.ROUTER, model)
         }
 
-        // Check Ubiquiti (UBNT)
-        if (openPort == 8080 || openPort == 8443 ||
-            descr.contains("ubiquiti") || descr.contains("ubnt") || descr.contains("unifi") || descr.contains("airos") ||
-            host.contains("ubnt") || host.contains("unifi") ||
-            macLower.startsWith("74:83:c2") || macLower.startsWith("ac:8b:a9") || macLower.startsWith("68:d7:9a") || macLower.startsWith("24:a4:3c")
-        ) {
-            val devType = if (descr.contains("switch") || host.contains("sw")) DeviceType.SWITCH else DeviceType.ACCESS_POINT
-            val model = if (snmpDescr != null && snmpDescr.length > 5) snmpDescr.take(25) else "UniFi / airMAX"
-            return Triple(Manufacturer.UBIQUITI, devType, model)
-        }
-
-        // Check Cisco
+        // 3. Cisco
         if (descr.contains("cisco") || host.contains("cisco") || macLower.startsWith("00:1e:13")) {
             return Triple(Manufacturer.CISCO, DeviceType.SWITCH, "Catalyst / IOS")
         }
