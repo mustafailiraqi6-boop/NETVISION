@@ -91,7 +91,7 @@ object SnmpV2Client {
     val OID_MIKROTIK_REG_TABLE_MAC_BYTES = encodeOidString(OID_MIKROTIK_REG_TABLE_MAC_STR)
 
     // Ubiquiti AirOS Station Table MAC Address Column: 1.3.6.1.4.1.41112.1.4.7.1.1.1
-    val OID_UBNT_STA_TABLE_MAC_STR = "1.3.6.1.4.1.41112.1.4.7.1.1.1"
+    val OID_UBNT_STA_TABLE_MAC_STR = "1.3.6.1.4.1.41112.1.4.7.1.1"
     val OID_UBNT_STA_TABLE_MAC_BYTES = encodeOidString(OID_UBNT_STA_TABLE_MAC_STR)
 
     // Scalar Fallbacks:
@@ -427,11 +427,8 @@ object SnmpV2Client {
                     } else {
                         val respOidStr = parsed.responseOid
                         if (!respOidStr.startsWith(rootOidStr)) {
-                            // The walk has left the requested table subtree.
-                            if (step == 1) {
-                                // The table is supported but contains no rows.
-                                isTableSupported = true
-                            }
+                            // GETNEXT left this subtree immediately: this agent does not
+                            // expose this table/column. Let the caller try the next vendor OID.
                             shouldExitLoop = true
                         } else {
                             isTableSupported = true
