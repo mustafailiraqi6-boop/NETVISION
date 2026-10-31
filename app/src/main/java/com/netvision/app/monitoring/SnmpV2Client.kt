@@ -389,6 +389,7 @@ object SnmpV2Client {
             var timeReceived = 0L
             var ifaceName = "Default"
 
+            var shouldExitLoop = false
             try {
                 DatagramSocket().use { socket ->
                     socket.soTimeout = timeoutMs
@@ -399,7 +400,7 @@ object SnmpV2Client {
                         try {
                             vpnInfo.first!!.bindSocket(socket)
                         } catch (e: Exception) {
-                            // Ignored
+                            // Keep the existing fallback behavior if VPN binding is unavailable.
                         }
                     }
 
@@ -411,57 +412,43 @@ object SnmpV2Client {
 
                     val buffer = ByteArray(2048)
                     val receivePacket = DatagramPacket(buffer, buffer.size)
-
                     socket.receive(receivePacket)
                     timeReceived = System.currentTimeMillis()
-                    val latency = timeReceived - timeSent
-                    val responseData = buffer.copyOf(receivePacket.length)
 
+                    val responseData = buffer.copyOf(receivePacket.length)
                     val parsed = parseSnmpResponse(responseData, reqId, community)
 
-                    var shouldExitLoop = false
                     if (!parsed.isSuccess || parsed.responseOid == null) {
-                        // Error, endOfMibView, or noSuchInstance
+                        // Error, endOfMibView, or noSuchInstance.
                         if (step == 1) {
                             return TableWalkResult(isSupported = false, rowCount = 0)
-                        } else {
-                            shouldExitLoop = true
                         }
+                        shouldExitLoop = true
                     } else {
                         val respOidStr = parsed.responseOid
-                        // Check if response OID still belongs to rootOidStr prefix
                         if (!respOidStr.startsWith(rootOidStr)) {
-                            // Left table subtree!
+                            // The walk has left the requested table subtree.
                             if (step == 1) {
-                                // If first GETNEXT immediately went past the prefix, table exists but is EMPTY
+                                // The table is supported but contains no rows.
                                 isTableSupported = true
                             }
                             shouldExitLoop = true
                         } else {
-                            // Table is supported! Add unique row identifier
                             isTableSupported = true
                             uniqueRows.add(respOidStr)
-                            // Advance next GETNEXT to returned OID bytes
                             currentOidBytes = encodeOidString(respOidStr)
                         }
                     }
-                    if (shouldExitLoop) {
-                        break
-                    }
-
-                    // Table is supported! Add unique row identifier
-                    isTableSupported = true
-                    uniqueRows.add(respOidStr)
-
-                    // Advance next GETNEXT to returned OID bytes
-                    currentOidBytes = encodeOidString(respOidStr)
                 }
             } catch (e: Exception) {
                 if (step == 1) {
                     return TableWalkResult(isSupported = false, rowCount = 0)
-                } else {
-                    break
                 }
+                shouldExitLoop = true
+            }
+
+            if (shouldExitLoop) {
+                break
             }
         }
 
