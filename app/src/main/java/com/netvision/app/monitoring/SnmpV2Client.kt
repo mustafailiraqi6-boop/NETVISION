@@ -431,7 +431,9 @@ object SnmpV2Client {
                 DatagramSocket().use { socket ->
                     socket.soTimeout = timeoutMs
                     val vpnInfo = resolveVpnNetwork()
-                    if (vpnInfo.first != null) vpnInfo.first!!.bindSocket(socket)
+                    if (vpnInfo.first != null) {
+                        try { vpnInfo.first!!.bindSocket(socket) } catch (_: Exception) { /* retain existing VPN fallback */ }
+                    }
                     val address = InetAddress.getByName(ip)
                     socket.send(DatagramPacket(packet, packet.size, address, port))
                     val buffer = ByteArray(2048)
@@ -443,16 +445,22 @@ object SnmpV2Client {
                         shouldStop = true
                     } else {
                         val parts = oid.removePrefix("$tableRoot.").split('.')
-                        // ubntStaEntry is column .1; the next sub-identifier is the column number.
-                        if (parts.size < 3 || parts[0] != "1") {
+                        // OID layout: ubntStaEntry.<column>.<ifIndex>.<six MAC octets>.
+                        if (parts.size < 8) {
                             shouldStop = true
                         } else {
-                            val column = parts[1].toIntOrNull()
-                            val index = parts.drop(2).joinToString(".")
+                            val column = parts[0].toIntOrNull()
+                            val index = parts.drop(1).joinToString(".")
                             if (index.isNotBlank()) {
                                 val row = rows.getOrPut(index) { MutableStation() }
+                                val macOctets = parts.takeLast(6).mapNotNull { it.toIntOrNull() }
+                                if (macOctets.size == 6 && macOctets.all { it in 0..255 }) {
+                                    row.mac = macOctets.joinToString(":") { "%02X".format(it) }
+                                }
                                 when (column) {
-                                    1 -> row.mac = parsed.stringValue?.uppercase(Locale.ROOT)
+                                    1 -> parsed.stringValue?.let { value ->
+                                        if (value.matches(Regex("^(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$"))) row.mac = value.uppercase(Locale.ROOT)
+                                    }
                                     2 -> row.name = parsed.stringValue?.takeIf { it.isNotBlank() }
                                     3 -> row.signal = parsed.intValue
                                     4 -> row.noise = parsed.intValue
