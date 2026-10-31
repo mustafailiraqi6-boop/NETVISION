@@ -187,12 +187,15 @@ private fun UbiquitiStationCard(station: UbiquitiStationInfo, isArabic: Boolean)
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    stationName,
-                    modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(stationName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text(
+                        if (isArabic) "الإشارة: ${station.signalDbm?.let { "$it dBm" } ?: "غير متاحة"}"
+                        else "Signal: ${station.signalDbm?.let { "$it dBm" } ?: "Unavailable"}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 OutlinedButton(onClick = { expanded = !expanded }) {
                     Text(
                         if (expanded) {
@@ -222,10 +225,9 @@ private fun UbiquitiStationCard(station: UbiquitiStationInfo, isArabic: Boolean)
                 }
                 Divider()
                 val metrics = listOf(
-                    (if (isArabic) "إشارة الجهاز" else "Signal") to station.signalDbm?.let { "$it dBm" },
                     "CCQ" to station.ccqPercent?.let { "$it%" },
-                    (if (isArabic) "Data Rate (TX)" else "Data Rate (TX)") to station.txRate?.let { "$it Mbps" },
-                    (if (isArabic) "Data Rate (RX)" else "Data Rate (RX)") to station.rxRate?.let { "$it Mbps" }
+                    (if (isArabic) "Data Rate TX" else "Data Rate TX") to station.txRate?.let { "$it Mbps" },
+                    (if (isArabic) "Data Rate RX" else "Data Rate RX") to station.rxRate?.let { "$it Mbps" }
                 )
                 metrics.chunked(2).forEach { pair ->
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
