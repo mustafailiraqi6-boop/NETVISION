@@ -27,7 +27,7 @@ class NetworkRouteManager(private val context: Context) {
                 if (!intf.isUp || intf.isLoopback) continue
 
                 val addresses = Collections.list(intf.inetAddresses)
-                val ipv4 = addresses.firstOrNull { !it.isLoopbackAddress && it.hostAddress.indexOf(':') < 0 }?.hostAddress
+                val ipv4 = addresses.firstOrNull { !it.isLoopbackAddress && (it.hostAddress?.contains(":") != true) }?.hostAddress
 
                 val isVpn = intf.name.contains("tun") || intf.name.contains("ppp") || intf.name.contains("tap")
 

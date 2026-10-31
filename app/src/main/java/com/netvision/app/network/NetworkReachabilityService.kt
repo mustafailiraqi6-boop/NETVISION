@@ -54,7 +54,7 @@ class NetworkReachabilityService {
                     socket.connect(InetSocketAddress(targetIp, port), timeoutMs)
                     openPorts.add(port)
                 }
-            } catch (_: Exception) {}
+            } catch (e: Exception) {}
         }
         openPorts
     }

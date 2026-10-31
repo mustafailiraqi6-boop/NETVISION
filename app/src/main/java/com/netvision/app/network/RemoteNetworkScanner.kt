@@ -1,5 +1,8 @@
 package com.netvision.app.network
 
+import com.netvision.app.models.DeviceStatus
+import com.netvision.app.models.DeviceType
+import com.netvision.app.models.Manufacturer
 import com.netvision.app.models.NetworkDevice
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
