@@ -35,6 +35,7 @@ import java.util.Locale
 @Composable
 fun MonitoringScreen(
     isArabic: Boolean,
+    onViewDeviceDetails: (String) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: MonitoringViewModel = viewModel()
 ) {
@@ -62,7 +63,6 @@ fun MonitoringScreen(
         ?: filteredDevices.firstOrNull()
         ?: savedDevices.firstOrNull()
 
-    val snmpInfo = activeDevice?.let { uiState.snmpStatusByDevice[it.id] }
 
     // Dynamic stats based on saved devices
     val totalDevicesCount = savedDevices.size
@@ -357,195 +357,12 @@ fun MonitoringScreen(
                     isSelected = isSelected,
                     isSnmpActive = isSnmpActive,
                     isArabic = isArabic,
-                    onClick = { viewModel.selectDevice(device.id) }
+                    onClick = { viewModel.selectDevice(device.id) },
+                    onViewDetails = { onViewDeviceDetails(device.id) }
                 )
             }
         }
 
-        // -------------------------------------------------------------
-        // Selected Device SNMP Information Card (بطاقة معلومات SNMP)
-        // -------------------------------------------------------------
-        if (activeDevice != null) {
-            item {
-                val isSnmpOk = snmpInfo != null && snmpInfo.isSuccess
-
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .border(
-                            width = 1.5.dp,
-                            color = if (isSnmpOk) CyanAccent.copy(alpha = 0.8f) else MaterialTheme.colorScheme.outline,
-                            shape = RoundedCornerShape(16.dp)
-                        ),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                ) {
-                    Column(modifier = Modifier.padding(18.dp)) {
-                        // Card Header
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Default.SettingsEthernet,
-                                    contentDescription = null,
-                                    tint = CyanAccent,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = if (isArabic) "معلومات الجهاز عبر SNMP" else "Device SNMP Telemetry",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
-                                )
-                            }
-
-                            val statusColor = if (isSnmpOk) StatusGreen else StatusRed
-                            val statusText = if (isSnmpOk) "SNMP Active" else "SNMP Failed"
-
-                            Surface(
-                                color = statusColor.copy(alpha = 0.15f),
-                                shape = RoundedCornerShape(6.dp)
-                            ) {
-                                Text(
-                                    text = statusText,
-                                    fontSize = 11.sp,
-                                    color = statusColor,
-                                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(14.dp))
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        // -------------------------------------------------------------
-                        // The Strictly Specified 5 Fields in Order
-                        // -------------------------------------------------------------
-
-                        // Field 1: اسم الجهاز (Device Name)
-                        val field1Name = if (isSnmpOk && !snmpInfo?.sysName.isNullOrBlank()) {
-                            snmpInfo!!.sysName!!
-                        } else if (activeDevice.name.isNotBlank()) {
-                            activeDevice.name
-                        } else {
-                            if (isArabic) "غير متاح" else "N/A"
-                        }
-
-                        SnmpFieldRow(
-                            label = if (isArabic) "اسم الجهاز:" else "Device Name:",
-                            value = field1Name,
-                            isArabic = isArabic
-                        )
-
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
-
-                        // Field 2: مدة التشغيل (Uptime)
-                        val field2Uptime = if (isSnmpOk && !snmpInfo?.uptimeFormatted.isNullOrBlank()) {
-                            snmpInfo!!.uptimeFormatted!!
-                        } else if (activeDevice.metrics.uptimeFormatted.isNotBlank() && activeDevice.metrics.uptimeFormatted != "N/A") {
-                            activeDevice.metrics.uptimeFormatted
-                        } else {
-                            if (isArabic) "غير متاح" else "N/A"
-                        }
-
-                        SnmpFieldRow(
-                            label = if (isArabic) "مدة التشغيل:" else "Uptime:",
-                            value = field2Uptime,
-                            isArabic = isArabic,
-                            valueColor = CyanAccent
-                        )
-
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
-
-                        // Field 3: الموديل (Model)
-                        val field3Model = if (isSnmpOk && !snmpInfo?.model.isNullOrBlank() && snmpInfo.model != "Unknown") {
-                            snmpInfo.model!!
-                        } else if (activeDevice.model.isNotBlank()) {
-                            activeDevice.model
-                        } else {
-                            if (isArabic) "غير متاح" else "N/A"
-                        }
-
-                        SnmpFieldRow(
-                            label = if (isArabic) "الموديل:" else "Model:",
-                            value = field3Model,
-                            isArabic = isArabic
-                        )
-
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
-
-                        // Field 4: زمن الاستجابة (Latency)
-                        val field4Latency = if (isSnmpOk && snmpInfo!!.latencyMs > 0) {
-                            "${snmpInfo.latencyMs} ms"
-                        } else if (activeDevice.status == DeviceStatus.ONLINE && activeDevice.metrics.pingLatencyMs > 0) {
-                            "${activeDevice.metrics.pingLatencyMs} ms"
-                        } else {
-                            if (isArabic) "غير متاح" else "N/A"
-                        }
-
-                        SnmpFieldRow(
-                            label = if (isArabic) "زمن الاستجابة:" else "Response Time:",
-                            value = field4Latency,
-                            isArabic = isArabic,
-                            valueColor = CyanAccent
-                        )
-
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
-
-                        // Field 5: عدد الأجهزة المتصلة (Connected Clients / Stations count)
-                        val field5Clients = if (isSnmpOk && snmpInfo?.connectedClientsCount != null) {
-                            "${snmpInfo.connectedClientsCount}"
-                        } else {
-                            if (isArabic) "غير متاح" else "N/A"
-                        }
-
-                        SnmpFieldRow(
-                            label = if (isArabic) "عدد الأجهزة المتصلة:" else "Connected Clients:",
-                            value = field5Clients,
-                            isArabic = isArabic
-                        )
-
-                        // Failure Reason note if SNMP failed
-                        if (!isSnmpOk) {
-                            Spacer(modifier = Modifier.height(14.dp))
-                            Surface(
-                                color = StatusAmber.copy(alpha = 0.12f),
-                                shape = RoundedCornerShape(8.dp),
-                                border = CardDefaults.outlinedCardBorder()
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(10.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Info,
-                                        contentDescription = null,
-                                        tint = StatusAmber,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        text = snmpInfo?.errorMessage
-                                            ?: (if (isArabic) "فشل استجابة SNMP على UDP 161 (يرجى التحقق من Community ومعلمات الاتصال)"
-                                            else "No SNMP response on UDP 161 (Check Community string & network access)"),
-                                        fontSize = 11.sp,
-                                        color = StatusAmber
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
     }
 }
 
@@ -555,7 +372,8 @@ fun DeviceMonitoringCard(
     isSelected: Boolean,
     isSnmpActive: Boolean,
     isArabic: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onViewDetails: () -> Unit
 ) {
     val isOnline = device.status == DeviceStatus.ONLINE
     val statusColor = if (isOnline) StatusGreen else StatusRed
@@ -681,6 +499,18 @@ fun DeviceMonitoringCard(
                     color = if (isOnline) CyanAccent else StatusRed,
                     fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
                 )
+            }
+            Spacer(modifier = Modifier.height(10.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                OutlinedButton(
+                    onClick = onViewDetails,
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                    shape = RoundedCornerShape(9.dp)
+                ) {
+                    Text(if (isArabic) "عرض التفاصيل" else "View details", fontSize = 12.sp)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Icon(Icons.Default.ChevronLeft, contentDescription = null, modifier = Modifier.size(16.dp))
+                }
             }
         }
     }
