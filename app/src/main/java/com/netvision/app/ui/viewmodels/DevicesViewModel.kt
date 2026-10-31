@@ -37,15 +37,30 @@ class DevicesViewModel(
     private val _sortBy = MutableStateFlow("name")
     private val _selectedFolderId = MutableStateFlow<String?>(null)
 
-    val uiState: StateFlow<DevicesUiState> = combine(
-        repository.getAllDevices(),
-        repository.getAllFolders(),
+    private data class FilterParams(
+        val query: String,
+        val vendor: Manufacturer?,
+        val status: DeviceStatus?,
+        val folderId: String?,
+        val sort: String
+    )
+
+    private val filterParamsFlow = combine(
         _searchQuery,
         _selectedManufacturer,
         _selectedStatus,
         _selectedFolderId,
         _sortBy
-    ) { devices, folders, query, vendor, status, folderId, sort ->
+    ) { query, vendor, status, folderId, sort ->
+        FilterParams(query, vendor, status, folderId, sort)
+    }
+
+    val uiState: StateFlow<DevicesUiState> = combine(
+        repository.getAllDevices(),
+        repository.getAllFolders(),
+        filterParamsFlow
+    ) { devices, folders, filter ->
+        val (query, vendor, status, folderId, sort) = filter
         val filtered = devices.filter { dev ->
             val matchesFolder = folderId == null || dev.folderId == folderId
             val matchesQuery = query.isEmpty() ||

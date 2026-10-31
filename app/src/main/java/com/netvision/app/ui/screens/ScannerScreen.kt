@@ -402,6 +402,7 @@ fun DiscoveredDeviceCard(
         Manufacturer.UBIQUITI -> ElectricBlue
         Manufacturer.MIKROTIK -> CyanAccent
         Manufacturer.CISCO -> Color(0xFF38BDF8)
+        Manufacturer.OTHER -> Color(0xFFA78BFA)
         Manufacturer.GENERIC -> TextMutedDark
     }
 
