@@ -23,7 +23,9 @@ data class SnmpDeviceInfo(
     val sysName: String? = null,
     val uptimeHundredths: Long? = null,
     val uptimeFormatted: String? = null,
+    val model: String? = null,
     val ifCount: Int? = null,
+    val connectedClientsCount: Int? = null,
     val errorMessage: String? = null,
     val communityUsed: String = "netvision",
     val latencyMs: Long = 0,
@@ -66,7 +68,6 @@ object SnmpV2Client {
         return "${community.first()}${"*".repeat(community.length - 2)}${community.last()}"
     }
 
-    // Standard OID byte sequences in ASN.1 BER:
     // 1.3.6.1.2.1.1.1.0 (sysDescr)
     val OID_SYS_DESCR = byteArrayOf(0x2b, 0x06, 0x01, 0x02, 0x01, 0x01, 0x01, 0x00)
     // 1.3.6.1.2.1.1.3.0 (sysUpTime)
@@ -75,6 +76,36 @@ object SnmpV2Client {
     val OID_SYS_NAME = byteArrayOf(0x2b, 0x06, 0x01, 0x02, 0x01, 0x01, 0x05, 0x00)
     // 1.3.6.1.2.1.2.1.0 (ifNumber)
     val OID_IF_NUMBER = byteArrayOf(0x2b, 0x06, 0x01, 0x02, 0x01, 0x02, 0x01, 0x00)
+
+    // Wireless Station Count OIDs (for Ubiquiti AirOS / MikroTik Wireless Registration Table):
+    // Ubiquiti ubntAirMaxStationCount (1.3.6.1.4.1.41112.1.4.5.1.15.1)
+    val OID_UBNT_STA_COUNT = byteArrayOf(0x2b, 0x06, 0x01, 0x04, 0x01, 0x82.toByte(), 0xc1.toByte(), 0x28, 0x01, 0x04, 0x05, 0x01, 0x0f, 0x01)
+    // IEEE 802.11 dot11AssociatedStationCount (1.2.840.10036.1.1.1.9.1)
+    val OID_DOT11_STA_COUNT = byteArrayOf(0x2a, 0x86.toByte(), 0x48, 0x82.toByte(), 0x8e.toByte(), 0x24, 0x01, 0x01, 0x01, 0x09, 0x01)
+    // MikroTik Wireless Registration Table entries count (1.3.6.1.4.1.14988.1.1.1.3.1.6)
+    val OID_MIKROTIK_WLAN_COUNT = byteArrayOf(0x2b, 0x06, 0x01, 0x04, 0x01, 0xf5.toByte(), 0x0c, 0x01, 0x01, 0x01, 0x03, 0x01, 0x06)
+
+    fun extractModel(descr: String?): String {
+        if (descr.isNullOrBlank()) return "Unknown"
+        val clean = descr.trim()
+        if (clean.contains("RouterOS", ignoreCase = true)) {
+            val rbMatch = Regex("""(RB\w+(-\w+)?|CRS\w+|CCR\w+|hEX\w*|hAP\w*|NetMetal\w*|BaseBox\w*|LHG\w*|cAP\w*|OmniTIK\w*|SXT\w*)""", RegexOption.IGNORE_CASE).find(clean)
+            if (rbMatch != null) return "MikroTik ${rbMatch.value}"
+            return clean.take(30)
+        }
+        val ubntKeywords = listOf("LiteBeam", "PowerBeam", "NanoStation", "Rocket", "AirGrid", "NanoBeam", "Bullet", "IsoStation", "GigaBeam", "UniFi", "EdgeRouter", "EdgeSwitch")
+        for (kw in ubntKeywords) {
+            if (clean.contains(kw, ignoreCase = true)) {
+                val idx = clean.indexOf(kw, ignoreCase = true)
+                val extracted = clean.substring(idx).split('\n', ',', ';').firstOrNull()?.trim()?.take(28) ?: kw
+                return "Ubiquiti $extracted"
+            }
+        }
+        if (clean.contains("AirOS", ignoreCase = true)) {
+            return "Ubiquiti AirOS"
+        }
+        return clean.take(30)
+    }
 
     /**
      * Queries device SNMP information with intelligent auto-negotiation and fallback:
@@ -119,7 +150,7 @@ object SnmpV2Client {
             lastInterface = descrRes.networkInterface
 
             if (descrRes.isSuccess) {
-                // Succeeded! Query remaining OIDs with this same verified version
+                // Succeeded! Query remaining standard OIDs with this same verified version
                 val nameRes = querySingleOid(
                     ip = targetIp,
                     community = community,
@@ -153,12 +184,58 @@ object SnmpV2Client {
                     attemptNumber = attemptNumber
                 )
 
+                // Query Wireless Station / Registration Table count (NOT interface count)
+                // Try Ubiquiti first, then Dot11, then MikroTik WLAN count
+                var clientCount: Int? = null
+                val staRes = querySingleOid(
+                    ip = targetIp,
+                    community = community,
+                    port = port,
+                    oidBytes = OID_UBNT_STA_COUNT,
+                    oidName = "ubntStaCount",
+                    version = currentVersion,
+                    timeoutMs = 600,
+                    attemptNumber = attemptNumber
+                )
+                if (staRes.isSuccess && staRes.intValue != null) {
+                    clientCount = staRes.intValue
+                } else {
+                    val dot11Res = querySingleOid(
+                        ip = targetIp,
+                        community = community,
+                        port = port,
+                        oidBytes = OID_DOT11_STA_COUNT,
+                        oidName = "dot11StaCount",
+                        version = currentVersion,
+                        timeoutMs = 600,
+                        attemptNumber = attemptNumber
+                    )
+                    if (dot11Res.isSuccess && dot11Res.intValue != null) {
+                        clientCount = dot11Res.intValue
+                    } else {
+                        val mtxWlanRes = querySingleOid(
+                            ip = targetIp,
+                            community = community,
+                            port = port,
+                            oidBytes = OID_MIKROTIK_WLAN_COUNT,
+                            oidName = "mtxWlanCount",
+                            version = currentVersion,
+                            timeoutMs = 600,
+                            attemptNumber = attemptNumber
+                        )
+                        if (mtxWlanRes.isSuccess && mtxWlanRes.intValue != null) {
+                            clientCount = mtxWlanRes.intValue
+                        }
+                    }
+                }
+
                 val totalLatency = System.currentTimeMillis() - totalStart
                 val descr = descrRes.stringValue
                 val name = nameRes.stringValue
                 val uptimeTicks = uptimeRes.longValue
                 val uptimeFormatted = uptimeTicks?.let { formatTimeTicks(it) }
                 val ifCount = ifRes.intValue
+                val modelName = extractModel(descr)
 
                 val negSummary = if (attemptNumber == 1) {
                     if (preferredVersion != null) "SNMP $currentVersion (Saved)" else "SNMP $currentVersion (Primary)"
@@ -173,7 +250,9 @@ object SnmpV2Client {
                         sysName = name,
                         uptimeHundredths = uptimeTicks,
                         uptimeFormatted = uptimeFormatted,
+                        model = modelName,
                         ifCount = ifCount,
+                        connectedClientsCount = clientCount,
                         communityUsed = community,
                         latencyMs = totalLatency,
                         networkInterface = lastInterface,

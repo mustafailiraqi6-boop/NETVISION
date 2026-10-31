@@ -7,7 +7,7 @@ import com.netvision.app.settings.SettingsRepository
 
 class NetVisionApplication : Application() {
     val database by lazy { AppDatabase.getDatabase(this) }
-    val deviceRepository by lazy { DeviceRepository(database.deviceDao(), database.networkRangeDao()) }
+    val deviceRepository by lazy { DeviceRepository(database.deviceDao(), database.networkRangeDao(), database.deviceFolderDao()) }
     val settingsRepository by lazy { SettingsRepository(this) }
 
     companion object {

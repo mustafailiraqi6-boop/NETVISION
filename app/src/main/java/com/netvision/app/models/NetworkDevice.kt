@@ -2,18 +2,29 @@ package com.netvision.app.models
 
 enum class DeviceType(val labelEn: String, val labelAr: String) {
     ROUTER("Router", "راوتر"),
+    SECTOR_AP("Sector / Access Point", "سكتر / نقطة وصول"),
     SWITCH("Switch", "سويتش"),
+    CLIENT_DEVICE("Client Device", "جهاز مشترك"),
     ACCESS_POINT("Access Point", "نقطة وصول"),
     GATEWAY("Security Gateway", "بوابة حماية"),
-    CONTROLLER("Controller", "وحدة تحكم")
+    CONTROLLER("Controller", "وحدة تحكم"),
+    OTHER("Other", "أخرى")
 }
 
 enum class Manufacturer(val displayName: String) {
-    UBIQUITI("Ubiquiti (UBNT)"),
     MIKROTIK("MikroTik"),
+    UBIQUITI("Ubiquiti (UBNT)"),
     CISCO("Cisco"),
+    OTHER("Other"),
     GENERIC("Generic / Other")
 }
+
+data class DeviceFolder(
+    val id: String,
+    val name: String,
+    val deviceCount: Int = 0,
+    val createdAt: Long = System.currentTimeMillis()
+)
 
 enum class DeviceStatus(val labelEn: String, val labelAr: String) {
     ONLINE("Online", "متصل"),
@@ -43,7 +54,8 @@ data class NetworkDevice(
     val firmwareVersion: String = "v3.2.12",
     val lastSeenTimestamp: Long = System.currentTimeMillis(),
     val metrics: NetworkMetrics = NetworkMetrics(),
-    val snmpVersion: String? = null
+    val snmpVersion: String? = null,
+    val folderId: String = "uncategorized"
 )
 
 data class NetworkRange(

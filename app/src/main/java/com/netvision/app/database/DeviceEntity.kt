@@ -27,7 +27,8 @@ data class DeviceEntity(
     val cpuUsagePercent: Int,
     val memoryUsagePercent: Int,
     val pingLatencyMs: Int,
-    val snmpVersion: String? = null
+    val snmpVersion: String? = null,
+    val folderId: String = "uncategorized"
 ) {
     fun toDomainModel(): NetworkDevice {
         return NetworkDevice(
@@ -50,7 +51,8 @@ data class DeviceEntity(
                 memoryUsagePercent = memoryUsagePercent,
                 pingLatencyMs = pingLatencyMs
             ),
-            snmpVersion = snmpVersion
+            snmpVersion = snmpVersion,
+            folderId = if (folderId.isBlank()) "uncategorized" else folderId
         )
     }
 
@@ -74,7 +76,8 @@ data class DeviceEntity(
                 cpuUsagePercent = device.metrics.cpuUsagePercent,
                 memoryUsagePercent = device.metrics.memoryUsagePercent,
                 pingLatencyMs = device.metrics.pingLatencyMs,
-                snmpVersion = device.snmpVersion
+                snmpVersion = device.snmpVersion,
+                folderId = if (device.folderId.isBlank()) "uncategorized" else device.folderId
             )
         }
     }

@@ -3,6 +3,7 @@ package com.netvision.app.ui.viewmodels
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.netvision.app.NetVisionApplication
+import com.netvision.app.models.DeviceFolder
 import com.netvision.app.models.DeviceStatus
 import com.netvision.app.models.DeviceType
 import com.netvision.app.models.Manufacturer
@@ -14,6 +15,8 @@ import kotlinx.coroutines.launch
 data class DevicesUiState(
     val devices: List<NetworkDevice> = emptyList(),
     val totalCount: Int = 0,
+    val folders: List<DeviceFolder> = emptyList(),
+    val selectedFolderId: String? = null,
     val searchQuery: String = "",
     val selectedManufacturer: Manufacturer? = null,
     val selectedStatus: DeviceStatus? = null,
@@ -32,15 +35,19 @@ class DevicesViewModel(
     private val _selectedManufacturer = MutableStateFlow<Manufacturer?>(null)
     private val _selectedStatus = MutableStateFlow<DeviceStatus?>(null)
     private val _sortBy = MutableStateFlow("name")
+    private val _selectedFolderId = MutableStateFlow<String?>(null)
 
     val uiState: StateFlow<DevicesUiState> = combine(
         repository.getAllDevices(),
+        repository.getAllFolders(),
         _searchQuery,
         _selectedManufacturer,
         _selectedStatus,
+        _selectedFolderId,
         _sortBy
-    ) { devices, query, vendor, status, sort ->
+    ) { devices, folders, query, vendor, status, folderId, sort ->
         val filtered = devices.filter { dev ->
+            val matchesFolder = folderId == null || dev.folderId == folderId
             val matchesQuery = query.isEmpty() ||
                     dev.name.contains(query, ignoreCase = true) ||
                     dev.ipAddress.contains(query) ||
@@ -48,7 +55,7 @@ class DevicesViewModel(
                     dev.model.contains(query, ignoreCase = true)
             val matchesVendor = vendor == null || dev.manufacturer == vendor
             val matchesStatus = status == null || dev.status == status
-            matchesQuery && matchesVendor && matchesStatus
+            matchesFolder && matchesQuery && matchesVendor && matchesStatus
         }.sortedWith { a, b ->
             when (sort) {
                 "ip" -> a.ipAddress.compareTo(b.ipAddress)
@@ -60,6 +67,8 @@ class DevicesViewModel(
         DevicesUiState(
             devices = filtered,
             totalCount = devices.size,
+            folders = folders,
+            selectedFolderId = folderId,
             searchQuery = query,
             selectedManufacturer = vendor,
             selectedStatus = status,
@@ -87,13 +96,58 @@ class DevicesViewModel(
         _sortBy.value = sort
     }
 
-    fun updateDevice(device: NetworkDevice, newName: String, newType: DeviceType) {
+    fun selectFolder(folderId: String?) {
+        _selectedFolderId.value = folderId
+    }
+
+    fun createFolder(name: String) {
         viewModelScope.launch {
-            val updated = device.copy(
-                name = newName.trim(),
-                deviceType = newType
-            )
-            repository.updateDevice(updated)
+            if (name.isNotBlank()) {
+                val newId = repository.createFolder(name.trim())
+                _selectedFolderId.value = newId
+            }
+        }
+    }
+
+    fun updateFolderName(folderId: String, newName: String) {
+        viewModelScope.launch {
+            if (newName.isNotBlank()) {
+                repository.updateFolderName(folderId, newName.trim())
+            }
+        }
+    }
+
+    fun deleteFolder(folderId: String) {
+        viewModelScope.launch {
+            repository.deleteFolder(folderId)
+            if (_selectedFolderId.value == folderId) {
+                _selectedFolderId.value = null
+            }
+        }
+    }
+
+    fun addDevice(
+        name: String,
+        ipAddress: String,
+        manufacturer: Manufacturer,
+        deviceType: DeviceType,
+        folderId: String
+    ) {
+        viewModelScope.launch {
+            repository.addManualDevice(name, ipAddress, manufacturer, deviceType, folderId)
+        }
+    }
+
+    fun updateDeviceFull(
+        deviceId: String,
+        name: String,
+        ipAddress: String,
+        manufacturer: Manufacturer,
+        deviceType: DeviceType,
+        folderId: String
+    ) {
+        viewModelScope.launch {
+            repository.updateDeviceFull(deviceId, name, ipAddress, manufacturer, deviceType, folderId)
         }
     }
 

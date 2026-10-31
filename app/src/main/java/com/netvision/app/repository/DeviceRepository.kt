@@ -2,22 +2,30 @@ package com.netvision.app.repository
 
 import com.netvision.app.database.DeviceDao
 import com.netvision.app.database.DeviceEntity
+import com.netvision.app.database.DeviceFolderDao
+import com.netvision.app.database.DeviceFolderEntity
 import com.netvision.app.database.NetworkRangeDao
 import com.netvision.app.database.NetworkRangeEntity
 import com.netvision.app.models.ActivitySeverity
+import com.netvision.app.models.DeviceFolder
 import com.netvision.app.models.DeviceStatus
+import com.netvision.app.models.DeviceType
+import com.netvision.app.models.Manufacturer
 import com.netvision.app.models.NetworkDevice
 import com.netvision.app.models.NetworkRange
 import com.netvision.app.models.RecentDeviceActivity
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import java.util.UUID
 
 class DeviceRepository(
     private val deviceDao: DeviceDao? = null,
-    private val networkRangeDao: NetworkRangeDao? = null
+    private val networkRangeDao: NetworkRangeDao? = null,
+    private val deviceFolderDao: DeviceFolderDao? = null
 ) {
 
     // Dynamic real activity log populated only by genuine network events
@@ -39,7 +47,8 @@ class DeviceRepository(
     }
 
     suspend fun saveDevice(device: NetworkDevice) {
-        deviceDao?.insertOrUpdate(DeviceEntity.fromDomainModel(device))
+        val folderId = if (device.folderId.isBlank()) DeviceFolderEntity.DEFAULT_FOLDER_ID else device.folderId
+        deviceDao?.insertOrUpdate(DeviceEntity.fromDomainModel(device.copy(folderId = folderId)))
         logActivity(
             deviceName = device.name,
             ipAddress = device.ipAddress,
@@ -50,7 +59,59 @@ class DeviceRepository(
     }
 
     suspend fun updateDevice(device: NetworkDevice) {
-        deviceDao?.insertOrUpdate(DeviceEntity.fromDomainModel(device))
+        val folderId = if (device.folderId.isBlank()) DeviceFolderEntity.DEFAULT_FOLDER_ID else device.folderId
+        deviceDao?.insertOrUpdate(DeviceEntity.fromDomainModel(device.copy(folderId = folderId)))
+    }
+
+    suspend fun updateDeviceFull(
+        deviceId: String,
+        name: String,
+        ipAddress: String,
+        manufacturer: Manufacturer,
+        deviceType: DeviceType,
+        folderId: String
+    ) {
+        val entity = deviceDao?.getDeviceById(deviceId) ?: return
+        val targetFolder = if (folderId.isBlank()) DeviceFolderEntity.DEFAULT_FOLDER_ID else folderId
+        val updated = entity.copy(
+            name = name.trim(),
+            ipAddress = ipAddress.trim(),
+            manufacturer = manufacturer.name,
+            deviceType = deviceType.name,
+            folderId = targetFolder
+        )
+        deviceDao.insertOrUpdate(updated)
+        logActivity(
+            deviceName = name,
+            ipAddress = ipAddress,
+            messageEn = "Device configuration updated (${ipAddress}).",
+            messageAr = "تم تحديث بيانات الجهاز (${ipAddress}).",
+            severity = ActivitySeverity.INFO
+        )
+    }
+
+    suspend fun addManualDevice(
+        name: String,
+        ipAddress: String,
+        manufacturer: Manufacturer,
+        deviceType: DeviceType,
+        folderId: String
+    ): NetworkDevice {
+        val targetFolder = if (folderId.isBlank()) DeviceFolderEntity.DEFAULT_FOLDER_ID else folderId
+        val newDevice = NetworkDevice(
+            id = "dev-${System.currentTimeMillis()}-${(100..999).random()}",
+            name = name.trim(),
+            ipAddress = ipAddress.trim(),
+            macAddress = "00:00:00:00:00:00",
+            manufacturer = manufacturer,
+            model = if (manufacturer == Manufacturer.MIKROTIK) "RouterOS" else if (manufacturer == Manufacturer.UBIQUITI) "AirOS" else "Standard Device",
+            deviceType = deviceType,
+            status = DeviceStatus.OFFLINE,
+            firmwareVersion = "v1.0.0",
+            folderId = targetFolder
+        )
+        saveDevice(newDevice)
+        return newDevice
     }
 
     suspend fun deleteDevice(device: NetworkDevice) {
@@ -104,6 +165,108 @@ class DeviceRepository(
                 )
             }
         }
+    }
+
+    // -------------------------------------------------------------
+    // Device Folders Management (Room Database)
+    // -------------------------------------------------------------
+
+    fun getAllFolders(): Flow<List<DeviceFolder>> {
+        val foldersFlow = deviceFolderDao?.getAllFolders() ?: flowOf(emptyList())
+        val devicesFlow = deviceDao?.getAllDevices() ?: flowOf(emptyList())
+
+        return combine(foldersFlow, devicesFlow) { folderEntities, deviceEntities ->
+            // Count devices per folder
+            val counts = mutableMapOf<String, Int>()
+            for (dev in deviceEntities) {
+                val fId = if (dev.folderId.isBlank()) DeviceFolderEntity.DEFAULT_FOLDER_ID else dev.folderId
+                counts[fId] = (counts[fId] ?: 0) + 1
+            }
+
+            val list = mutableListOf<DeviceFolder>()
+
+            // Always ensure the default "uncategorized" folder is present first
+            val uncategorizedEntity = folderEntities.find { it.id == DeviceFolderEntity.DEFAULT_FOLDER_ID }
+            val uncatCount = counts[DeviceFolderEntity.DEFAULT_FOLDER_ID] ?: 0
+            list.add(
+                DeviceFolder(
+                    id = DeviceFolderEntity.DEFAULT_FOLDER_ID,
+                    name = uncategorizedEntity?.name ?: DeviceFolderEntity.DEFAULT_FOLDER_NAME,
+                    deviceCount = uncatCount,
+                    createdAt = 0L
+                )
+            )
+
+            // Add custom user folders
+            folderEntities
+                .filter { it.id != DeviceFolderEntity.DEFAULT_FOLDER_ID }
+                .forEach { entity ->
+                    list.add(entity.toDomainModel(deviceCount = counts[entity.id] ?: 0))
+                }
+
+            list
+        }
+    }
+
+    suspend fun createFolder(name: String): String {
+        val folderId = "fld-${System.currentTimeMillis()}-${UUID.randomUUID().toString().take(6)}"
+        val entity = DeviceFolderEntity(
+            id = folderId,
+            name = name.trim(),
+            createdAt = System.currentTimeMillis()
+        )
+        deviceFolderDao?.insertOrUpdate(entity)
+        logActivity(
+            deviceName = name,
+            ipAddress = "Folder System",
+            messageEn = "New device folder created: '${name.trim()}'.",
+            messageAr = "تم إنشاء حافظة أجهزة جديدة: '${name.trim()}'.",
+            severity = ActivitySeverity.SUCCESS
+        )
+        return folderId
+    }
+
+    suspend fun updateFolderName(folderId: String, newName: String) {
+        val existing = deviceFolderDao?.getFolderById(folderId) ?: return
+        deviceFolderDao.update(existing.copy(name = newName.trim()))
+        logActivity(
+            deviceName = newName,
+            ipAddress = "Folder System",
+            messageEn = "Folder name updated to '${newName.trim()}'.",
+            messageAr = "تم تعديل اسم الحافظة إلى '${newName.trim()}'.",
+            severity = ActivitySeverity.INFO
+        )
+    }
+
+    suspend fun deleteFolder(folderId: String) {
+        if (folderId == DeviceFolderEntity.DEFAULT_FOLDER_ID) {
+            // Cannot delete default uncategorized folder
+            return
+        }
+        val folder = deviceFolderDao?.getFolderById(folderId)
+        val folderName = folder?.name ?: folderId
+
+        // Critical Safety: Move all devices inside this folder to "uncategorized" so no devices are deleted!
+        deviceDao?.reassignFolderDevices(
+            oldFolderId = folderId,
+            newFolderId = DeviceFolderEntity.DEFAULT_FOLDER_ID
+        )
+
+        // Delete the folder entity from database
+        deviceFolderDao?.deleteById(folderId)
+
+        logActivity(
+            deviceName = folderName,
+            ipAddress = "Folder System",
+            messageEn = "Folder '${folderName}' deleted. All contained devices were safely moved to 'Uncategorized'.",
+            messageAr = "تم حذف الحافظة '${folderName}' ونقل جميع أجهزتها بأمان إلى حافظة 'غير مصنف'.",
+            severity = ActivitySeverity.WARNING
+        )
+    }
+
+    suspend fun moveDeviceToFolder(deviceId: String, newFolderId: String) {
+        val targetFolder = if (newFolderId.isBlank()) DeviceFolderEntity.DEFAULT_FOLDER_ID else newFolderId
+        deviceDao?.updateDeviceFolder(deviceId, targetFolder)
     }
 
     // -------------------------------------------------------------

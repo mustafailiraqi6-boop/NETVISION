@@ -28,6 +28,21 @@ interface DeviceDao {
     @Query("SELECT COUNT(*) FROM devices WHERE status = 'OFFLINE'")
     fun getOfflineCount(): Flow<Int>
 
+    @Query("SELECT * FROM devices WHERE folderId = :folderId ORDER BY lastSeenTimestamp DESC")
+    fun getDevicesByFolder(folderId: String): Flow<List<DeviceEntity>>
+
+    @Query("SELECT COUNT(*) FROM devices WHERE folderId = :folderId")
+    suspend fun getDeviceCountInFolder(folderId: String): Int
+
+    @Query("UPDATE devices SET folderId = :newFolderId WHERE folderId = :oldFolderId")
+    suspend fun reassignFolderDevices(oldFolderId: String, newFolderId: String)
+
+    @Query("UPDATE devices SET folderId = :folderId WHERE id = :deviceId")
+    suspend fun updateDeviceFolder(deviceId: String, folderId: String)
+
+    @Query("UPDATE devices SET name = :name, ipAddress = :ipAddress, manufacturer = :manufacturer, deviceType = :deviceType, folderId = :folderId WHERE id = :deviceId")
+    suspend fun updateDeviceInfo(deviceId: String, name: String, ipAddress: String, manufacturer: String, deviceType: String, folderId: String)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertOrUpdate(device: DeviceEntity)
 

@@ -118,6 +118,17 @@ class SnmpPacketTest {
         assertTrue(formatted.contains("d") && formatted.contains("h"))
     }
 
+    @Test
+    fun testModelExtraction() {
+        val mtxDescr = "RouterOS RB750Gr3"
+        val mtxModel = SnmpV2Client.extractModel(mtxDescr)
+        assertEquals("MikroTik RB750Gr3", mtxModel)
+
+        val ubntDescr = "Linux 2.6.32.71-UBNT #1 PREEMPT LiteBeam 5AC Gen2"
+        val ubntModel = SnmpV2Client.extractModel(ubntDescr)
+        assertTrue(ubntModel.contains("LiteBeam 5AC"))
+    }
+
     /**
      * Helper to synthesize a standard ASN.1 BER SNMP response for test assertions
      */
