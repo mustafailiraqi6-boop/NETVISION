@@ -263,3 +263,139 @@ fun DashboardScreen(
         }
     }
 }
+
+@Composable
+fun HealthMetricItem(
+    label: String,
+    value: String,
+    icon: ImageVector
+) {
+    Column {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(imageVector = icon, contentDescription = null, tint = CyanAccent, modifier = Modifier.size(14.dp))
+            Spacer(modifier = Modifier.width(4.dp))
+            Text(text = label, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Spacer(modifier = Modifier.height(2.dp))
+        Text(text = value, fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurface)
+    }
+}
+
+@Composable
+fun StatCard(
+    title: String,
+    count: String,
+    accentColor: Color,
+    icon: ImageVector,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier
+            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(12.dp))
+            .clickable { onClick() },
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(text = title, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Icon(imageVector = icon, contentDescription = null, tint = accentColor, modifier = Modifier.size(16.dp))
+            }
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(text = count, fontSize = 24.sp, color = accentColor)
+        }
+    }
+}
+
+@Composable
+fun VendorBadgeCard(
+    vendorName: String,
+    deviceCount: String,
+    deviceCountAr: String,
+    protocol: String,
+    color: Color,
+    isArabic: Boolean,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(12.dp)),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Text(text = vendorName, style = MaterialTheme.typography.titleSmall, color = color)
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = if (isArabic) deviceCountAr else deviceCount,
+                fontSize = 18.sp,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(text = protocol, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+fun ActivityRow(
+    activity: RecentDeviceActivity,
+    isArabic: Boolean
+) {
+    val indicatorColor = when (activity.severity) {
+        ActivitySeverity.SUCCESS -> StatusGreen
+        ActivitySeverity.WARNING -> StatusAmber
+        ActivitySeverity.ALERT -> StatusRed
+        ActivitySeverity.INFO -> ElectricBlue
+    }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(10.dp)),
+        shape = RoundedCornerShape(10.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(10.dp)
+                    .clip(CircleShape)
+                    .background(indicatorColor)
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = activity.deviceName,
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = if (isArabic) activity.timeAgoAr else activity.timeAgoEn,
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = if (isArabic) activity.messageAr else activity.messageEn,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
