@@ -378,14 +378,6 @@ fun DeviceMonitoringCard(
     val isOnline = device.status == DeviceStatus.ONLINE
     val statusColor = if (isOnline) StatusGreen else StatusRed
 
-    val vendorColor = when (device.manufacturer) {
-        Manufacturer.UBIQUITI -> ElectricBlue
-        Manufacturer.MIKROTIK -> CyanAccent
-        Manufacturer.CISCO -> Color(0xFF38BDF8)
-        Manufacturer.OTHER -> Color(0xFFA78BFA)
-        Manufacturer.GENERIC -> TextMutedDark
-    }
-
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -396,119 +388,59 @@ fun DeviceMonitoringCard(
             )
             .clickable { onClick() },
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-            else MaterialTheme.colorScheme.surface
-        )
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            // Top Row: Name & Connection Status Badge
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                    Box(
-                        modifier = Modifier
-                            .size(10.dp)
-                            .clip(CircleShape)
-                            .background(statusColor)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Box(Modifier.size(9.dp).clip(CircleShape).background(statusColor))
+                    Spacer(Modifier.width(8.dp))
                     Text(
                         text = device.name,
                         style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
                     )
                 }
-
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    // Connection Status
-                    Surface(
-                        color = statusColor.copy(alpha = 0.15f),
-                        shape = RoundedCornerShape(6.dp)
-                    ) {
-                        Text(
-                            text = if (isOnline) (if (isArabic) "متصل" else "Online") else (if (isArabic) "غير متصل" else "Offline"),
-                            fontSize = 10.sp,
-                            color = statusColor,
-                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
-                        )
-                    }
-
-                    // SNMP Status
-                    Surface(
-                        color = if (isSnmpActive) StatusGreen.copy(alpha = 0.15f) else StatusAmber.copy(alpha = 0.15f),
-                        shape = RoundedCornerShape(6.dp)
-                    ) {
-                        Text(
-                            text = if (isSnmpActive) "SNMP Active" else "SNMP Failed",
-                            fontSize = 10.sp,
-                            color = if (isSnmpActive) StatusGreen else StatusAmber,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(6.dp))
-
-            // Subtitle Row: Manufacturer & Device Type & IP
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(text = device.manufacturer.displayName, fontSize = 11.sp, color = vendorColor)
-                    Text(text = " • ", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Surface(color = statusColor.copy(alpha = 0.14f), shape = RoundedCornerShape(6.dp)) {
                     Text(
-                        text = if (isArabic) device.deviceType.labelAr else device.deviceType.labelEn,
+                        text = if (isOnline) (if (isArabic) "متصل" else "Online") else (if (isArabic) "غير متصل" else "Offline"),
+                        color = statusColor,
                         fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                     )
                 }
-
-                Text(
-                    text = "IP: ${device.ipAddress}",
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontWeight = androidx.compose.ui.text.font.FontWeight.Medium
-                )
             }
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            // Latency Row
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = if (device.model.isNotBlank()) "Model: ${device.model}" else "",
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                Text(
-                    text = if (isOnline) "${device.metrics.pingLatencyMs} ms" else "—",
-                    fontSize = 12.sp,
-                    color = if (isOnline) CyanAccent else StatusRed,
-                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
-                )
+                Text("IP: ${device.ipAddress}", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+                Surface(
+                    color = (if (isSnmpActive) StatusGreen else StatusAmber).copy(alpha = 0.12f),
+                    shape = RoundedCornerShape(6.dp)
+                ) {
+                    Text(
+                        if (isSnmpActive) "SNMP Active" else "SNMP Failed",
+                        color = if (isSnmpActive) StatusGreen else StatusAmber,
+                        fontSize = 10.sp,
+                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp)
+                    )
+                }
             }
-            Spacer(modifier = Modifier.height(10.dp))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 OutlinedButton(
                     onClick = onViewDetails,
                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
                     shape = RoundedCornerShape(9.dp)
                 ) {
                     Text(if (isArabic) "عرض التفاصيل" else "View details", fontSize = 12.sp)
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Spacer(Modifier.width(5.dp))
                     Icon(Icons.Default.ChevronLeft, contentDescription = null, modifier = Modifier.size(16.dp))
                 }
             }
