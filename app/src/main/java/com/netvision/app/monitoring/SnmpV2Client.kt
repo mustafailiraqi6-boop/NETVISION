@@ -16,6 +16,7 @@ import java.net.InetAddress
 import java.net.SocketTimeoutException
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.Locale
 
 data class SnmpDeviceInfo(
     val isSuccess: Boolean,
@@ -26,6 +27,7 @@ data class SnmpDeviceInfo(
     val model: String? = null,
     val ifCount: Int? = null,
     val connectedClientsCount: Int? = null,
+    val connectedStationsMacs: List<String> = emptyList(),
     val errorMessage: String? = null,
     val communityUsed: String = "netvision",
     val latencyMs: Long = 0,
@@ -56,7 +58,8 @@ data class SnmpDiagnosticRecord(
 data class StationCountResult(
     val isSupported: Boolean,
     val count: Int = 0,
-    val source: String = "None"
+    val source: String = "None",
+    val macAddresses: List<String> = emptyList()
 )
 
 object SnmpV2Client {
@@ -248,6 +251,7 @@ object SnmpV2Client {
                         model = modelName,
                         ifCount = ifCount,
                         connectedClientsCount = clientCount,
+                        connectedStationsMacs = stationResult.macAddresses,
                         communityUsed = community,
                         latencyMs = totalLatency,
                         networkInterface = lastInterface,
@@ -303,7 +307,7 @@ object SnmpV2Client {
             attemptNumber = attemptNumber
         )
         if (mtxWalk.isSupported) {
-            return StationCountResult(isSupported = true, count = mtxWalk.rowCount, source = "MikroTik Registration Table")
+            return StationCountResult(isSupported = true, count = mtxWalk.rowCount, source = "MikroTik Registration Table", macAddresses = mtxWalk.macAddresses)
         }
 
         // 2. Try Ubiquiti AirOS Station Table (1.3.6.1.4.1.41112.1.4.7.1.1.1)
@@ -319,7 +323,7 @@ object SnmpV2Client {
             attemptNumber = attemptNumber
         )
         if (ubntWalk.isSupported) {
-            return StationCountResult(isSupported = true, count = ubntWalk.rowCount, source = "Ubiquiti AirOS Station Table")
+            return StationCountResult(isSupported = true, count = ubntWalk.rowCount, source = "Ubiquiti AirOS Station Table", macAddresses = ubntWalk.macAddresses)
         }
 
         // 3. Fallback: Ubiquiti ubntAirMaxStationCount scalar
@@ -358,7 +362,8 @@ object SnmpV2Client {
 
     data class TableWalkResult(
         val isSupported: Boolean,
-        val rowCount: Int = 0
+        val rowCount: Int = 0,
+        val macAddresses: List<String> = emptyList()
     )
 
     /**
@@ -377,6 +382,7 @@ object SnmpV2Client {
     ): TableWalkResult {
         var currentOidBytes = encodeOidString(rootOidStr)
         val uniqueRows = mutableSetOf<String>()
+        val macAddresses = linkedSetOf<String>()
         var isTableSupported = false
 
         for (step in 1..maxRows) {
@@ -433,6 +439,12 @@ object SnmpV2Client {
                         } else {
                             isTableSupported = true
                             uniqueRows.add(respOidStr)
+                            parsed.stringValue?.let { value ->
+                                val mac = value.trim().uppercase(Locale.ROOT)
+                                if (Regex("^(?:[0-9A-F]{2}:){5}[0-9A-F]{2}$").matches(mac)) {
+                                    macAddresses.add(mac)
+                                }
+                            }
                             currentOidBytes = encodeOidString(respOidStr)
                         }
                     }
@@ -449,7 +461,7 @@ object SnmpV2Client {
             }
         }
 
-        return TableWalkResult(isSupported = isTableSupported, rowCount = uniqueRows.size)
+        return TableWalkResult(isSupported = isTableSupported, rowCount = macAddresses.size.takeIf { it > 0 } ?: uniqueRows.size, macAddresses = macAddresses.toList())
     }
 
     data class SingleOidResult(
