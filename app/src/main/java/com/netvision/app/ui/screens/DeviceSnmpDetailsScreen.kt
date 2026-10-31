@@ -38,7 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.netvision.app.models.NetworkDevice
-import com.netvision.app.monitoring.SnmpDeviceInfo
+import com.netvision.app.monitoring.UbiquitiStationInfo
 import com.netvision.app.ui.theme.CyanAccent
 import com.netvision.app.ui.viewmodels.MonitoringViewModel
 
@@ -128,21 +128,25 @@ fun DeviceSnmpDetailsScreen(
                         Text(info?.connectedClientsCount?.let { "$it" } ?: "—", color = CyanAccent, fontWeight = FontWeight.Bold)
                     }
                 }
-                if (info?.connectedStationsMacs.isNullOrEmpty()) {
+                if (!info?.connectedStations.isNullOrEmpty()) {
+                    items(info!!.connectedStations, key = { it.macAddress }) { station ->
+                        UbiquitiStationCard(station = station, isArabic = isArabic)
+                    }
+                } else if (!info?.connectedStationsMacs.isNullOrEmpty()) {
+                    items(info!!.connectedStationsMacs.distinct(), key = { it }) { mac ->
+                        StationMacCard(mac = mac, isArabic = isArabic)
+                    }
+                } else {
                     item {
                         Text(
                             if (info?.isSuccess == true && info.connectedClientsCount == 0) {
                                 if (isArabic) "لا توجد محطات متصلة حالياً." else "No stations are currently connected."
                             } else {
-                                if (isArabic) "عناوين MAC غير متاحة من جدول المحطات لهذا الجهاز." else "Station MAC addresses are not available from this device table."
+                                if (isArabic) "تفاصيل المحطات غير متاحة من SNMP لهذا الجهاز." else "Station details are unavailable through SNMP on this device."
                             },
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(vertical = 8.dp)
                         )
-                    }
-                } else {
-                    items(info!!.connectedStationsMacs.distinct(), key = { it }) { mac ->
-                        StationMacCard(mac = mac, isArabic = isArabic)
                     }
                 }
             }
@@ -155,6 +159,68 @@ private fun SnmpDetailRow(label: String, value: String) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
         Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
         Text(value, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun UbiquitiStationCard(station: UbiquitiStationInfo, isArabic: Boolean) {
+    val clipboard = LocalClipboardManager.current
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(9.dp)
+        ) {
+            Text(
+                station.deviceName?.takeIf { it.isNotBlank() } ?: (if (isArabic) "اسم المحطة غير متاح" else "Station name unavailable"),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("MAC", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(station.macAddress, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                    station.lastIpAddress?.takeIf { it.isNotBlank() }?.let {
+                        Text("IP: $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+                OutlinedButton(onClick = { clipboard.setText(AnnotatedString(station.macAddress)) }) {
+                    Icon(Icons.Default.ContentCopy, contentDescription = null)
+                    Text(if (isArabic) "نسخ" else "Copy")
+                }
+            }
+            Divider()
+            val metrics = listOf(
+                (if (isArabic) "الإشارة" else "Signal") to station.signalDbm?.let { "$it dBm" },
+                (if (isArabic) "التشويش" else "Noise") to station.noiseDbm?.let { "$it dBm" },
+                "CCQ" to station.ccqPercent?.let { "$it%" },
+                (if (isArabic) "جودة airMAX" else "airMAX quality") to station.airMaxQualityPercent?.let { "$it%" },
+                (if (isArabic) "سعة airMAX" else "airMAX capacity") to station.airMaxCapacityPercent?.let { "$it%" },
+                (if (isArabic) "المسافة" else "Distance") to station.distance?.toString(),
+                (if (isArabic) "TX rate" else "TX rate") to station.txRate?.let { "$it Mbps" },
+                (if (isArabic) "RX rate" else "RX rate") to station.rxRate?.let { "$it Mbps" },
+                (if (isArabic) "مدة الاتصال" else "Connection time") to station.connectionTime,
+                (if (isArabic) "زمن التأخير" else "Latency") to station.latencyMs?.let { "$it ms" }
+            ).filter { !it.second.isNullOrBlank() }
+            metrics.chunked(2).forEach { pair ->
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    pair.forEach { (label, value) ->
+                        Column(Modifier.weight(1f)) {
+                            Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(value.orEmpty(), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                        }
+                    }
+                    if (pair.size == 1) Spacer(Modifier.weight(1f))
+                }
+            }
+        }
     }
 }
 
