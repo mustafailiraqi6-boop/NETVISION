@@ -26,7 +26,8 @@ data class DeviceEntity(
     val uptimeFormatted: String,
     val cpuUsagePercent: Int,
     val memoryUsagePercent: Int,
-    val pingLatencyMs: Int
+    val pingLatencyMs: Int,
+    val snmpVersion: String? = null
 ) {
     fun toDomainModel(): NetworkDevice {
         return NetworkDevice(
@@ -48,7 +49,8 @@ data class DeviceEntity(
                 cpuUsagePercent = cpuUsagePercent,
                 memoryUsagePercent = memoryUsagePercent,
                 pingLatencyMs = pingLatencyMs
-            )
+            ),
+            snmpVersion = snmpVersion
         )
     }
 
@@ -71,7 +73,8 @@ data class DeviceEntity(
                 uptimeFormatted = device.metrics.uptimeFormatted,
                 cpuUsagePercent = device.metrics.cpuUsagePercent,
                 memoryUsagePercent = device.metrics.memoryUsagePercent,
-                pingLatencyMs = device.metrics.pingLatencyMs
+                pingLatencyMs = device.metrics.pingLatencyMs,
+                snmpVersion = device.snmpVersion
             )
         }
     }

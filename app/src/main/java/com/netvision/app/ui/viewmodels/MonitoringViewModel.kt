@@ -120,12 +120,14 @@ class MonitoringViewModel(
 
             // Perform SNMP query with saved SNMP community string (netvision)
             var uptime: String? = null
+            var negotiatedVersion: String? = device.snmpVersion
             try {
                 val snmpRes = SnmpV2Client.queryDeviceInfo(
                     targetIp = device.ipAddress,
                     community = community,
                     port = snmpPort,
-                    timeoutMs = 1200
+                    preferredVersion = device.snmpVersion,
+                    timeoutMs = 1000
                 )
                 if (snmpRes.isSuccess) {
                     val info = snmpRes.getOrNull()
@@ -133,6 +135,7 @@ class MonitoringViewModel(
                         updatedSnmpMap[device.id] = info
                         if (info.isSuccess) {
                             uptime = info.uptimeFormatted
+                            negotiatedVersion = info.snmpVersion
                         }
                     }
                 }
@@ -144,7 +147,8 @@ class MonitoringViewModel(
                 deviceId = device.id,
                 isOnline = isOnline,
                 latencyMs = latencyMs,
-                uptime = uptime
+                uptime = uptime,
+                snmpVersion = negotiatedVersion
             )
         }
 

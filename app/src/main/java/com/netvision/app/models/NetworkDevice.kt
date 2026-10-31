@@ -42,7 +42,8 @@ data class NetworkDevice(
     val status: DeviceStatus,
     val firmwareVersion: String = "v3.2.12",
     val lastSeenTimestamp: Long = System.currentTimeMillis(),
-    val metrics: NetworkMetrics = NetworkMetrics()
+    val metrics: NetworkMetrics = NetworkMetrics(),
+    val snmpVersion: String? = null
 )
 
 data class NetworkRange(

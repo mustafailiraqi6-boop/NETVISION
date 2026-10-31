@@ -123,14 +123,14 @@ fun SettingsScreen(
 
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         FilterChip(
-                            selected = appSettings.snmpVersion == "v2c",
+                            selected = appSettings.snmpVersion == "v2c" || appSettings.snmpVersion == "auto",
                             onClick = { viewModel.updateSnmpVersion("v2c") },
-                            label = { Text("SNMP v2c") }
+                            label = { Text("v2c (Auto)") }
                         )
                         FilterChip(
-                            selected = appSettings.snmpVersion == "v3",
-                            onClick = { viewModel.updateSnmpVersion("v3") },
-                            label = { Text("SNMP v3") }
+                            selected = appSettings.snmpVersion == "v1",
+                            onClick = { viewModel.updateSnmpVersion("v1") },
+                            label = { Text("v1") }
                         )
                     }
                 }

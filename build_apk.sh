@@ -52,7 +52,7 @@ echo "Android SDK Platforms: $(ls /opt/android-sdk/platforms)"
 # 4. Run Gradle Build
 echo "[4/4] Compiling and Assembling Debug APK..."
 cd /app/applet
-/usr/local/bin/gradle --no-daemon :app:assembleDebug --stacktrace
+/usr/local/bin/gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug --stacktrace
 
 echo "========================================="
 echo "Checking APK Output:"

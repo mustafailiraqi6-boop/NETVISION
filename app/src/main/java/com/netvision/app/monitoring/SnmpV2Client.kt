@@ -9,6 +9,7 @@ import com.netvision.app.NetVisionApplication
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
+import java.io.IOException
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
@@ -26,7 +27,9 @@ data class SnmpDeviceInfo(
     val errorMessage: String? = null,
     val communityUsed: String = "netvision",
     val latencyMs: Long = 0,
-    val networkInterface: String = "VPN (Auto)"
+    val networkInterface: String = "VPN (Auto)",
+    val snmpVersion: String = "v2c",
+    val negotiationSummary: String? = null
 )
 
 data class SnmpDiagnosticRecord(
@@ -44,7 +47,8 @@ data class SnmpDiagnosticRecord(
     val networkInterface: String,
     val isSuccess: Boolean,
     val resultSummary: String,
-    val exceptionDetail: String? = null
+    val exceptionDetail: String? = null,
+    val attemptNumber: Int = 1
 )
 
 object SnmpV2Client {
@@ -52,7 +56,7 @@ object SnmpV2Client {
     private const val TAG = "NetVision_SNMP"
     private val requestIdCounter = AtomicInteger(1000)
 
-    // In-memory circular diagnostic log buffer (retains last 30 transactions)
+    // In-memory circular diagnostic log buffer (retains last 40 transactions)
     private val diagnosticHistory = ConcurrentLinkedQueue<SnmpDiagnosticRecord>()
 
     fun getDiagnosticHistory(): List<SnmpDiagnosticRecord> = diagnosticHistory.toList()
@@ -72,108 +76,184 @@ object SnmpV2Client {
     // 1.3.6.1.2.1.2.1.0 (ifNumber)
     val OID_IF_NUMBER = byteArrayOf(0x2b, 0x06, 0x01, 0x02, 0x01, 0x02, 0x01, 0x00)
 
+    /**
+     * Queries device SNMP information with intelligent auto-negotiation and fallback:
+     * - Tests preferred SNMP version first (or v2c if none saved).
+     * - If attempt 1 fails/times out, seamlessly tests alternative version (v1 <-> v2c).
+     * - Persists and returns the working version for future polling.
+     */
     suspend fun queryDeviceInfo(
         targetIp: String,
         community: String = "netvision",
         port: Int = 161,
-        timeoutMs: Int = 1500
+        preferredVersion: String? = null,
+        timeoutMs: Int = 1000
     ): Result<SnmpDeviceInfo> = withContext(Dispatchers.IO) {
         val totalStart = System.currentTimeMillis()
 
-        // 1. Query sysDescr
-        val descrRes = querySingleOid(targetIp, community, port, OID_SYS_DESCR, "sysDescr", timeoutMs)
-
-        // 2. Query sysName
-        val nameRes = querySingleOid(targetIp, community, port, OID_SYS_NAME, "sysName", timeoutMs)
-
-        // 3. Query sysUpTime
-        val uptimeRes = querySingleOid(targetIp, community, port, OID_SYS_UPTIME, "sysUpTime", timeoutMs)
-
-        // 4. Query ifNumber
-        val ifRes = querySingleOid(targetIp, community, port, OID_IF_NUMBER, "ifNumber", timeoutMs)
-
-        val totalLatency = System.currentTimeMillis() - totalStart
-        val ifaceName = descrRes.networkInterface
-
-        val anySuccess = descrRes.isSuccess || nameRes.isSuccess || uptimeRes.isSuccess || ifRes.isSuccess
-
-        if (!anySuccess) {
-            val primaryError = descrRes.errorMessage
-                ?: nameRes.errorMessage
-                ?: "Timeout - No SNMP response from $targetIp:$port (Community: '${maskCommunity(community)}')"
-            return@withContext Result.success(
-                SnmpDeviceInfo(
-                    isSuccess = false,
-                    errorMessage = primaryError,
-                    communityUsed = community,
-                    latencyMs = totalLatency,
-                    networkInterface = ifaceName
-                )
-            )
+        // Determine sequence of SNMP versions to try:
+        val versionsToTry = if (preferredVersion?.equals("v1", ignoreCase = true) == true) {
+            listOf("v1", "v2c")
+        } else {
+            listOf("v2c", "v1")
         }
 
-        val descr = descrRes.stringValue
-        val name = nameRes.stringValue
-        val uptimeTicks = uptimeRes.longValue
-        val uptimeFormatted = uptimeTicks?.let { formatTimeTicks(it) }
-        val ifCount = ifRes.intValue
+        var lastErrorMessage: String? = null
+        var lastInterface = "VPN (Auto)"
+
+        for (index in versionsToTry.indices) {
+            val currentVersion = versionsToTry[index]
+            val attemptNumber = index + 1
+
+            // 1. Probe sysDescr with current version
+            val descrRes = querySingleOid(
+                ip = targetIp,
+                community = community,
+                port = port,
+                oidBytes = OID_SYS_DESCR,
+                oidName = "sysDescr",
+                version = currentVersion,
+                timeoutMs = timeoutMs,
+                attemptNumber = attemptNumber
+            )
+            lastInterface = descrRes.networkInterface
+
+            if (descrRes.isSuccess) {
+                // Succeeded! Query remaining OIDs with this same verified version
+                val nameRes = querySingleOid(
+                    ip = targetIp,
+                    community = community,
+                    port = port,
+                    oidBytes = OID_SYS_NAME,
+                    oidName = "sysName",
+                    version = currentVersion,
+                    timeoutMs = timeoutMs,
+                    attemptNumber = attemptNumber
+                )
+
+                val uptimeRes = querySingleOid(
+                    ip = targetIp,
+                    community = community,
+                    port = port,
+                    oidBytes = OID_SYS_UPTIME,
+                    oidName = "sysUpTime",
+                    version = currentVersion,
+                    timeoutMs = timeoutMs,
+                    attemptNumber = attemptNumber
+                )
+
+                val ifRes = querySingleOid(
+                    ip = targetIp,
+                    community = community,
+                    port = port,
+                    oidBytes = OID_IF_NUMBER,
+                    oidName = "ifNumber",
+                    version = currentVersion,
+                    timeoutMs = timeoutMs,
+                    attemptNumber = attemptNumber
+                )
+
+                val totalLatency = System.currentTimeMillis() - totalStart
+                val descr = descrRes.stringValue
+                val name = nameRes.stringValue
+                val uptimeTicks = uptimeRes.longValue
+                val uptimeFormatted = uptimeTicks?.let { formatTimeTicks(it) }
+                val ifCount = ifRes.intValue
+
+                val negSummary = if (attemptNumber == 1) {
+                    if (preferredVersion != null) "SNMP $currentVersion (Saved)" else "SNMP $currentVersion (Primary)"
+                } else {
+                    "Attempt 1 (${versionsToTry[0]}) failed -> Attempt 2 ($currentVersion) succeeded"
+                }
+
+                return@withContext Result.success(
+                    SnmpDeviceInfo(
+                        isSuccess = true,
+                        sysDescr = descr,
+                        sysName = name,
+                        uptimeHundredths = uptimeTicks,
+                        uptimeFormatted = uptimeFormatted,
+                        ifCount = ifCount,
+                        communityUsed = community,
+                        latencyMs = totalLatency,
+                        networkInterface = lastInterface,
+                        snmpVersion = currentVersion,
+                        negotiationSummary = negSummary
+                    )
+                )
+            } else {
+                lastErrorMessage = descrRes.errorMessage
+                // Fallback will trigger next iteration
+            }
+        }
+
+        // All attempts exhausted
+        val totalLatency = System.currentTimeMillis() - totalStart
+        val primaryError = lastErrorMessage
+            ?: "Timeout - No response from $targetIp:$port (Tried ${versionsToTry.joinToString(" & ")}, Community: '${maskCommunity(community)}')"
+
+        val negSummary = "Attempt 1 (${versionsToTry[0]}) failed, Attempt 2 (${versionsToTry[1]}) failed"
 
         Result.success(
             SnmpDeviceInfo(
-                isSuccess = true,
-                sysDescr = descr,
-                sysName = name,
-                uptimeHundredths = uptimeTicks,
-                uptimeFormatted = uptimeFormatted,
-                ifCount = ifCount,
+                isSuccess = false,
+                errorMessage = primaryError,
                 communityUsed = community,
                 latencyMs = totalLatency,
-                networkInterface = ifaceName
+                networkInterface = lastInterface,
+                snmpVersion = versionsToTry[0],
+                negotiationSummary = negSummary
             )
         )
     }
 
-    private data class SingleOidResult(
+    data class SingleOidResult(
         val isSuccess: Boolean,
         val stringValue: String? = null,
         val longValue: Long? = null,
         val intValue: Int? = null,
         val errorMessage: String? = null,
         val networkInterface: String = "Default",
-        val latencyMs: Long = 0
+        val latencyMs: Long = 0,
+        val versionUsed: String = "v2c"
     )
 
-    private fun querySingleOid(
+    fun querySingleOid(
         ip: String,
         community: String,
         port: Int,
         oidBytes: ByteArray,
         oidName: String,
-        timeoutMs: Int
+        version: String = "v2c",
+        timeoutMs: Int = 1000,
+        attemptNumber: Int = 1
     ): SingleOidResult {
         val reqId = requestIdCounter.incrementAndGet()
-        val packetBytes = buildGetRequest(reqId, community, oidBytes)
+        val versionInt = if (version.equals("v1", ignoreCase = true)) 0 else 1
+        val packetBytes = buildGetRequest(reqId, community, oidBytes, versionInt)
         val maskedComm = maskCommunity(community)
 
         var timeSent = 0L
         var timeReceived = 0L
         var bytesReceived = 0
         var ifaceName = "Default"
-        var exceptionMsg: String? = null
 
         try {
             DatagramSocket().use { socket ->
                 socket.soTimeout = timeoutMs
 
-                // Bind to active Android VPN network if present
+                // Bind to active Android VPN network interface if available
                 val vpnInfo = resolveVpnNetwork()
                 ifaceName = vpnInfo.second
                 if (vpnInfo.first != null) {
                     try {
                         vpnInfo.first!!.bindSocket(socket)
-                        Log.d(TAG, "Socket bound to VPN Network ($ifaceName) for target $ip")
+                        Log.d(TAG, "Socket bound to Network ($ifaceName) for target $ip")
                     } catch (e: Exception) {
-                        Log.w(TAG, "Could not bind socket to VPN network: ${e.message}")
+                        Log.w(TAG, "Could not bind socket to network: ${e.message}")
+                        if (ifaceName.contains("VPN", ignoreCase = true) || ifaceName.startsWith("tun")) {
+                            throw IOException("VPN is active ($ifaceName) but failed to bind socket to VPN tunnel: ${e.message}")
+                        }
                     }
                 }
 
@@ -198,7 +278,7 @@ object SnmpV2Client {
                 val record = SnmpDiagnosticRecord(
                     targetIp = ip,
                     port = port,
-                    version = "v2c",
+                    version = parsed.versionDecoded,
                     communityMasked = maskedComm,
                     oidName = oidName,
                     bytesSent = packetBytes.size,
@@ -209,7 +289,8 @@ object SnmpV2Client {
                     networkInterface = ifaceName,
                     isSuccess = parsed.isSuccess,
                     resultSummary = parsed.summary,
-                    exceptionDetail = parsed.errorDetail
+                    exceptionDetail = parsed.errorDetail,
+                    attemptNumber = attemptNumber
                 )
                 logDiagnostic(record)
 
@@ -220,24 +301,27 @@ object SnmpV2Client {
                         longValue = parsed.longValue,
                         intValue = parsed.intValue,
                         networkInterface = ifaceName,
-                        latencyMs = latency
+                        latencyMs = latency,
+                        versionUsed = parsed.versionDecoded
                     )
                 } else {
                     return SingleOidResult(
                         isSuccess = false,
                         errorMessage = parsed.errorDetail ?: "SNMP response error",
                         networkInterface = ifaceName,
-                        latencyMs = latency
+                        latencyMs = latency,
+                        versionUsed = parsed.versionDecoded
                     )
                 }
             }
         } catch (e: SocketTimeoutException) {
             val latency = if (timeSent > 0) System.currentTimeMillis() - timeSent else timeoutMs.toLong()
-            val msg = "Timeout - No response on UDP $port via $ifaceName (Community '$maskedComm')"
+            val msg = "Timeout - No response on UDP $port via $ifaceName (SNMP $version)"
             logDiagnostic(
                 SnmpDiagnosticRecord(
                     targetIp = ip,
                     port = port,
+                    version = version,
                     communityMasked = maskedComm,
                     oidName = oidName,
                     bytesSent = packetBytes.size,
@@ -248,10 +332,11 @@ object SnmpV2Client {
                     networkInterface = ifaceName,
                     isSuccess = false,
                     resultSummary = "Timeout",
-                    exceptionDetail = e.javaClass.simpleName + ": " + (e.message ?: "SocketTimeout")
+                    exceptionDetail = "${e.javaClass.simpleName}: ${e.message ?: "SocketTimeout"}",
+                    attemptNumber = attemptNumber
                 )
             )
-            return SingleOidResult(isSuccess = false, errorMessage = msg, networkInterface = ifaceName, latencyMs = latency)
+            return SingleOidResult(isSuccess = false, errorMessage = msg, networkInterface = ifaceName, latencyMs = latency, versionUsed = version)
         } catch (e: Exception) {
             val latency = if (timeSent > 0) System.currentTimeMillis() - timeSent else 0L
             val msg = "${e.javaClass.simpleName}: ${e.message}"
@@ -259,6 +344,7 @@ object SnmpV2Client {
                 SnmpDiagnosticRecord(
                     targetIp = ip,
                     port = port,
+                    version = version,
                     communityMasked = maskedComm,
                     oidName = oidName,
                     bytesSent = packetBytes.size,
@@ -269,19 +355,20 @@ object SnmpV2Client {
                     networkInterface = ifaceName,
                     isSuccess = false,
                     resultSummary = "Error",
-                    exceptionDetail = msg
+                    exceptionDetail = msg,
+                    attemptNumber = attemptNumber
                 )
             )
-            return SingleOidResult(isSuccess = false, errorMessage = msg, networkInterface = ifaceName, latencyMs = latency)
+            return SingleOidResult(isSuccess = false, errorMessage = msg, networkInterface = ifaceName, latencyMs = latency, versionUsed = version)
         }
     }
 
     private fun logDiagnostic(entry: SnmpDiagnosticRecord) {
         diagnosticHistory.add(entry)
-        while (diagnosticHistory.size > 30) {
+        while (diagnosticHistory.size > 40) {
             diagnosticHistory.poll()
         }
-        Log.i(TAG, "SNMP [${entry.oidName}] to ${entry.targetIp}:${entry.port} via ${entry.networkInterface} | Success: ${entry.isSuccess} | Latency: ${entry.latencyMs}ms | ${entry.resultSummary}")
+        Log.i(TAG, "SNMP [${entry.oidName} - ${entry.version} (Att ${entry.attemptNumber})] to ${entry.targetIp}:${entry.port} via ${entry.networkInterface} | Success: ${entry.isSuccess} | Latency: ${entry.latencyMs}ms | ${entry.resultSummary}")
     }
 
     /**
@@ -297,27 +384,35 @@ object SnmpV2Client {
                 val caps = cm.getNetworkCapabilities(network)
                 if (caps?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true) {
                     val linkProps = cm.getLinkProperties(network)
-                    val name = linkProps?.interfaceName ?: "VPN (tun)"
+                    val name = linkProps?.interfaceName ?: "tun0 (VPN)"
                     return Pair(network, name)
                 }
             }
 
-            // Fallback to active network
             val activeNet = cm.activeNetwork
-            val activeProps = cm.getLinkProperties(activeNet)
-            val name = activeProps?.interfaceName ?: "Default"
-            return Pair(activeNet, name)
+            if (activeNet != null) {
+                val caps = cm.getNetworkCapabilities(activeNet)
+                if (caps?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true) {
+                    val linkProps = cm.getLinkProperties(activeNet)
+                    val name = linkProps?.interfaceName ?: "tun0 (VPN)"
+                    return Pair(activeNet, name)
+                }
+                val activeProps = cm.getLinkProperties(activeNet)
+                val name = activeProps?.interfaceName ?: "Default"
+                return Pair(activeNet, name)
+            }
+            return Pair(null, "Default")
         } catch (e: Exception) {
             return Pair(null, "Default")
         }
     }
 
     /**
-     * Builds a standard SNMPv2c GetRequest packet strictly adhering to ASN.1 BER (RFC 1157, RFC 1905).
+     * Builds a standard SNMP GetRequest packet strictly adhering to ASN.1 BER (RFC 1157, RFC 1905).
      *
      * Format:
      * SEQUENCE {
-     *   INTEGER version (1 = v2c)
+     *   INTEGER version (0 = v1, 1 = v2c)
      *   OCTET STRING community
      *   GetRequest-PDU [0xA0] {
      *     INTEGER request-id
@@ -332,7 +427,7 @@ object SnmpV2Client {
      *   }
      * }
      */
-    fun buildGetRequest(reqId: Int, community: String, oidBytes: ByteArray): ByteArray {
+    fun buildGetRequest(reqId: Int, community: String, oidBytes: ByteArray, version: Int = 1): ByteArray {
         // 1. VarBind: SEQUENCE { ObjectName (0x06), ObjectSyntax (NULL 0x05 0x00) }
         val varBindInner = ByteArrayOutputStream()
         varBindInner.write(0x06) // OBJECT IDENTIFIER tag
@@ -366,9 +461,9 @@ object SnmpV2Client {
         writeLength(pduSeq, pduBytes.size)
         pduSeq.write(pduBytes)
 
-        // 4. Message: SEQUENCE { version (INTEGER 1), community (OCTET STRING), PDU }
+        // 4. Message: SEQUENCE { version (INTEGER 0 or 1), community (OCTET STRING), PDU }
         val msgInner = ByteArrayOutputStream()
-        writeBerInteger(msgInner, 1) // version 1 = SNMPv2c
+        writeBerInteger(msgInner, version) // 0 = SNMPv1, 1 = SNMPv2c
         val commBytes = community.toByteArray(Charsets.US_ASCII)
         msgInner.write(0x04) // OCTET STRING
         writeLength(msgInner, commBytes.size)
@@ -384,8 +479,9 @@ object SnmpV2Client {
         return finalSeq.toByteArray()
     }
 
-    private data class ParsedResponse(
+    data class ParsedResponse(
         val isSuccess: Boolean,
+        val versionDecoded: String = "v2c",
         val stringValue: String? = null,
         val longValue: Long? = null,
         val intValue: Int? = null,
@@ -394,9 +490,9 @@ object SnmpV2Client {
     )
 
     /**
-     * Strict ASN.1 BER parser for SNMP GetResponse (0xA2)
+     * Strict ASN.1 BER parser for SNMP GetResponse (0xA2) across SNMP v1 and v2c
      */
-    private fun parseSnmpResponse(data: ByteArray, expectedReqId: Int, expectedCommunity: String): ParsedResponse {
+    fun parseSnmpResponse(data: ByteArray, expectedReqId: Int, expectedCommunity: String): ParsedResponse {
         try {
             var i = 0
 
@@ -405,7 +501,7 @@ object SnmpV2Client {
                 return ParsedResponse(false, summary = "Invalid ASN.1", errorDetail = "Expected SEQUENCE 0x30, got ${data[i]}")
             }
             i++
-            val (msgLen, nextI) = readLength(data, i)
+            val (_, nextI) = readLength(data, i)
             i = nextI
 
             // 2. Version (INTEGER 0x02)
@@ -414,29 +510,40 @@ object SnmpV2Client {
             }
             i++
             val (vLen, vNext) = readLength(data, i)
+            var respVersion = 0
+            for (k in 0 until vLen) {
+                respVersion = (respVersion shl 8) or (data[vNext + k].toInt() and 0xFF)
+            }
             i = vNext + vLen
+
+            val versionDecoded = when (respVersion) {
+                0 -> "v1"
+                1 -> "v2c"
+                2 -> "v2u"
+                3 -> "v3"
+                else -> "v$respVersion"
+            }
 
             // 3. Community (OCTET STRING 0x04)
             if (data[i] != 0x04.toByte()) {
-                return ParsedResponse(false, summary = "Invalid Community Tag", errorDetail = "Expected OCTET STRING 0x04, got ${data[i]}")
+                return ParsedResponse(false, versionDecoded = versionDecoded, summary = "Invalid Community Tag", errorDetail = "Expected OCTET STRING 0x04, got ${data[i]}")
             }
             i++
             val (cLen, cNext) = readLength(data, i)
-            val commStr = String(data, cNext, cLen, Charsets.US_ASCII)
             i = cNext + cLen
 
             // 4. Response PDU (0xA2)
             val pduTag = data[i].toInt() and 0xFF
             if (pduTag != 0xA2) {
-                return ParsedResponse(false, summary = "Invalid PDU", errorDetail = "Expected GetResponse PDU 0xA2, got 0x${Integer.toHexString(pduTag)}")
+                return ParsedResponse(false, versionDecoded = versionDecoded, summary = "Invalid PDU", errorDetail = "Expected GetResponse PDU 0xA2, got 0x${Integer.toHexString(pduTag)}")
             }
             i++
-            val (pduLen, pduNext) = readLength(data, i)
+            val (_, pduNext) = readLength(data, i)
             i = pduNext
 
             // 5. Request ID (INTEGER 0x02)
             if (data[i] != 0x02.toByte()) {
-                return ParsedResponse(false, summary = "Invalid ReqId Tag", errorDetail = "Expected INTEGER for reqId")
+                return ParsedResponse(false, versionDecoded = versionDecoded, summary = "Invalid ReqId Tag", errorDetail = "Expected INTEGER for reqId")
             }
             i++
             val (reqLen, reqNext) = readLength(data, i)
@@ -450,6 +557,7 @@ object SnmpV2Client {
             if (responseReqId != expectedReqId) {
                 return ParsedResponse(
                     false,
+                    versionDecoded = versionDecoded,
                     summary = "Request ID Mismatch",
                     errorDetail = "Response reqId ($responseReqId) != Sent reqId ($expectedReqId)"
                 )
@@ -457,7 +565,7 @@ object SnmpV2Client {
 
             // 6. Error Status (INTEGER 0x02)
             if (data[i] != 0x02.toByte()) {
-                return ParsedResponse(false, summary = "Invalid ErrorStatus", errorDetail = "Expected INTEGER for errorStatus")
+                return ParsedResponse(false, versionDecoded = versionDecoded, summary = "Invalid ErrorStatus", errorDetail = "Expected INTEGER for errorStatus")
             }
             i++
             val (errLen, errNext) = readLength(data, i)
@@ -469,7 +577,7 @@ object SnmpV2Client {
 
             // 7. Error Index (INTEGER 0x02)
             if (data[i] != 0x02.toByte()) {
-                return ParsedResponse(false, summary = "Invalid ErrorIndex", errorDetail = "Expected INTEGER for errorIndex")
+                return ParsedResponse(false, versionDecoded = versionDecoded, summary = "Invalid ErrorIndex", errorDetail = "Expected INTEGER for errorIndex")
             }
             i++
             val (idxLen, idxNext) = readLength(data, i)
@@ -485,28 +593,28 @@ object SnmpV2Client {
                     16 -> "authorizationError (Check Community name)"
                     else -> "SNMP Error code $errorStatus"
                 }
-                return ParsedResponse(false, summary = "SNMP Error: $errName", errorDetail = errName)
+                return ParsedResponse(false, versionDecoded = versionDecoded, summary = "SNMP Error: $errName", errorDetail = errName)
             }
 
             // 8. VarBindList Sequence (0x30)
             if (data[i] != 0x30.toByte()) {
-                return ParsedResponse(false, summary = "Invalid VarBindList", errorDetail = "Expected SEQUENCE 0x30 for VarBindList")
+                return ParsedResponse(false, versionDecoded = versionDecoded, summary = "Invalid VarBindList", errorDetail = "Expected SEQUENCE 0x30 for VarBindList")
             }
             i++
-            val (vbListLen, vbListNext) = readLength(data, i)
+            val (_, vbListNext) = readLength(data, i)
             i = vbListNext
 
             // 9. First VarBind Sequence (0x30)
             if (data[i] != 0x30.toByte()) {
-                return ParsedResponse(false, summary = "Invalid VarBind", errorDetail = "Expected SEQUENCE 0x30 for VarBind")
+                return ParsedResponse(false, versionDecoded = versionDecoded, summary = "Invalid VarBind", errorDetail = "Expected SEQUENCE 0x30 for VarBind")
             }
             i++
-            val (vbLen, vbNext) = readLength(data, i)
+            val (_, vbNext) = readLength(data, i)
             i = vbNext
 
             // 10. OID tag (0x06)
             if (data[i] != 0x06.toByte()) {
-                return ParsedResponse(false, summary = "Invalid OID Tag", errorDetail = "Expected OBJECT IDENTIFIER 0x06")
+                return ParsedResponse(false, versionDecoded = versionDecoded, summary = "Invalid OID Tag", errorDetail = "Expected OBJECT IDENTIFIER 0x06")
             }
             i++
             val (oidLen, oidNext) = readLength(data, i)
@@ -520,35 +628,43 @@ object SnmpV2Client {
             when (valTag) {
                 0x04 -> { // OCTET STRING
                     val str = String(data, vDataNext, vDataLen, Charsets.UTF_8).trim()
-                    return ParsedResponse(true, stringValue = str, summary = "String: ${str.take(40)}")
+                    return ParsedResponse(true, versionDecoded = versionDecoded, stringValue = str, summary = "String: ${str.take(40)}")
                 }
                 0x43 -> { // TimeTicks (1/100 sec)
                     var ticks = 0L
                     for (k in 0 until vDataLen) {
                         ticks = (ticks shl 8) or (data[vDataNext + k].toLong() and 0xFFL)
                     }
-                    return ParsedResponse(true, longValue = ticks, summary = "TimeTicks: $ticks (${formatTimeTicks(ticks)})")
+                    return ParsedResponse(true, versionDecoded = versionDecoded, longValue = ticks, summary = "TimeTicks: $ticks (${formatTimeTicks(ticks)})")
                 }
                 0x02 -> { // INTEGER
                     var num = 0
                     for (k in 0 until vDataLen) {
                         num = (num shl 8) or (data[vDataNext + k].toInt() and 0xFF)
                     }
-                    return ParsedResponse(true, intValue = num, summary = "Integer: $num")
+                    return ParsedResponse(true, versionDecoded = versionDecoded, intValue = num, summary = "Integer: $num")
                 }
                 0x41, 0x42 -> { // Counter32 / Gauge32
                     var num = 0L
                     for (k in 0 until vDataLen) {
                         num = (num shl 8) or (data[vDataNext + k].toLong() and 0xFFL)
                     }
-                    return ParsedResponse(true, longValue = num, summary = "Counter/Gauge: $num")
+                    return ParsedResponse(true, versionDecoded = versionDecoded, longValue = num, summary = "Counter/Gauge: $num")
                 }
-                0x80 -> return ParsedResponse(false, summary = "noSuchObject", errorDetail = "noSuchObject (OID not found in MIB)")
-                0x81 -> return ParsedResponse(false, summary = "noSuchInstance", errorDetail = "noSuchInstance (Instance does not exist)")
-                0x82 -> return ParsedResponse(false, summary = "endOfMibView", errorDetail = "endOfMibView")
+                0x40 -> { // IpAddress (4 bytes)
+                    if (vDataLen == 4) {
+                        val ip = "${data[vDataNext].toInt() and 0xFF}.${data[vDataNext + 1].toInt() and 0xFF}.${data[vDataNext + 2].toInt() and 0xFF}.${data[vDataNext + 3].toInt() and 0xFF}"
+                        return ParsedResponse(true, versionDecoded = versionDecoded, stringValue = ip, summary = "IpAddress: $ip")
+                    } else {
+                        return ParsedResponse(true, versionDecoded = versionDecoded, stringValue = "IpAddress", summary = "IpAddress")
+                    }
+                }
+                0x80 -> return ParsedResponse(false, versionDecoded = versionDecoded, summary = "noSuchObject", errorDetail = "noSuchObject (OID not found in MIB)")
+                0x81 -> return ParsedResponse(false, versionDecoded = versionDecoded, summary = "noSuchInstance", errorDetail = "noSuchInstance (Instance does not exist)")
+                0x82 -> return ParsedResponse(false, versionDecoded = versionDecoded, summary = "endOfMibView", errorDetail = "endOfMibView")
                 else -> {
                     val rawHex = data.sliceArray(vDataNext until (vDataNext + vDataLen)).joinToString("") { "%02x".format(it) }
-                    return ParsedResponse(true, stringValue = rawHex, summary = "Raw Tag 0x${Integer.toHexString(valTag)}: $rawHex")
+                    return ParsedResponse(true, versionDecoded = versionDecoded, stringValue = rawHex, summary = "Raw Tag 0x${Integer.toHexString(valTag)}: $rawHex")
                 }
             }
         } catch (e: Exception) {
@@ -614,7 +730,7 @@ object SnmpV2Client {
         return Pair(length, pos)
     }
 
-    private fun formatTimeTicks(ticks: Long): String {
+    fun formatTimeTicks(ticks: Long): String {
         val totalSeconds = ticks / 100
         val days = totalSeconds / (24 * 3600)
         val hours = (totalSeconds % (24 * 3600)) / 3600

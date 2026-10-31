@@ -68,7 +68,8 @@ class DeviceRepository(
         deviceId: String,
         isOnline: Boolean,
         latencyMs: Int,
-        uptime: String? = null
+        uptime: String? = null,
+        snmpVersion: String? = null
     ) {
         val entity = deviceDao?.getDeviceById(deviceId) ?: return
         val currentStatus = try { DeviceStatus.valueOf(entity.status) } catch (e: Exception) { DeviceStatus.OFFLINE }
@@ -78,7 +79,8 @@ class DeviceRepository(
             status = newStatus.name,
             lastSeenTimestamp = if (isOnline) System.currentTimeMillis() else entity.lastSeenTimestamp,
             pingLatencyMs = if (isOnline) latencyMs else 0,
-            uptimeFormatted = uptime ?: entity.uptimeFormatted
+            uptimeFormatted = uptime ?: entity.uptimeFormatted,
+            snmpVersion = snmpVersion ?: entity.snmpVersion
         )
         deviceDao.insertOrUpdate(updatedEntity)
 

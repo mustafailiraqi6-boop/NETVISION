@@ -266,12 +266,13 @@ fun MonitoringScreen(
                                 }
 
                                 val isSnmpOk = snmpInfo != null && snmpInfo.isSuccess
+                                val versionLabel = snmpInfo?.snmpVersion?.uppercase() ?: (activeDevice.snmpVersion?.uppercase() ?: "V2C")
                                 Surface(
                                     color = if (isSnmpOk) StatusGreen.copy(alpha = 0.15f) else StatusAmber.copy(alpha = 0.15f),
                                     shape = RoundedCornerShape(6.dp)
                                 ) {
                                     Text(
-                                        text = if (isSnmpOk) "SNMP Active (${snmpInfo?.communityUsed ?: "netvision"})"
+                                        text = if (isSnmpOk) "SNMP $versionLabel Active"
                                         else (if (isArabic) "تنبيه SNMP" else "SNMP Notice"),
                                         fontSize = 11.sp,
                                         color = if (isSnmpOk) StatusGreen else StatusAmber,
@@ -283,6 +284,14 @@ fun MonitoringScreen(
                             Spacer(modifier = Modifier.height(10.dp))
 
                             if (snmpInfo != null && snmpInfo.isSuccess) {
+                                snmpInfo.negotiationSummary?.let { summary ->
+                                    Text(
+                                        text = "${if (isArabic) "حالة التفاوض والإصدار:" else "Protocol Negotiation:"} $summary",
+                                        fontSize = 12.sp,
+                                        color = CyanAccent
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                }
                                 snmpInfo.sysName?.let { name ->
                                     Text(
                                         text = "System Name (sysName): $name",
@@ -441,11 +450,25 @@ fun MonitoringScreen(
                                                         horizontalArrangement = Arrangement.SpaceBetween,
                                                         verticalAlignment = Alignment.CenterVertically
                                                     ) {
-                                                        Text(
-                                                            text = "${log.targetIp}:${log.port} (${log.version})",
-                                                            fontSize = 12.sp,
-                                                            color = MaterialTheme.colorScheme.onSurface
-                                                        )
+                                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                                            Surface(
+                                                                color = if (log.attemptNumber == 1) CyanAccent.copy(alpha = 0.15f) else StatusAmber.copy(alpha = 0.15f),
+                                                                shape = RoundedCornerShape(4.dp)
+                                                            ) {
+                                                                Text(
+                                                                    text = if (log.attemptNumber == 1) "Att 1: ${log.version.uppercase()}" else "Att 2 (Fallback): ${log.version.uppercase()}",
+                                                                    fontSize = 10.sp,
+                                                                    color = if (log.attemptNumber == 1) CyanAccent else StatusAmber,
+                                                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                                                )
+                                                            }
+                                                            Spacer(modifier = Modifier.width(6.dp))
+                                                            Text(
+                                                                text = "${log.targetIp}:${log.port}",
+                                                                fontSize = 12.sp,
+                                                                color = MaterialTheme.colorScheme.onSurface
+                                                            )
+                                                        }
                                                         Surface(
                                                             color = if (log.isSuccess) StatusGreen.copy(alpha = 0.15f) else StatusRed.copy(alpha = 0.15f),
                                                             shape = RoundedCornerShape(4.dp)
