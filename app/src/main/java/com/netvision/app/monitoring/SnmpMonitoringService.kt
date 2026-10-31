@@ -20,7 +20,7 @@ interface SnmpMonitoringService {
     data class SnmpTarget(
         val ipAddress: String,
         val port: Int = 161,
-        val communityString: String = "public",
+        val communityString: String = "netvision",
         val version: SnmpVersion = SnmpVersion.V2C
     )
 

@@ -1,5 +1,6 @@
 package com.netvision.app.network
 
+import com.netvision.app.NetVisionApplication
 import com.netvision.app.models.DeviceStatus
 import com.netvision.app.models.DeviceType
 import com.netvision.app.models.Manufacturer
@@ -10,8 +11,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import java.io.BufferedReader
 import java.io.FileReader
@@ -92,6 +91,12 @@ class RemoteNetworkScanner(
      * Guaranteed to return a NetworkDevice ONLY if the device is genuinely reachable.
      */
     suspend fun probeHost(targetIp: String): NetworkDevice? = withContext(Dispatchers.IO) {
+        val configuredCommunity = try {
+            NetVisionApplication.instance.settingsRepository.getSettings().snmpCommunity
+        } catch (e: Exception) {
+            "netvision"
+        }
+
         var isOnline = false
         var activePort = 0
         var latencyMs: Long = 0
@@ -124,18 +129,20 @@ class RemoteNetworkScanner(
             } catch (e: Exception) {}
         }
 
-        // 3. If still not responding, try SNMP v2c (port 161)
+        // 3. If still not responding, try SNMP v2c
         var snmpSysDescr: String? = null
         var snmpSysName: String? = null
         var snmpUptime: String? = null
 
-        val snmpRes = SnmpV2Client.queryDeviceInfo(targetIp, timeoutMs = 500)
+        val snmpRes = SnmpV2Client.queryDeviceInfo(targetIp, community = configuredCommunity, timeoutMs = 500)
         if (snmpRes.isSuccess) {
-            isOnline = true
             val info = snmpRes.getOrNull()
-            snmpSysDescr = info?.sysDescr
-            snmpSysName = info?.sysName
-            snmpUptime = info?.uptimeFormatted
+            if (info != null && info.isSuccess) {
+                isOnline = true
+                snmpSysDescr = info.sysDescr
+                snmpSysName = info.sysName
+                snmpUptime = info.uptimeFormatted
+            }
         }
 
         if (!isOnline) {
@@ -201,7 +208,7 @@ class RemoteNetworkScanner(
         val host = (hostname ?: "").lowercase()
         val macLower = (mac ?: "").lowercase()
 
-        // Check MikroTik (Port 80, 8291, 8728, or SNMP / MNDP / MAC)
+        // Check MikroTik
         if (openPort == 8291 || openPort == 8728 || openPort == 80 ||
             descr.contains("mikrotik") || descr.contains("routeros") ||
             host.contains("mikrotik") || host.contains("rb") ||

@@ -6,13 +6,17 @@ import java.io.ByteArrayOutputStream
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
+import java.net.SocketTimeoutException
 import java.util.concurrent.atomic.AtomicInteger
 
 data class SnmpDeviceInfo(
-    val sysDescr: String?,
-    val sysName: String?,
-    val uptimeHundredths: Long?,
-    val uptimeFormatted: String?
+    val isSuccess: Boolean,
+    val sysDescr: String? = null,
+    val sysName: String? = null,
+    val uptimeHundredths: Long? = null,
+    val uptimeFormatted: String? = null,
+    val errorMessage: String? = null,
+    val communityUsed: String = "netvision"
 )
 
 object SnmpV2Client {
@@ -29,9 +33,9 @@ object SnmpV2Client {
 
     suspend fun queryDeviceInfo(
         targetIp: String,
-        community: String = "public",
+        community: String = "netvision",
         port: Int = 161,
-        timeoutMs: Int = 1500
+        timeoutMs: Int = 1200
     ): Result<SnmpDeviceInfo> = withContext(Dispatchers.IO) {
         try {
             val descr = queryOidString(targetIp, community, port, OID_SYS_DESCR, timeoutMs)
@@ -39,21 +43,42 @@ object SnmpV2Client {
             val uptime = queryOidTimeTicks(targetIp, community, port, OID_SYS_UPTIME, timeoutMs)
 
             if (descr == null && name == null && uptime == null) {
-                return@withContext Result.failure(Exception("SNMP agent did not respond on $targetIp:$port"))
+                val failureInfo = SnmpDeviceInfo(
+                    isSuccess = false,
+                    errorMessage = "Timeout - No SNMP response on UDP $port (Community: '$community')",
+                    communityUsed = community
+                )
+                return@withContext Result.success(failureInfo)
             }
 
             val formattedUptime = uptime?.let { formatTimeTicks(it) }
 
+            val successInfo = SnmpDeviceInfo(
+                isSuccess = true,
+                sysDescr = descr,
+                sysName = name,
+                uptimeHundredths = uptime,
+                uptimeFormatted = formattedUptime,
+                communityUsed = community
+            )
+
+            Result.success(successInfo)
+        } catch (e: SocketTimeoutException) {
             Result.success(
                 SnmpDeviceInfo(
-                    sysDescr = descr,
-                    sysName = name,
-                    uptimeHundredths = uptime,
-                    uptimeFormatted = formattedUptime
+                    isSuccess = false,
+                    errorMessage = "Timeout - No response on UDP $port (Community '$community')",
+                    communityUsed = community
                 )
             )
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.success(
+                SnmpDeviceInfo(
+                    isSuccess = false,
+                    errorMessage = e.localizedMessage ?: "SNMP query failed on UDP $port (Community '$community')",
+                    communityUsed = community
+                )
+            )
         }
     }
 
@@ -65,7 +90,7 @@ object SnmpV2Client {
         timeoutMs: Int
     ): String? {
         val response = sendSnmpGet(ip, community, port, oidBytes, timeoutMs) ?: return null
-        return extractStringValue(response)
+        return extractStringValue(response, community)
     }
 
     private fun queryOidTimeTicks(
@@ -181,7 +206,7 @@ object SnmpV2Client {
         }
     }
 
-    private fun extractStringValue(data: ByteArray): String? {
+    private fun extractStringValue(data: ByteArray, community: String): String? {
         try {
             var i = 0
             while (i < data.size - 2) {
@@ -199,10 +224,9 @@ object SnmpV2Client {
                     }
                     if (offset + len <= data.size && len > 0) {
                         val str = String(data, offset, len, Charsets.UTF_8).trim()
-                        // Ensure printable ascii/utf8
                         if (str.isNotEmpty() && str.all { it >= ' ' || it == '\n' || it == '\r' || it == '\t' }) {
-                            // Ignore community string echo
-                            if (str != "public") {
+                            // Filter out exact community string echo
+                            if (str != community) {
                                 return str
                             }
                         }

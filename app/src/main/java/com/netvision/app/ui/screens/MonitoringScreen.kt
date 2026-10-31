@@ -21,7 +21,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.netvision.app.models.DeviceStatus
-import com.netvision.app.models.Manufacturer
 import com.netvision.app.models.NetworkDevice
 import com.netvision.app.ui.theme.*
 import com.netvision.app.ui.viewmodels.MonitoringViewModel
@@ -241,7 +240,7 @@ fun MonitoringScreen(
                     }
                 }
 
-                // SNMP Card (Real values only)
+                // SNMP Card (Real values only with clear error reason when failed)
                 item {
                     Card(
                         modifier = Modifier
@@ -266,15 +265,16 @@ fun MonitoringScreen(
                                     )
                                 }
 
+                                val isSnmpOk = snmpInfo != null && snmpInfo.isSuccess
                                 Surface(
-                                    color = if (snmpInfo != null) StatusGreen.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant,
+                                    color = if (isSnmpOk) StatusGreen.copy(alpha = 0.15f) else StatusAmber.copy(alpha = 0.15f),
                                     shape = RoundedCornerShape(6.dp)
                                 ) {
                                     Text(
-                                        text = if (snmpInfo != null) "SNMP v2c Active"
-                                        else (if (isArabic) "SNMP غير مفعل" else "SNMP Inactive"),
+                                        text = if (isSnmpOk) "SNMP Active (${snmpInfo?.communityUsed ?: "netvision"})"
+                                        else (if (isArabic) "تنبيه SNMP" else "SNMP Notice"),
                                         fontSize = 11.sp,
-                                        color = if (snmpInfo != null) StatusGreen else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        color = if (isSnmpOk) StatusGreen else StatusAmber,
                                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                                     )
                                 }
@@ -282,10 +282,10 @@ fun MonitoringScreen(
 
                             Spacer(modifier = Modifier.height(10.dp))
 
-                            if (snmpInfo != null) {
+                            if (snmpInfo != null && snmpInfo.isSuccess) {
                                 snmpInfo.sysName?.let { name ->
                                     Text(
-                                        text = "sysName: $name",
+                                        text = "System Name (sysName): $name",
                                         fontSize = 12.sp,
                                         color = MaterialTheme.colorScheme.onSurface
                                     )
@@ -301,15 +301,25 @@ fun MonitoringScreen(
                                 }
                                 snmpInfo.sysDescr?.let { descr ->
                                     Text(
-                                        text = "sysDescr: $descr",
+                                        text = "System Description (sysDescr): $descr",
                                         fontSize = 11.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
+                            } else if (snmpInfo != null && !snmpInfo.isSuccess) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.Warning, contentDescription = null, tint = StatusAmber, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = snmpInfo.errorMessage ?: "SNMP Query Failed",
+                                        fontSize = 12.sp,
+                                        color = StatusAmber
+                                    )
+                                }
                             } else {
                                 Text(
-                                    text = if (isArabic) "الجهاز متصل ومراقب عبر ICMP/TCP. للحصول على مدة التشغيل والتفاصيل البرمجية، يرجى تفعيل SNMP على الجهاز بمجتمع 'public'."
-                                    else "Device is monitored via ICMP/TCP ping. To pull uptime and system info, enable SNMP on the device with community 'public'.",
+                                    text = if (isArabic) "جاري إرسال استعلام SNMP باكتشاف تلقائي على المنفذ 161..."
+                                    else "Initiating SNMP query on UDP port 161...",
                                     fontSize = 12.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )

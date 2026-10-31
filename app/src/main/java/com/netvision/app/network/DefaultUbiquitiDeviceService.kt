@@ -1,5 +1,6 @@
 package com.netvision.app.network
 
+import com.netvision.app.NetVisionApplication
 import com.netvision.app.models.DeviceStatus
 import com.netvision.app.models.DeviceType
 import com.netvision.app.models.Manufacturer
@@ -58,29 +59,37 @@ class DefaultUbiquitiDeviceService : UbiquitiDeviceService {
     }.flowOn(Dispatchers.IO)
 
     override suspend fun queryDeviceDetails(ipAddress: String): Result<NetworkDevice> = withContext(Dispatchers.IO) {
+        val configuredCommunity = try {
+            NetVisionApplication.instance.settingsRepository.getSettings().snmpCommunity
+        } catch (e: Exception) {
+            "netvision"
+        }
+
         // Try SNMP first
-        val snmpRes = SnmpV2Client.queryDeviceInfo(ipAddress)
+        val snmpRes = SnmpV2Client.queryDeviceInfo(ipAddress, community = configuredCommunity)
         if (snmpRes.isSuccess) {
             val info = snmpRes.getOrNull()
-            val desc = info?.sysDescr ?: "Ubiquiti UniFi"
-            val name = info?.sysName ?: "Ubiquiti ($ipAddress)"
-            return@withContext Result.success(
-                NetworkDevice(
-                    id = "ubnt-$ipAddress",
-                    name = name,
-                    ipAddress = ipAddress,
-                    macAddress = "Discovered via SNMP",
-                    manufacturer = Manufacturer.UBIQUITI,
-                    model = desc.take(30),
-                    deviceType = DeviceType.ACCESS_POINT,
-                    status = DeviceStatus.ONLINE,
-                    firmwareVersion = desc,
-                    lastSeenTimestamp = System.currentTimeMillis(),
-                    metrics = NetworkMetrics(
-                        uptimeFormatted = info?.uptimeFormatted ?: "N/A"
+            if (info != null && info.isSuccess) {
+                val desc = info.sysDescr ?: "Ubiquiti UniFi"
+                val name = info.sysName ?: "Ubiquiti ($ipAddress)"
+                return@withContext Result.success(
+                    NetworkDevice(
+                        id = "ubnt-$ipAddress",
+                        name = name,
+                        ipAddress = ipAddress,
+                        macAddress = "Discovered via SNMP ($configuredCommunity)",
+                        manufacturer = Manufacturer.UBIQUITI,
+                        model = desc.take(30),
+                        deviceType = DeviceType.ACCESS_POINT,
+                        status = DeviceStatus.ONLINE,
+                        firmwareVersion = desc,
+                        lastSeenTimestamp = System.currentTimeMillis(),
+                        metrics = NetworkMetrics(
+                            uptimeFormatted = info.uptimeFormatted ?: "N/A"
+                        )
                     )
                 )
-            )
+            }
         }
 
         // Test UniFi management ports: 8080 or 8443 or standard HTTPS 443

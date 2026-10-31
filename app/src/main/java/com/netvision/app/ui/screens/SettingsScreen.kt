@@ -12,12 +12,16 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.netvision.app.settings.AppLanguage
 import com.netvision.app.settings.AppThemeMode
 import com.netvision.app.ui.theme.CyanAccent
 import com.netvision.app.ui.theme.ElectricBlue
+import com.netvision.app.ui.viewmodels.SettingsViewModel
 
 @Composable
 fun SettingsScreen(
@@ -25,17 +29,22 @@ fun SettingsScreen(
     onLanguageChange: (AppLanguage) -> Unit,
     themeMode: AppThemeMode,
     onThemeModeChange: (AppThemeMode) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    viewModel: SettingsViewModel = viewModel()
 ) {
     val isArabic = language == AppLanguage.ARABIC
+    val appSettings by viewModel.settings.collectAsState()
 
-    var defaultSubnet by remember { mutableStateOf("192.168.1.0/24") }
-    var scanTimeoutMs by remember { mutableStateOf("1200") }
-    var refreshIntervalSec by remember { mutableStateOf("5") }
+    var communityInput by remember(appSettings.snmpCommunity) { mutableStateOf(appSettings.snmpCommunity) }
+    var snmpPortInput by remember(appSettings.snmpPort) { mutableStateOf(appSettings.snmpPort.toString()) }
+    var isCommunityVisible by remember { mutableStateOf(false) }
 
-    var ubntProtocolEnabled by remember { mutableStateOf(true) }
-    var mikrotikMndpEnabled by remember { mutableStateOf(true) }
-    var snmpPollingEnabled by remember { mutableStateOf(true) }
+    var defaultSubnet by remember(appSettings.defaultSubnet) { mutableStateOf(appSettings.defaultSubnet) }
+    var scanTimeoutMs by remember(appSettings.scanTimeoutMs) { mutableStateOf(appSettings.scanTimeoutMs.toString()) }
+
+    var ubntProtocolEnabled by remember(appSettings.enableUbiquitiDiscovery) { mutableStateOf(appSettings.enableUbiquitiDiscovery) }
+    var mikrotikMndpEnabled by remember(appSettings.enableMikroTikMndp) { mutableStateOf(appSettings.enableMikroTikMndp) }
+    var snmpPollingEnabled by remember(appSettings.enableSnmpPolling) { mutableStateOf(appSettings.enableSnmpPolling) }
 
     LazyColumn(
         modifier = modifier
@@ -49,19 +58,101 @@ fun SettingsScreen(
         item {
             Column {
                 Text(
-                    text = if (isArabic) "إعدادات التطبيق" else "Settings & Preferences",
+                    text = if (isArabic) "إعدادات التطبيق و SNMP" else "Settings & SNMP Setup",
                     style = MaterialTheme.typography.headlineSmall,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                    text = if (isArabic) "اللغة، المظهر، بروتوكولات الفحص، ومؤقتات المراقبة" else "Language, display theme, discovery protocols, and timers",
+                    text = if (isArabic) "ضبط مجتمع SNMP، بروتوكولات الفحص، اللغة والمظهر" else "SNMP Community, version, scan timeouts, and display options",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
 
-        // Section 1: Localization & Display
+        // Section 1: SNMP Protocol Configuration
+        item {
+            SettingsGroupCard(
+                title = if (isArabic) "إعدادات بروتوكول SNMP" else "SNMP Protocol Configuration",
+                icon = Icons.Default.SettingsEthernet
+            ) {
+                Text(
+                    text = if (isArabic) "تخصيص مجتمع SNMP والإصدار المستهدف للاتصال بالأجهزة:" else "Custom Community string and SNMP target version:",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // SNMP Community String Input with Password Mask
+                OutlinedTextField(
+                    value = communityInput,
+                    onValueChange = {
+                        communityInput = it
+                        viewModel.updateSnmpCommunity(it)
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text(if (isArabic) "اسم مجتمع SNMP (Community)" else "SNMP Community String") },
+                    singleLine = true,
+                    visualTransformation = if (isCommunityVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon = {
+                        IconButton(onClick = { isCommunityVisible = !isCommunityVisible }) {
+                            Icon(
+                                imageVector = if (isCommunityVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                                contentDescription = "Toggle Visibility",
+                                tint = CyanAccent
+                            )
+                        }
+                    },
+                    shape = RoundedCornerShape(10.dp)
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // SNMP Version Selection
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (isArabic) "إصدار SNMP (Version):" else "SNMP Version:",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        FilterChip(
+                            selected = appSettings.snmpVersion == "v2c",
+                            onClick = { viewModel.updateSnmpVersion("v2c") },
+                            label = { Text("SNMP v2c") }
+                        )
+                        FilterChip(
+                            selected = appSettings.snmpVersion == "v3",
+                            onClick = { viewModel.updateSnmpVersion("v3") },
+                            label = { Text("SNMP v3") }
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // SNMP UDP Port Input
+                OutlinedTextField(
+                    value = snmpPortInput,
+                    onValueChange = {
+                        snmpPortInput = it
+                        viewModel.updateSnmpPort(it)
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text(if (isArabic) "منفذ UDP لبروتوكول SNMP" else "SNMP UDP Port") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(10.dp)
+                )
+            }
+        }
+
+        // Section 2: Localization & Display
         item {
             SettingsGroupCard(
                 title = if (isArabic) "اللغة والمظهر" else "Language & Display",
@@ -137,7 +228,7 @@ fun SettingsScreen(
             }
         }
 
-        // Section 2: Network Scan Preferences
+        // Section 3: Network Scan Preferences
         item {
             SettingsGroupCard(
                 title = if (isArabic) "تفضيلات فحص الشبكة" else "Scan Preferences",
@@ -145,7 +236,10 @@ fun SettingsScreen(
             ) {
                 OutlinedTextField(
                     value = defaultSubnet,
-                    onValueChange = { defaultSubnet = it },
+                    onValueChange = {
+                        defaultSubnet = it
+                        viewModel.updateSettings(appSettings.copy(defaultSubnet = it))
+                    },
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text(if (isArabic) "الشبكة الفرعية الافتراضية" else "Default Subnet (CIDR)") },
                     singleLine = true,
@@ -156,7 +250,11 @@ fun SettingsScreen(
 
                 OutlinedTextField(
                     value = scanTimeoutMs,
-                    onValueChange = { scanTimeoutMs = it },
+                    onValueChange = {
+                        scanTimeoutMs = it
+                        val timeoutInt = it.toIntOrNull() ?: 1200
+                        viewModel.updateSettings(appSettings.copy(scanTimeoutMs = timeoutInt))
+                    },
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text(if (isArabic) "مهلة استجابة المقبس (ms)" else "Probe Timeout (ms)") },
                     singleLine = true,
@@ -174,46 +272,27 @@ fun SettingsScreen(
                 ProtocolToggleRow(
                     label = "Ubiquiti Discovery Protocol (UDP 10001)",
                     checked = ubntProtocolEnabled,
-                    onCheckedChange = { ubntProtocolEnabled = it }
+                    onCheckedChange = {
+                        ubntProtocolEnabled = it
+                        viewModel.updateSettings(appSettings.copy(enableUbiquitiDiscovery = it))
+                    }
                 )
                 ProtocolToggleRow(
                     label = "MikroTik MNDP Protocol (UDP 5678)",
                     checked = mikrotikMndpEnabled,
-                    onCheckedChange = { mikrotikMndpEnabled = it }
+                    onCheckedChange = {
+                        mikrotikMndpEnabled = it
+                        viewModel.updateSettings(appSettings.copy(enableMikroTikMndp = it))
+                    }
                 )
                 ProtocolToggleRow(
                     label = "SNMP Auto-Detection (UDP 161)",
                     checked = snmpPollingEnabled,
-                    onCheckedChange = { snmpPollingEnabled = it }
-                )
-            }
-        }
-
-        // Section 3: Monitoring Refresh Interval
-        item {
-            SettingsGroupCard(
-                title = if (isArabic) "معدل تحديث المراقبة" else "Monitoring Refresh Interval",
-                icon = Icons.Default.Autorenew
-            ) {
-                Text(
-                    text = if (isArabic) "الفترة الزمنية بين استعلامات SNMP الحية:" else "Time interval between periodic SNMP counter polls:",
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    listOf("5s", "15s", "30s", "60s").forEach { interval ->
-                        val isSelected = refreshIntervalSec == interval.replace("s", "")
-                        FilterChip(
-                            selected = isSelected,
-                            onClick = { refreshIntervalSec = interval.replace("s", "") },
-                            label = { Text(interval) }
-                        )
+                    onCheckedChange = {
+                        snmpPollingEnabled = it
+                        viewModel.updateSettings(appSettings.copy(enableSnmpPolling = it))
                     }
-                }
+                )
             }
         }
 
@@ -230,7 +309,7 @@ fun SettingsScreen(
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "Version 1.0.0-PROTOTYPE (API 26+ Android Native)",
+                    text = "Version 1.1.0 (SNMP v2c/v3 Community Support)",
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -242,12 +321,6 @@ fun SettingsScreen(
                         "Professional network discovery and telemetry application engineered for Ubiquiti (UBNT), MikroTik RouterOS, and enterprise network infrastructure.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Architecture: Kotlin • Jetpack Compose • Material 3 • Room DB • Coroutines & Flow • MVVM",
-                    fontSize = 11.sp,
-                    color = ElectricBlue
                 )
             }
         }

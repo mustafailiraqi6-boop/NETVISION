@@ -9,6 +9,7 @@ import com.netvision.app.monitoring.SnmpDeviceInfo
 import com.netvision.app.monitoring.SnmpV2Client
 import com.netvision.app.network.NetworkReachabilityService
 import com.netvision.app.repository.DeviceRepository
+import com.netvision.app.settings.SettingsRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -35,6 +36,11 @@ class MonitoringViewModel(
         NetVisionApplication.instance.deviceRepository
     } catch (e: Exception) {
         DeviceRepository()
+    },
+    private val settingsRepository: SettingsRepository = try {
+        NetVisionApplication.instance.settingsRepository
+    } catch (e: Exception) {
+        SettingsRepository(NetVisionApplication.instance)
     },
     private val reachabilityService: NetworkReachabilityService = NetworkReachabilityService()
 ) : ViewModel() {
@@ -100,25 +106,36 @@ class MonitoringViewModel(
         _uiState.value = _uiState.value.copy(isPollingNow = true)
         val updatedSnmpMap = _uiState.value.snmpStatusByDevice.toMutableMap()
 
+        val settings = settingsRepository.getSettings()
+        val community = settings.snmpCommunity.ifBlank { "netvision" }
+        val snmpPort = settings.snmpPort
+
         for (device in currentDevices) {
             // Check reachability via TCP port 80 (WebFig / Web UI), 443, 8291, 8728, etc. and fallback to ICMP
             val reachability = reachabilityService.checkHostReachability(device.ipAddress)
             val isOnline = reachability.isReachable
             val latencyMs = reachability.latencyMs.toInt().coerceAtLeast(0)
 
-            // Try SNMP query separately — failure of SNMP or API query does NOT override connection status
+            // Perform SNMP query with saved SNMP community string (netvision)
             var uptime: String? = null
             try {
-                val snmpRes = SnmpV2Client.queryDeviceInfo(device.ipAddress, timeoutMs = 800)
+                val snmpRes = SnmpV2Client.queryDeviceInfo(
+                    targetIp = device.ipAddress,
+                    community = community,
+                    port = snmpPort,
+                    timeoutMs = 1000
+                )
                 if (snmpRes.isSuccess) {
                     val info = snmpRes.getOrNull()
                     if (info != null) {
                         updatedSnmpMap[device.id] = info
-                        uptime = info.uptimeFormatted
+                        if (info.isSuccess) {
+                            uptime = info.uptimeFormatted
+                        }
                     }
                 }
             } catch (e: Exception) {
-                // Ignore SNMP errors so device status remains ONLINE if TCP/ICMP succeeded
+                // Ignore SNMP exception so device connection status remains ONLINE if TCP/ICMP succeeded
             }
 
             repository.updateDeviceStatus(
