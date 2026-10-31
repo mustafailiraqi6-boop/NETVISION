@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.netvision.app.models.NetworkDevice
 import com.netvision.app.monitoring.UbiquitiStationInfo
+import com.netvision.app.monitoring.MikrotikStationInfo
 import com.netvision.app.ui.theme.CyanAccent
 import com.netvision.app.ui.viewmodels.MonitoringViewModel
 
@@ -132,7 +133,11 @@ fun DeviceSnmpDetailsScreen(
                         Text(info?.connectedClientsCount?.let { "$it" } ?: "—", color = CyanAccent, fontWeight = FontWeight.Bold)
                     }
                 }
-                if (!info?.connectedStations.isNullOrEmpty()) {
+                if (!info?.connectedMikrotikStations.isNullOrEmpty()) {
+                    items(info!!.connectedMikrotikStations, key = { it.macAddress }) { station ->
+                        MikrotikStationCard(station = station, isArabic = isArabic)
+                    }
+                } else if (!info?.connectedStations.isNullOrEmpty()) {
                     items(info!!.connectedStations, key = { it.macAddress }) { station ->
                         UbiquitiStationCard(station = station, isArabic = isArabic)
                     }
@@ -239,6 +244,79 @@ private fun UbiquitiStationCard(station: UbiquitiStationInfo, isArabic: Boolean)
                         }
                         if (pair.size == 1) Spacer(Modifier.weight(1f))
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MikrotikStationCard(station: MikrotikStationInfo, isArabic: Boolean) {
+    val clipboard = LocalClipboardManager.current
+    var expanded by remember(station.macAddress) { mutableStateOf(false) }
+    val stationName = station.deviceName?.takeIf { it.isNotBlank() }
+        ?: (if (isArabic) "اسم المحطة غير متاح" else "Station name unavailable")
+    fun rate(value: Double?): String = value?.let {
+        val formatted = if (it % 1.0 == 0.0) it.toLong().toString() else String.format(java.util.Locale.US, "%.1f", it)
+        "$formatted Mbps"
+    } ?: "—"
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(stationName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text(
+                        if (isArabic) "الإشارة: ${station.signalDbm?.let { "$it dBm" } ?: "غير متاحة"}"
+                        else "Signal: ${station.signalDbm?.let { "$it dBm" } ?: "Unavailable"}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                OutlinedButton(onClick = { expanded = !expanded }) {
+                    Text(if (expanded) { if (isArabic) "إخفاء التفاصيل" else "Hide details" }
+                    else { if (isArabic) "عرض التفاصيل" else "View details" })
+                }
+            }
+            if (expanded) {
+                Divider()
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("MAC Address", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(station.macAddress, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                    }
+                    OutlinedButton(onClick = { clipboard.setText(AnnotatedString(station.macAddress)) }) {
+                        Icon(Icons.Default.ContentCopy, contentDescription = null)
+                        Text(if (isArabic) "نسخ" else "Copy")
+                    }
+                }
+                Divider()
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Column(Modifier.weight(1f)) {
+                        Text("TX Rate", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(rate(station.txRateMbps), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text("RX Rate", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(rate(station.rxRateMbps), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                    }
+                }
+                Divider()
+                Column {
+                    Text(if (isArabic) "مدة الاتصال" else "Connection uptime", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(station.connectionTime ?: "—", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
                 }
             }
         }
