@@ -242,7 +242,10 @@ object SnmpV2Client {
                 )
 
                 val clientCount: Int? = if (stationResult.isSupported) stationResult.count else null
-                val isUbiquiti = sysObjRes.stringValue?.contains("41112") == true ||
+                // AirOS reports a generic Linux sysDescr and sysObjectID is an ASN.1 OID,
+                // so identify Ubiquiti from the station-table walk source as well.
+                val isUbiquiti = stationResult.source.contains("Ubiquiti", ignoreCase = true) ||
+                    sysObjRes.stringValue?.contains("41112") == true ||
                     descrRes.stringValue?.let { it.contains("AirOS", true) || it.contains("UBNT", true) || it.contains("Ubiquiti", true) } == true
                 val detailedStations = if (isUbiquiti) {
                     walkUbiquitiStations(
@@ -1031,10 +1034,13 @@ object SnmpV2Client {
                         summary = "TimeTicks: $ticks (${formatTimeTicks(ticks)})"
                     )
                 }
-                0x02 -> { // INTEGER
+                0x02 -> { // INTEGER (signed; preserve negative RF values such as -50 dBm)
                     var num = 0
                     for (k in 0 until vDataLen) {
                         num = (num shl 8) or (data[vDataNext + k].toInt() and 0xFF)
+                    }
+                    if (vDataLen in 1..3 && (data[vDataNext].toInt() and 0x80) != 0) {
+                        num = num or (-1 shl (vDataLen * 8))
                     }
                     return ParsedResponse(
                         isSuccess = true,
