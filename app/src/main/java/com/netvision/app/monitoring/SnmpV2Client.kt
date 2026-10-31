@@ -28,12 +28,29 @@ data class SnmpDeviceInfo(
     val ifCount: Int? = null,
     val connectedClientsCount: Int? = null,
     val connectedStationsMacs: List<String> = emptyList(),
+    val connectedStations: List<UbiquitiStationInfo> = emptyList(),
     val errorMessage: String? = null,
     val communityUsed: String = "netvision",
     val latencyMs: Long = 0,
     val networkInterface: String = "VPN (Auto)",
     val snmpVersion: String = "v2c",
     val negotiationSummary: String? = null
+)
+
+data class UbiquitiStationInfo(
+    val macAddress: String,
+    val deviceName: String? = null,
+    val signalDbm: Int? = null,
+    val noiseDbm: Int? = null,
+    val distance: Int? = null,
+    val ccqPercent: Int? = null,
+    val airMaxQualityPercent: Int? = null,
+    val airMaxCapacityPercent: Int? = null,
+    val lastIpAddress: String? = null,
+    val txRate: Int? = null,
+    val rxRate: Int? = null,
+    val connectionTime: String? = null,
+    val latencyMs: Int? = null
 )
 
 data class SnmpDiagnosticRecord(
@@ -225,6 +242,18 @@ object SnmpV2Client {
                 )
 
                 val clientCount: Int? = if (stationResult.isSupported) stationResult.count else null
+                val isUbiquiti = sysObjRes.stringValue?.contains("41112") == true ||
+                    descrRes.stringValue?.let { it.contains("AirOS", true) || it.contains("UBNT", true) || it.contains("Ubiquiti", true) } == true
+                val detailedStations = if (isUbiquiti) {
+                    walkUbiquitiStations(
+                        ip = targetIp,
+                        community = community,
+                        port = port,
+                        version = currentVersion,
+                        timeoutMs = 800,
+                        attemptNumber = attemptNumber
+                    )
+                } else emptyList()
 
                 val totalLatency = System.currentTimeMillis() - totalStart
                 val descr = descrRes.stringValue
@@ -251,7 +280,8 @@ object SnmpV2Client {
                         model = modelName,
                         ifCount = ifCount,
                         connectedClientsCount = clientCount,
-                        connectedStationsMacs = stationResult.macAddresses,
+                        connectedStationsMacs = if (detailedStations.isNotEmpty()) detailedStations.map { it.macAddress } else stationResult.macAddresses,
+                        connectedStations = detailedStations,
                         communityUsed = community,
                         latencyMs = totalLatency,
                         networkInterface = lastInterface,
@@ -358,6 +388,114 @@ object SnmpV2Client {
 
         // Table / MIB not supported on this device
         return StationCountResult(isSupported = false, count = 0, source = "Unsupported")
+    }
+
+
+    /**
+     * Reads the complete AirMAX station entry table. Each station row is correlated
+     * by its SNMP index so names and radio metrics cannot be assigned to another MAC.
+     */
+    private fun walkUbiquitiStations(
+        ip: String,
+        community: String,
+        port: Int,
+        version: String,
+        timeoutMs: Int,
+        attemptNumber: Int
+    ): List<UbiquitiStationInfo> {
+        val tableRoot = "1.3.6.1.4.1.41112.1.4.7.1"
+        var currentOid = encodeOidString(tableRoot)
+        data class MutableStation(
+            var mac: String? = null,
+            var name: String? = null,
+            var signal: Int? = null,
+            var noise: Int? = null,
+            var distance: Int? = null,
+            var ccq: Int? = null,
+            var quality: Int? = null,
+            var capacity: Int? = null,
+            var lastIp: String? = null,
+            var txRate: Int? = null,
+            var rxRate: Int? = null,
+            var connectionTicks: Long? = null,
+            var latency: Int? = null
+        )
+        val rows = linkedMapOf<String, MutableStation>()
+
+        for (step in 1..400) {
+            val reqId = requestIdCounter.incrementAndGet()
+            val versionInt = if (version.equals("v1", ignoreCase = true)) 0 else 1
+            val packet = buildGetNextRequest(reqId, community, currentOid, versionInt)
+            var shouldStop = false
+            try {
+                DatagramSocket().use { socket ->
+                    socket.soTimeout = timeoutMs
+                    val vpnInfo = resolveVpnNetwork()
+                    if (vpnInfo.first != null) vpnInfo.first!!.bindSocket(socket)
+                    val address = InetAddress.getByName(ip)
+                    socket.send(DatagramPacket(packet, packet.size, address, port))
+                    val buffer = ByteArray(2048)
+                    val received = DatagramPacket(buffer, buffer.size)
+                    socket.receive(received)
+                    val parsed = parseSnmpResponse(buffer.copyOf(received.length), reqId, community)
+                    val oid = parsed.responseOid
+                    if (!parsed.isSuccess || oid == null || !oid.startsWith("$tableRoot.")) {
+                        shouldStop = true
+                    } else {
+                        val parts = oid.removePrefix("$tableRoot.").split('.')
+                        // ubntStaEntry is column .1; the next sub-identifier is the column number.
+                        if (parts.size < 3 || parts[0] != "1") {
+                            shouldStop = true
+                        } else {
+                            val column = parts[1].toIntOrNull()
+                            val index = parts.drop(2).joinToString(".")
+                            if (index.isNotBlank()) {
+                                val row = rows.getOrPut(index) { MutableStation() }
+                                when (column) {
+                                    1 -> row.mac = parsed.stringValue?.uppercase(Locale.ROOT)
+                                    2 -> row.name = parsed.stringValue?.takeIf { it.isNotBlank() }
+                                    3 -> row.signal = parsed.intValue
+                                    4 -> row.noise = parsed.intValue
+                                    5 -> row.distance = parsed.intValue
+                                    6 -> row.ccq = parsed.intValue
+                                    8 -> row.quality = parsed.intValue
+                                    9 -> row.capacity = parsed.intValue
+                                    10 -> row.lastIp = parsed.stringValue
+                                    11 -> row.txRate = parsed.intValue
+                                    12 -> row.rxRate = parsed.intValue
+                                    15 -> row.connectionTicks = parsed.longValue
+                                    21 -> row.latency = parsed.intValue
+                                }
+                            }
+                            currentOid = encodeOidString(oid)
+                        }
+                    }
+                }
+            } catch (_: Exception) {
+                shouldStop = true
+            }
+            if (shouldStop) break
+        }
+
+        return rows.values.mapNotNull { row ->
+            val mac = row.mac?.takeIf { it.matches(Regex("^(?:[0-9A-F]{2}:){5}[0-9A-F]{2}$")) }
+                ?: return@mapNotNull null
+            UbiquitiStationInfo(
+                macAddress = mac,
+                deviceName = row.name,
+                signalDbm = row.signal,
+                noiseDbm = row.noise,
+                distance = row.distance,
+                ccqPercent = row.ccq,
+                airMaxQualityPercent = row.quality,
+                airMaxCapacityPercent = row.capacity,
+                lastIpAddress = row.lastIp,
+                txRate = row.txRate,
+                rxRate = row.rxRate,
+                connectionTime = row.connectionTicks?.let { formatTimeTicks(it) },
+                latencyMs = row.latency
+            )
+        }
     }
 
     data class TableWalkResult(
