@@ -25,6 +25,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.netvision.app.settings.AppLanguage
 import com.netvision.app.settings.AppThemeMode
 import com.netvision.app.ui.navigation.Screen
@@ -43,6 +44,7 @@ import com.netvision.app.ui.theme.NavySurface
 import com.netvision.app.ui.theme.NetVisionTheme
 import com.netvision.app.ui.theme.TextMutedDark
 import com.netvision.app.ui.theme.TextPrimaryDark
+import com.netvision.app.ui.viewmodels.MonitoringViewModel
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -144,10 +146,15 @@ fun NetVisionApp(
             }
             composable("device-details/{deviceId}") { backStackEntry ->
                 val deviceId = backStackEntry.arguments?.getString("deviceId").orEmpty()
+                val monitoringEntry = remember(navController) {
+                    navController.getBackStackEntry(Screen.Monitoring.route)
+                }
+                val monitoringViewModel: MonitoringViewModel = viewModel(monitoringEntry)
                 DeviceSnmpDetailsScreen(
                     deviceId = deviceId,
                     isArabic = isArabic,
-                    onBack = { navController.popBackStack() }
+                    onBack = { navController.popBackStack() },
+                    viewModel = monitoringViewModel
                 )
             }
             composable(Screen.Settings.route) {
