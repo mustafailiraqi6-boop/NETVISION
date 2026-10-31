@@ -34,8 +34,8 @@ class RemoteNetworkScanner(
     private val reachabilityService: NetworkReachabilityService = NetworkReachabilityService()
 ) {
 
-    // Common ports to detect Ubiquiti, MikroTik, and network equipment
-    private val probePorts = listOf(8291, 8728, 80, 443, 22, 8080, 8443)
+    // Common ports tested for network equipment (HTTP Port 80 checked FIRST for WebFig / Web UI)
+    private val probePorts = listOf(80, 443, 8291, 8728, 22, 8080, 8443)
 
     fun scanRemoteSubnet(subnetCidr: String): Flow<RemoteScanStatus> = flow {
         val hostIps = CidrUtils.getUsableHostIps(subnetCidr, maxHosts = 512)
@@ -96,7 +96,7 @@ class RemoteNetworkScanner(
         var activePort = 0
         var latencyMs: Long = 0
 
-        // 1. Probe TCP ports with short timeout
+        // 1. Probe TCP ports with short timeout (port 80 checked FIRST for MikroTik WebFig and web UI)
         for (port in probePorts) {
             val startTime = System.currentTimeMillis()
             try {
@@ -153,7 +153,7 @@ class RemoteNetworkScanner(
             } catch (e: Exception) {}
         }
 
-        // 5. Check ARP cache for MAC address (applicable when on same subnet)
+        // 5. Check ARP cache for MAC address
         val arpMac = getMacFromArpCache(targetIp)
 
         // 6. Classify Vendor & Device Type
@@ -201,8 +201,8 @@ class RemoteNetworkScanner(
         val host = (hostname ?: "").lowercase()
         val macLower = (mac ?: "").lowercase()
 
-        // Check MikroTik
-        if (openPort == 8291 || openPort == 8728 ||
+        // Check MikroTik (Port 80, 8291, 8728, or SNMP / MNDP / MAC)
+        if (openPort == 8291 || openPort == 8728 || openPort == 80 ||
             descr.contains("mikrotik") || descr.contains("routeros") ||
             host.contains("mikrotik") || host.contains("rb") ||
             macLower.startsWith("48:8f:5a") || macLower.startsWith("cc:2d:e0") || macLower.startsWith("08:55:31")

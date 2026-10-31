@@ -9,6 +9,7 @@ import com.netvision.app.monitoring.SnmpDeviceInfo
 import com.netvision.app.monitoring.SnmpV2Client
 import com.netvision.app.network.NetworkReachabilityService
 import com.netvision.app.repository.DeviceRepository
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,9 +19,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import java.net.InetAddress
-import java.net.InetSocketAddress
-import java.net.Socket
+import kotlinx.coroutines.withContext
 
 data class MonitoringUiState(
     val selectedDeviceId: String? = null,
@@ -94,28 +93,34 @@ class MonitoringViewModel(
         }
     }
 
-    private suspend fun pollAllDevices() {
+    private suspend fun pollAllDevices() = withContext(Dispatchers.IO) {
         val currentDevices = savedDevices.value
-        if (currentDevices.isEmpty()) return
+        if (currentDevices.isEmpty()) return@withContext
 
         _uiState.value = _uiState.value.copy(isPollingNow = true)
         val updatedSnmpMap = _uiState.value.snmpStatusByDevice.toMutableMap()
 
         for (device in currentDevices) {
-            val (isOnline, latencyMs) = testHostReachability(device.ipAddress)
+            // Check reachability via TCP port 80 (WebFig / Web UI), 443, 8291, 8728, etc. and fallback to ICMP
+            val reachability = reachabilityService.checkHostReachability(device.ipAddress)
+            val isOnline = reachability.isReachable
+            val latencyMs = reachability.latencyMs.toInt().coerceAtLeast(0)
 
-            // Try SNMP query
+            // Try SNMP query separately — failure of SNMP or API query does NOT override connection status
             var uptime: String? = null
-            val snmpRes = SnmpV2Client.queryDeviceInfo(device.ipAddress, timeoutMs = 800)
-            if (snmpRes.isSuccess) {
-                val info = snmpRes.getOrNull()
-                if (info != null) {
-                    updatedSnmpMap[device.id] = info
-                    uptime = info.uptimeFormatted
+            try {
+                val snmpRes = SnmpV2Client.queryDeviceInfo(device.ipAddress, timeoutMs = 800)
+                if (snmpRes.isSuccess) {
+                    val info = snmpRes.getOrNull()
+                    if (info != null) {
+                        updatedSnmpMap[device.id] = info
+                        uptime = info.uptimeFormatted
+                    }
                 }
+            } catch (e: Exception) {
+                // Ignore SNMP errors so device status remains ONLINE if TCP/ICMP succeeded
             }
 
-            // CRITICAL: Reachability is independent of SNMP. If ICMP/TCP succeeds, device is ONLINE!
             repository.updateDeviceStatus(
                 deviceId = device.id,
                 isOnline = isOnline,
@@ -129,32 +134,6 @@ class MonitoringViewModel(
             lastRefreshedTime = System.currentTimeMillis(),
             snmpStatusByDevice = updatedSnmpMap
         )
-    }
-
-    private fun testHostReachability(ip: String): Pair<Boolean, Int> {
-        val portsToProbe = listOf(8291, 8728, 80, 443, 22)
-        val startTime = System.currentTimeMillis()
-
-        for (port in portsToProbe) {
-            try {
-                Socket().use { s ->
-                    s.connect(InetSocketAddress(ip, port), 400)
-                    val latency = (System.currentTimeMillis() - startTime).toInt().coerceAtLeast(1)
-                    return Pair(true, latency)
-                }
-            } catch (e: Exception) {}
-        }
-
-        // Fallback to ICMP ping
-        try {
-            val addr = InetAddress.getByName(ip)
-            if (addr.isReachable(500)) {
-                val latency = (System.currentTimeMillis() - startTime).toInt().coerceAtLeast(1)
-                return Pair(true, latency)
-            }
-        } catch (e: Exception) {}
-
-        return Pair(false, 0)
     }
 
     override fun onCleared() {
