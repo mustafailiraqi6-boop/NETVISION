@@ -6,6 +6,7 @@ import com.netvision.app.NetVisionApplication
 import com.netvision.app.models.DeviceStatus
 import com.netvision.app.models.NetworkDevice
 import com.netvision.app.monitoring.SnmpDeviceInfo
+import com.netvision.app.monitoring.SnmpDiagnosticRecord
 import com.netvision.app.monitoring.SnmpV2Client
 import com.netvision.app.network.NetworkReachabilityService
 import com.netvision.app.repository.DeviceRepository
@@ -28,7 +29,8 @@ data class MonitoringUiState(
     val refreshIntervalSec: Int = 10,
     val lastRefreshedTime: Long = 0L,
     val isPollingNow: Boolean = false,
-    val snmpStatusByDevice: Map<String, SnmpDeviceInfo> = emptyMap()
+    val snmpStatusByDevice: Map<String, SnmpDeviceInfo> = emptyMap(),
+    val diagnosticLogs: List<SnmpDiagnosticRecord> = emptyList()
 )
 
 class MonitoringViewModel(
@@ -123,7 +125,7 @@ class MonitoringViewModel(
                     targetIp = device.ipAddress,
                     community = community,
                     port = snmpPort,
-                    timeoutMs = 1000
+                    timeoutMs = 1200
                 )
                 if (snmpRes.isSuccess) {
                     val info = snmpRes.getOrNull()
@@ -149,7 +151,8 @@ class MonitoringViewModel(
         _uiState.value = _uiState.value.copy(
             isPollingNow = false,
             lastRefreshedTime = System.currentTimeMillis(),
-            snmpStatusByDevice = updatedSnmpMap
+            snmpStatusByDevice = updatedSnmpMap,
+            diagnosticLogs = SnmpV2Client.getDiagnosticHistory().reversed()
         )
     }
 

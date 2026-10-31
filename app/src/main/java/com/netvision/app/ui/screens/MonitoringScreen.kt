@@ -299,6 +299,28 @@ fun MonitoringScreen(
                                     )
                                     Spacer(modifier = Modifier.height(4.dp))
                                 }
+                                snmpInfo.ifCount?.let { count ->
+                                    Text(
+                                        text = "${if (isArabic) "عدد واجهات الشبكة (Interfaces):" else "Network Interfaces:"} $count",
+                                        fontSize = 12.sp,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                }
+                                if (snmpInfo.latencyMs > 0) {
+                                    Text(
+                                        text = "${if (isArabic) "زمن استجابة SNMP:" else "SNMP Response Time:"} ${snmpInfo.latencyMs} ms",
+                                        fontSize = 11.sp,
+                                        color = CyanAccent
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                }
+                                Text(
+                                    text = "${if (isArabic) "واجهة الإرسال:" else "Outbound Interface:"} ${snmpInfo.networkInterface}",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
                                 snmpInfo.sysDescr?.let { descr ->
                                     Text(
                                         text = "System Description (sysDescr): $descr",
@@ -323,6 +345,143 @@ fun MonitoringScreen(
                                     fontSize = 12.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
+                            }
+                        }
+                    }
+                }
+
+                // SNMP Diagnostic Logs Card
+                item {
+                    var isExpanded by remember { mutableStateOf(true) }
+                    val logs = uiState.diagnosticLogs
+
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(14.dp)),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.Analytics,
+                                        contentDescription = null,
+                                        tint = CyanAccent,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = if (isArabic) "سجل تشخيص SNMP التشغيلي" else "SNMP Diagnostic Logs",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Surface(
+                                        color = MaterialTheme.colorScheme.surfaceVariant,
+                                        shape = RoundedCornerShape(10.dp)
+                                    ) {
+                                        Text(
+                                            text = "${logs.size}",
+                                            fontSize = 11.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
+
+                                TextButton(
+                                    onClick = { isExpanded = !isExpanded },
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                                ) {
+                                    Text(
+                                        text = if (isExpanded) {
+                                            if (isArabic) "طي" else "Collapse"
+                                        } else {
+                                            if (isArabic) "عرض" else "Expand"
+                                        },
+                                        fontSize = 12.sp,
+                                        color = CyanAccent
+                                    )
+                                    Icon(
+                                        imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                        contentDescription = null,
+                                        tint = CyanAccent,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+
+                            if (isExpanded) {
+                                Spacer(modifier = Modifier.height(10.dp))
+                                if (logs.isEmpty()) {
+                                    Text(
+                                        text = if (isArabic) "لا توجد عمليات SNMP مسجلة بعد. اضغط 'تحديث الآن' لبدء الفحص."
+                                        else "No SNMP transactions recorded yet. Tap 'Refresh' to poll.",
+                                        fontSize = 12.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                } else {
+                                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        logs.take(10).forEach { log ->
+                                            Surface(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                color = MaterialTheme.colorScheme.background.copy(alpha = 0.6f),
+                                                shape = RoundedCornerShape(8.dp),
+                                                border = CardDefaults.outlinedCardBorder()
+                                            ) {
+                                                Column(modifier = Modifier.padding(10.dp)) {
+                                                    Row(
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                                        verticalAlignment = Alignment.CenterVertically
+                                                    ) {
+                                                        Text(
+                                                            text = "${log.targetIp}:${log.port} (${log.version})",
+                                                            fontSize = 12.sp,
+                                                            color = MaterialTheme.colorScheme.onSurface
+                                                        )
+                                                        Surface(
+                                                            color = if (log.isSuccess) StatusGreen.copy(alpha = 0.15f) else StatusRed.copy(alpha = 0.15f),
+                                                            shape = RoundedCornerShape(4.dp)
+                                                        ) {
+                                                            Text(
+                                                                text = if (log.isSuccess) "Success (${log.latencyMs}ms)" else "Failed",
+                                                                fontSize = 10.sp,
+                                                                color = if (log.isSuccess) StatusGreen else StatusRed,
+                                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                            )
+                                                        }
+                                                    }
+                                                    Spacer(modifier = Modifier.height(4.dp))
+                                                    Text(
+                                                        text = "Community: ${log.communityMasked} • Interface: ${log.networkInterface} • OID: ${log.oidName}",
+                                                        fontSize = 11.sp,
+                                                        color = CyanAccent
+                                                    )
+                                                    Text(
+                                                        text = "Tx: ${log.bytesSent} B • Rx: ${log.bytesReceived} B • Summary: ${log.resultSummary}",
+                                                        fontSize = 10.sp,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                    if (!log.exceptionDetail.isNullOrBlank()) {
+                                                        Spacer(modifier = Modifier.height(2.dp))
+                                                        Text(
+                                                            text = "Detail: ${log.exceptionDetail}",
+                                                            fontSize = 10.sp,
+                                                            color = StatusAmber
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
