@@ -86,8 +86,8 @@ object BackupManager {
                         check(cursor.getInt(0) == 0) { "Database is busy; retry backup in a moment" }
                     }
                 }
-                // Close Room after checkpoint to make the main database file a complete snapshot.
-                AppDatabase.closeDatabase()
+                // Keep Room open: ViewModels continue using its DAOs while the app is backgrounded.
+                // The WAL checkpoint above flushes committed changes before the snapshot is copied.
 
                 val root = DocumentsContract.buildDocumentUriUsingTree(
                     treeUri, DocumentsContract.getTreeDocumentId(treeUri)
