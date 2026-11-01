@@ -210,15 +210,11 @@ fun NetVisionApp(
                 MonitoringScreen(
                     isArabic = isArabic,
                     onViewDeviceDetails = { deviceId -> navController.navigate("device-details/$deviceId") },
-                    viewModel = detailsMonitoringViewModel
+                    viewModel = monitoringViewModel
                 )
             }
             composable("device-details/{deviceId}") { backStackEntry ->
                 val deviceId = backStackEntry.arguments?.getString("deviceId").orEmpty()
-                val monitoringEntry = remember(navController) {
-                    navController.getBackStackEntry(Screen.Monitoring.route)
-                }
-                val detailsMonitoringViewModel: MonitoringViewModel = viewModel(monitoringEntry)
                 DeviceSnmpDetailsScreen(
                     deviceId = deviceId,
                     isArabic = isArabic,
