@@ -133,7 +133,7 @@ object SnmpV2Client {
 
     // Scalar Fallbacks:
     // Ubiquiti ubntAirMaxStationCount (1.3.6.1.4.1.41112.1.4.5.1.15.1)
-    val OID_UBNT_STA_COUNT_BYTES = byteArrayOf(0x2b, 0x06, 0x01, 0x04, 0x01, 0x82.toByte(), 0xc1.toByte(), 0x28, 0x01, 0x04, 0x05, 0x01, 0x0f, 0x01, 0x00)
+    val OID_UBNT_STA_COUNT_BYTES = encodeOidString("1.3.6.1.4.1.41112.1.4.5.1.15.1")
     // IEEE 802.11 dot11AssociatedStationCount (1.2.840.10036.1.1.1.9.1.0)
     val OID_DOT11_STA_COUNT_BYTES = byteArrayOf(0x2a, 0x86.toByte(), 0x48, 0x82.toByte(), 0x8e.toByte(), 0x24, 0x01, 0x01, 0x01, 0x09, 0x01, 0x00)
     // MikroTik Wireless Registration Table count scalar (1.3.6.1.4.1.14988.1.1.1.3.1.6.1)
