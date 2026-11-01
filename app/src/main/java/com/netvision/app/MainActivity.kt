@@ -59,6 +59,11 @@ import com.netvision.app.ui.viewmodels.MonitoringViewModel
 import com.netvision.app.ui.theme.NetVisionTheme
 
 class MainActivity : ComponentActivity() {
+    override fun onResume() {
+        super.onResume()
+        NetVisionApplication.notifyAppForegrounded()
+    }
+
     override fun onStop() {
         // Android calls onStop when the activity leaves the foreground,
         // including Back navigation and removing the app from Recents.
@@ -103,6 +108,7 @@ fun NetVisionApp(
     onThemeModeChange: (AppThemeMode) -> Unit
 ) {
     val navController = rememberNavController()
+    val monitoringViewModel: MonitoringViewModel = viewModel()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route ?: Screen.Dashboard.route
     val isArabic = language == AppLanguage.ARABIC
@@ -203,7 +209,8 @@ fun NetVisionApp(
             composable(Screen.Monitoring.route) {
                 MonitoringScreen(
                     isArabic = isArabic,
-                    onViewDeviceDetails = { deviceId -> navController.navigate("device-details/$deviceId") }
+                    onViewDeviceDetails = { deviceId -> navController.navigate("device-details/$deviceId") },
+                    viewModel = detailsMonitoringViewModel
                 )
             }
             composable("device-details/{deviceId}") { backStackEntry ->
@@ -211,7 +218,7 @@ fun NetVisionApp(
                 val monitoringEntry = remember(navController) {
                     navController.getBackStackEntry(Screen.Monitoring.route)
                 }
-                val monitoringViewModel: MonitoringViewModel = viewModel(monitoringEntry)
+                val detailsMonitoringViewModel: MonitoringViewModel = viewModel(monitoringEntry)
                 DeviceSnmpDetailsScreen(
                     deviceId = deviceId,
                     isArabic = isArabic,
