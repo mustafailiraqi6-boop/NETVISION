@@ -154,6 +154,20 @@ class MonitoringViewModel(
                         if (info.isSuccess) {
                             uptime = info.uptimeFormatted
                             negotiatedVersion = info.snmpVersion
+
+                            // Identify Ubiquiti from its verified AirMAX SNMP values,
+                            // not only from hostname/OUI heuristics.
+                            val hasUbiquitiTelemetry =
+                                info.ubntApMac != null ||
+                                info.ubntNoiseFloorDbm != null ||
+                                info.ubntTransmitCcqPercent != null ||
+                                info.ubntAirMaxQualityPercent != null ||
+                                info.ubntAirMaxCapacityPercent != null
+                            if (hasUbiquitiTelemetry) {
+                                repository.updateDeviceManufacturer(device.id, com.netvision.app.models.Manufacturer.UBIQUITI)
+                            } else if (info.mikrotikCcqPercent != null || info.mikrotikVoltageDecivolts != null) {
+                                repository.updateDeviceManufacturer(device.id, com.netvision.app.models.Manufacturer.MIKROTIK)
+                            }
                         }
                     }
                 }
