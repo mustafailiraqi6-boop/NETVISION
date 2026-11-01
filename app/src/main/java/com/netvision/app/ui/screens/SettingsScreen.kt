@@ -9,6 +9,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.LaunchedEffect
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.platform.LocalContext
@@ -44,8 +45,13 @@ fun SettingsScreen(
     val scope = rememberCoroutineScope()
     var backupFolder by remember { mutableStateOf(BackupManager.getBackupFolder(context)) }
     var backupInProgress by remember { mutableStateOf(false) }
+    var backupItems by remember { mutableStateOf<List<BackupManager.BackupInfo>>(emptyList()) }
     var restoreInProgress by remember { mutableStateOf(false) }
     var pendingRestoreUri by remember { mutableStateOf<android.net.Uri?>(null) }
+    LaunchedEffect(backupFolder) {
+        backupItems = backupFolder?.let { BackupManager.listBackups(context, it) }.orEmpty()
+    }
+
     val restorePicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri ->
@@ -64,6 +70,7 @@ fun SettingsScreen(
             }
             BackupManager.setBackupFolder(context, uri)
             backupFolder = uri
+            backupItems = BackupManager.listBackups(context, uri)
             Toast.makeText(context, if (isArabic) "تم تحديد مجلد النسخ الاحتياطي" else "Backup folder selected", Toast.LENGTH_SHORT).show()
         }
     }
@@ -80,6 +87,7 @@ fun SettingsScreen(
             val result = BackupManager.createBackup(context, folder)
             backupInProgress = false
             result.onSuccess { name ->
+                backupItems = BackupManager.listBackups(context, folder)
                 Toast.makeText(context, (if (isArabic) "تم إنشاء النسخة: " else "Backup created: ") + name, Toast.LENGTH_LONG).show()
             }.onFailure { error ->
                 Toast.makeText(context, (if (isArabic) "فشل النسخ الاحتياطي: " else "Backup failed: ") + (error.message ?: ""), Toast.LENGTH_LONG).show()
@@ -402,9 +410,9 @@ fun SettingsScreen(
             ) {
                 Text(
                     text = if (isArabic)
-                        "احفظ بيانات الأجهزة والإعدادات في ملف ZIP. يحتفظ التطبيق بآخر نسختين فقط."
+                        "احفظ بيانات الأجهزة والإعدادات في ملف ZIP. يحتفظ التطبيق بآخر 3 نسخ."
                     else
-                        "Save your device database and settings to ZIP. Only the two newest backups are kept.",
+                        "Save your device database and settings to ZIP. The three newest backups are kept.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -474,12 +482,43 @@ fun SettingsScreen(
                 }
                 Text(
                     text = if (isArabic)
-                        "يتم الاحتفاظ بآخر نسختين تلقائياً. الاستعادة تستبدل قاعدة البيانات الحالية."
+                        "يتم الاحتفاظ بآخر 3 نسخ تلقائياً. الاستعادة تستبدل قاعدة البيانات الحالية."
                     else
-                        "The two newest backups are retained automatically. Restore replaces the current database.",
+                        "The three newest backups are retained automatically. Restore replaces the current database.",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                if (backupItems.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        if (isArabic) "النسخ الاحتياطية المحفوظة" else "Saved backups",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    backupItems.forEachIndexed { index, backup ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth()
+                                .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(10.dp))
+                                .padding(10.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(backup.name, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface)
+                                Text(
+                                    if (backup.modifiedAt > 0L)
+                                        java.text.SimpleDateFormat("yyyy-MM-dd  HH:mm", java.util.Locale.getDefault()).format(java.util.Date(backup.modifiedAt))
+                                    else if (isArabic) "التاريخ غير متاح" else "Date unavailable",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Text("${index + 1}/3", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                        }
+                        if (index < backupItems.lastIndex) Spacer(modifier = Modifier.height(6.dp))
+                    }
+                }
+
             }
         }
 
