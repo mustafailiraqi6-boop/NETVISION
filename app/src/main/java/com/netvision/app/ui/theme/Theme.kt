@@ -31,16 +31,16 @@ val TextSecondaryDark = Color(0xFF94A3B8)
 val TextMutedDark = Color(0xFF64748B)
 
 // Light Theme equivalents
-val SlateLightBg = Color(0xFFF2F0FA)
+val SlateLightBg = Color(0xFFF1F5F9)
 val SlateLightSurface = Color(0xFFFFFFFF)
-val SlateLightCard = Color(0xFFF8F6FF)
-val SlateLightBorder = Color(0xFFDDD6F3)
-val TextPrimaryLight = Color(0xFF211B35)
-val TextSecondaryLight = Color(0xFF625A75)
-val PurplePrimary = Color(0xFF5426B8)
-val PurpleDeep = Color(0xFF3D168F)
-val PurpleContainer = Color(0xFFE8DFFF)
-val TealAccent = Color(0xFF0F9D9A)
+val SlateLightCard = Color(0xFFFFFFFF)
+val SlateLightBorder = Color(0xFFE2E8F0)
+val TextPrimaryLight = Color(0xFF0F172A)
+val TextSecondaryLight = Color(0xFF64748B)
+val PurplePrimary = Color(0xFF173B67)
+val PurpleDeep = Color(0xFF102A4C)
+val PurpleContainer = Color(0xFFDCEBFA)
+val TealAccent = Color(0xFF16B8C4)
 
 private val DarkColorScheme = darkColorScheme(
     primary = CyanAccent,
@@ -85,7 +85,9 @@ fun NetVisionTheme(
         SideEffect {
             val window = (view.context as Activity).window
             window.statusBarColor = colorScheme.background.toArgb()
+            window.navigationBarColor = colorScheme.primary.toArgb()
             WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
+            WindowCompat.getInsetsController(window, view).isAppearanceLightNavigationBars = false
         }
     }
 
