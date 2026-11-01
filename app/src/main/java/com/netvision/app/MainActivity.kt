@@ -20,6 +20,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.navigation.compose.NavHost
@@ -44,12 +45,11 @@ import com.netvision.app.ui.screens.ScannerScreen
 import com.netvision.app.ui.screens.SettingsScreen
 import com.netvision.app.ui.theme.CyanAccent
 import com.netvision.app.ui.theme.ElectricBlue
-import com.netvision.app.ui.theme.NavyBorder
-import com.netvision.app.ui.theme.NavyCard
-import com.netvision.app.ui.theme.NavySurface
 import com.netvision.app.ui.theme.NetVisionTheme
-import com.netvision.app.ui.theme.TextMutedDark
-import com.netvision.app.ui.theme.TextPrimaryDark
+import com.netvision.app.ui.theme.PurplePrimary
+import com.netvision.app.ui.theme.TealAccent
+import com.netvision.app.ui.theme.SlateLightBg
+import com.netvision.app.ui.theme.TextSecondaryLight
 import com.netvision.app.ui.viewmodels.MonitoringViewModel
 
 class MainActivity : ComponentActivity() {
@@ -105,8 +105,8 @@ fun NetVisionApp(
         modifier = Modifier.fillMaxSize(),
         bottomBar = {
             NavigationBar(
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary
+                containerColor = Color.White,
+                contentColor = MaterialTheme.colorScheme.onSurface
             ) {
                 bottomNavItems.forEach { screen ->
                     val selected = currentRoute == screen.route
@@ -131,11 +131,11 @@ fun NetVisionApp(
                             Text(text = if (isArabic) screen.titleAr else screen.titleEn)
                         },
                         colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = MaterialTheme.colorScheme.primary,
-                            selectedTextColor = MaterialTheme.colorScheme.onPrimary,
-                            indicatorColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.18f),
-                            unselectedIconColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.72f),
-                            unselectedTextColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.72f)
+                            selectedIconColor = Color(0xFF6542A6),
+                            selectedTextColor = Color(0xFF6542A6),
+                            indicatorColor = Color(0xFFEEE8FF),
+                            unselectedIconColor = Color(0xFF64748B),
+                            unselectedTextColor = Color(0xFF64748B)
                         )
                     )
                 }
