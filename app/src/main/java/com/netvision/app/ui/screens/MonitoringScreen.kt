@@ -17,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -161,98 +162,113 @@ fun MonitoringScreen(
         }
 
         // -------------------------------------------------------------
-        // Tower Selector Card (اختيار البرج)
+        // Tower Selector - compact selectable cards
         // -------------------------------------------------------------
         item {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(14.dp)),
-                shape = RoundedCornerShape(14.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Column(modifier = Modifier.padding(14.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.CellTower, contentDescription = null, tint = CyanAccent, modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            if (isArabic) "اختيار البرج" else "Select Tower",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                    Text(
+                        text = if (isArabic) "${savedFolders.count { it.id != DeviceFolderEntity.DEFAULT_FOLDER_ID }} برج" else "${savedFolders.count { it.id != DeviceFolderEntity.DEFAULT_FOLDER_ID }} towers",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 11.sp
+                    )
+                }
+
+                val towerOptions: List<DeviceFolderEntity?> = listOf(null) + savedFolders
+                towerOptions.chunked(2).forEach { rowOptions ->
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                        horizontalArrangement = Arrangement.spacedBy(9.dp)
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.CellTower,
-                                contentDescription = null,
-                                tint = CyanAccent,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = if (isArabic) "اختيار البرج:" else "Select Tower:",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-
-                        val selectedTowerName = when (uiState.selectedFolderId) {
-                            null -> if (isArabic) "جميع الأبراج" else "All Towers"
-                            DeviceFolderEntity.DEFAULT_FOLDER_ID -> if (isArabic) "أجهزة غير تابعة لبرج" else "Unassigned Devices"
-                            else -> savedFolders.find { it.id == uiState.selectedFolderId }?.name ?: ""
-                        }
-
-                        Surface(
-                            color = CyanAccent.copy(alpha = 0.15f),
-                            shape = RoundedCornerShape(6.dp)
-                        ) {
-                            Text(
-                                text = selectedTowerName,
-                                fontSize = 11.sp,
-                                color = CyanAccent,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        // " جميع الأبراج"
-                        item {
-                            FilterChip(
-                                selected = uiState.selectedFolderId == null,
-                                onClick = { viewModel.selectFolder(null) },
-                                label = { Text(if (isArabic) "جميع الأبراج ($totalDevicesCount)" else "All Towers ($totalDevicesCount)") },
-                                leadingIcon = {
-                                    Icon(Icons.Default.CellTower, contentDescription = null, modifier = Modifier.size(16.dp))
-                                }
-                            )
-                        }
-
-                        // Towers list
-                        items(savedFolders) { folder ->
-                            val isSelected = uiState.selectedFolderId == folder.id
-                            val isUnassigned = folder.id == DeviceFolderEntity.DEFAULT_FOLDER_ID
-                            val labelText = if (isUnassigned) {
-                                if (isArabic) "أجهزة غير تابعة لبرج (${folder.deviceCount})" else "Unassigned (${folder.deviceCount})"
-                            } else {
-                                "${folder.name} (${folder.deviceCount})"
+                        rowOptions.forEach { folder ->
+                            val isAll = folder == null
+                            val isUnassigned = folder?.id == DeviceFolderEntity.DEFAULT_FOLDER_ID
+                            val selected = if (isAll) uiState.selectedFolderId == null else uiState.selectedFolderId == folder?.id
+                            val title = when {
+                                isAll -> if (isArabic) "جميع الأبراج" else "All Towers"
+                                isUnassigned -> if (isArabic) "أجهزة غير تابعة" else "Unassigned"
+                                else -> folder?.name.orEmpty()
                             }
-
-                            FilterChip(
-                                selected = isSelected,
-                                onClick = { viewModel.selectFolder(folder.id) },
-                                label = { Text(labelText) },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = if (isUnassigned) Icons.Default.FolderOpen else Icons.Default.Folder,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(16.dp),
-                                        tint = if (isSelected) CyanAccent else MaterialTheme.colorScheme.onSurfaceVariant
+                            val count = if (isAll) savedFolders.count { it.id != DeviceFolderEntity.DEFAULT_FOLDER_ID }
+                                else folder?.deviceCount ?: 0
+                            val icon = when {
+                                isAll -> Icons.Default.CellTower
+                                isUnassigned -> Icons.Default.FolderOpen
+                                else -> Icons.Default.Folder
+                            }
+                            Card(
+                                modifier = Modifier.weight(1f).heightIn(min = 82.dp)
+                                    .clickable {
+                                        if (isAll) viewModel.selectFolder(null) else folder?.let { viewModel.selectFolder(it.id) }
+                                    }
+                                    .border(
+                                        width = if (selected) 1.4.dp else 1.dp,
+                                        color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                                        shape = RoundedCornerShape(13.dp)
+                                    ),
+                                shape = RoundedCornerShape(13.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer
+                                    else MaterialTheme.colorScheme.surface
+                                )
+                            ) {
+                                Column(
+                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 11.dp, vertical = 9.dp),
+                                    verticalArrangement = Arrangement.spacedBy(5.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = icon,
+                                            contentDescription = null,
+                                            tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        if (selected) {
+                                            Icon(Icons.Default.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                                        } else {
+                                            Text(count.toString(), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
+                                        }
+                                    }
+                                    Text(
+                                        title,
+                                        color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+                                        fontSize = 12.sp,
+                                        fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                                        maxLines = 1,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        if (isAll) (if (isArabic) "كل الأجهزة" else "All devices")
+                                        else if (isUnassigned) (if (isArabic) "بدون برج" else "No tower")
+                                        else if (isArabic) "$count جهاز" else "$count devices",
+                                        color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontSize = 10.sp,
+                                        maxLines = 1
                                     )
                                 }
-                            )
+                            }
                         }
+                        if (rowOptions.size == 1) Spacer(Modifier.weight(1f))
                     }
                 }
             }
@@ -379,12 +395,27 @@ fun DeviceMonitoringCard(
 ) {
     val isOnline = device.status == DeviceStatus.ONLINE
     val statusColor = if (isOnline) StatusGreen else StatusRed
-    val isUbiquiti = device.manufacturer == Manufacturer.UBIQUITI
-    val isUbiquitiSector = isUbiquiti && (
-        device.deviceType.name == "SECTOR_AP" ||
-        device.deviceType.name == "ACCESS_POINT" ||
-        device.deviceType.name == "CLIENT_DEVICE"
-    )
+    val isUbiquitiSector = device.manufacturer == Manufacturer.UBIQUITI ||
+        snmpInfo?.model?.contains("Ubiquiti", ignoreCase = true) == true ||
+        snmpInfo?.sysDescr?.let { it.contains("AirOS", true) || it.contains("UBNT", true) } == true
+    val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    val metricPalette = if (isDark) {
+        listOf(
+            Color(0xFF123B4A) to Color(0xFF8BE9F5),
+            Color(0xFF173D2B) to Color(0xFF86EFAC),
+            Color(0xFF49351A) to Color(0xFFFCD28D),
+            Color(0xFF1D3558) to Color(0xFF93C5FD),
+            Color(0xFF48233C) to Color(0xFFF9A8D4)
+        )
+    } else {
+        listOf(
+            Color(0xFFE0F7FA) to Color(0xFF0E7490),
+            Color(0xFFDCFCE7) to Color(0xFF15803D),
+            Color(0xFFFFF2D9) to Color(0xFFB7791F),
+            Color(0xFFE5F0FF) to Color(0xFF2563EB),
+            Color(0xFFFCE7F3) to Color(0xFFBE185D)
+        )
+    }
 
     Card(
         modifier = Modifier
@@ -398,7 +429,7 @@ fun DeviceMonitoringCard(
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
-        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -436,42 +467,47 @@ fun DeviceMonitoringCard(
             }
 
             if (isUbiquitiSector && snmpInfo?.isSuccess == true) {
-                val metrics = listOf(
-                    Triple(if (isArabic) "الأجهزة المتصلة" else "Connected", snmpInfo.connectedClientsCount?.toString() ?: "—", Color(0xFF2563EB)),
-                    Triple("Transmit CCQ", snmpInfo.ubntTransmitCcqPercent?.let { "${it}%" } ?: "—", Color(0xFF15803D)),
-                    Triple("AirMAX Quality", snmpInfo.ubntAirMaxQualityPercent?.let { "${it}%" } ?: "—", Color(0xFF0E7490)),
-                    Triple("AirMAX Capacity", snmpInfo.ubntAirMaxCapacityPercent?.let { "${it}%" } ?: "—", Color(0xFFB7791F))
+                val values = listOf(
+                    Triple(if (isArabic) "الأجهزة" else "Clients", snmpInfo.connectedClientsCount?.toString() ?: "—", 0),
+                    Triple("CCQ", snmpInfo.ubntTransmitCcqPercent?.let { "${it}%" } ?: "—", 1),
+                    Triple(if (isArabic) "Noise Floor" else "Noise Floor", snmpInfo.ubntNoiseFloorDbm?.let { "${it} dBm" } ?: "—", 2),
+                    Triple("airMAX Quality", snmpInfo.ubntAirMaxQualityPercent?.let { "${it}%" } ?: "—", 3),
+                    Triple("airMAX Capacity", snmpInfo.ubntAirMaxCapacityPercent?.let { "${it}%" } ?: "—", 4)
                 )
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                    metrics.take(2).forEach { metric ->
-                        Column(Modifier.weight(1f).background(metric.third.copy(alpha = 0.10f), RoundedCornerShape(10.dp)).padding(9.dp)) {
-                            Text(metric.first, fontSize = 10.sp, color = metric.third)
-                            Text(metric.second, fontSize = 17.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = metric.third)
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        if (isArabic) "معلومات السكتر" else "Sector information",
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 12.sp,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
+                    )
+                    values.chunked(3).forEach { rowValues ->
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            rowValues.forEach { (label, value, colorIndex) ->
+                                val colors = metricPalette[colorIndex]
+                                Column(
+                                    modifier = Modifier.weight(1f)
+                                        .background(colors.first, RoundedCornerShape(9.dp))
+                                        .padding(horizontal = 7.dp, vertical = 7.dp),
+                                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                                ) {
+                                    Text(label, fontSize = 9.sp, color = colors.second, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                                    Text(value, fontSize = 14.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = colors.second, maxLines = 1)
+                                }
+                            }
+                            if (rowValues.size < 3) repeat(3 - rowValues.size) { Spacer(Modifier.weight(1f)) }
                         }
                     }
-                }
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                    metrics.drop(2).forEach { metric ->
-                        Column(Modifier.weight(1f).background(metric.third.copy(alpha = 0.10f), RoundedCornerShape(10.dp)).padding(9.dp)) {
-                            Text(metric.first, fontSize = 10.sp, color = metric.third)
-                            Text(metric.second, fontSize = 17.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = metric.third)
-                        }
+                    val durationBackground = if (isDark) Color(0xFF34264F) else Color(0xFFEEE8FF)
+                    val durationForeground = if (isDark) Color(0xFFD8C6FF) else Color(0xFF6542A6)
+                    Row(
+                        Modifier.fillMaxWidth().background(durationBackground, RoundedCornerShape(9.dp)).padding(horizontal = 10.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(if (isArabic) "مدة تشغيل السكتر" else "Sector uptime", color = durationForeground, fontSize = 11.sp)
+                        Text(snmpInfo.uptimeFormatted ?: "—", color = durationForeground, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, fontSize = 11.sp)
                     }
-                }
-                val extraStats = listOfNotNull(
-                    snmpInfo.ubntCpuLoadPercent?.let { (if (isArabic) "المعالج" else "CPU") to "$it%" },
-                    snmpInfo.ubntMemoryUsagePercent?.let { (if (isArabic) "الذاكرة" else "Memory") to "$it%" },
-                    snmpInfo.ubntNoiseFloorDbm?.let { (if (isArabic) "Noise Floor" else "Noise Floor") to "$it dBm" }
-                )
-                if (extraStats.isNotEmpty()) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        extraStats.forEach { (label, value) ->
-                            Text("$label: $value", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
-                        }
-                    }
-                }
-                if (!snmpInfo.ubntApMac.isNullOrBlank()) {
-                    Text("AP MAC: ${snmpInfo.ubntApMac}", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
                 }
             }
 
@@ -481,7 +517,7 @@ fun DeviceMonitoringCard(
                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
                     shape = RoundedCornerShape(9.dp)
                 ) {
-                    Text(if (isArabic) "عرض التفاصيل" else "View details", fontSize = 12.sp)
+                    Text(if (isArabic) "عرض المحطات المتصلة" else "View connected stations", fontSize = 12.sp)
                     Spacer(Modifier.width(5.dp))
                     Icon(Icons.Default.ChevronLeft, contentDescription = null, modifier = Modifier.size(16.dp))
                 }
