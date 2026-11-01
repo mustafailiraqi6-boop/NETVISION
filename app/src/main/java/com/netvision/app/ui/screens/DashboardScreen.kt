@@ -25,6 +25,7 @@ import com.netvision.app.models.ActivitySeverity
 import com.netvision.app.models.RecentDeviceActivity
 import com.netvision.app.ui.theme.*
 import com.netvision.app.ui.viewmodels.DashboardViewModel
+import com.netvision.app.ui.viewmodels.MonitoringViewModel
 import java.util.Locale
 
 @Composable
@@ -32,9 +33,11 @@ fun DashboardScreen(
     isArabic: Boolean,
     onNavigateToDevices: (DeviceStatus?) -> Unit,
     modifier: Modifier = Modifier,
-    viewModel: DashboardViewModel = viewModel()
+    viewModel: DashboardViewModel = viewModel(),
+    monitoringViewModel: MonitoringViewModel
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val monitoringState by monitoringViewModel.uiState.collectAsState()
 
     LazyColumn(
         modifier = modifier
@@ -106,11 +109,35 @@ fun DashboardScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = if (isArabic) "نظرة عامة على صحة الشبكة" else "Network Health Overview",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = if (isArabic) "نظرة عامة على صحة الشبكة" else "Network Health Overview",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            IconButton(
+                                onClick = { monitoringViewModel.refreshNow() },
+                                enabled = !monitoringState.isPollingNow,
+                                modifier = Modifier.size(34.dp)
+                            ) {
+                                if (monitoringState.isPollingNow) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(19.dp),
+                                        strokeWidth = 2.dp,
+                                        color = CyanAccent
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Default.Refresh,
+                                        contentDescription = if (isArabic) "تحديث الأجهزة" else "Refresh devices",
+                                        tint = CyanAccent
+                                    )
+                                }
+                            }
+                        }
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(
                                 modifier = Modifier
