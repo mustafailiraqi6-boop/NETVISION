@@ -210,10 +210,9 @@ private fun MikrotikStationCard(station: MikrotikStationInfo, isArabic: Boolean)
                     Icon(Icons.Default.ContentCopy, contentDescription = if (isArabic) "نسخ MAC" else "Copy MAC", tint = TealAccent)
                 }
             }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 MetricTile("TX", rate(station.txRateMbps), Color(0xFFDDF6FA), Color(0xFF0E7490), Modifier.weight(1f))
                 MetricTile("RX", rate(station.rxRateMbps), Color(0xFFE5F0FF), Color(0xFF2563EB), Modifier.weight(1f))
-                MetricTile(if (isArabic) "الإشارة" else "Signal", station.signalDbm?.let { "$it dBm" } ?: "—", Color(0xFFDCFCE7), Color(0xFF15803D), Modifier.weight(1f))
             }
             Row(Modifier.fillMaxWidth().background(if (MaterialTheme.colorScheme.background.luminance() < 0.5f) Color(0xFF34264F) else Color(0xFFEEE8FF), RoundedCornerShape(10.dp)).padding(11.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(if (isArabic) "مدة الاتصال" else "Connection time", color = if (MaterialTheme.colorScheme.background.luminance() < 0.5f) Color(0xFFD8C6FF) else Color(0xFF6542A6), fontSize = 12.sp)
