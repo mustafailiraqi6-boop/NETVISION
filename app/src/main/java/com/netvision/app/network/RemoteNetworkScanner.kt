@@ -30,7 +30,7 @@ data class RemoteScanStatus(
 )
 
 class RemoteNetworkScanner(
-    private val reachabilityService: NetworkReachabilityService = NetworkReachabilityService()
+    private val reachabilityService: NetworkReachabilityService = NetworkReachabilityService(NetVisionApplication.instance)
 ) {
 
     // Common ports tested for network equipment (HTTP Port 80 checked FIRST for WebFig / Web UI)
