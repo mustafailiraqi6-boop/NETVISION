@@ -356,6 +356,7 @@ fun MonitoringScreen(
                     device = device,
                     isSelected = isSelected,
                     isSnmpActive = isSnmpActive,
+                    snmpInfo = devSnmp,
                     isArabic = isArabic,
                     onClick = { viewModel.selectDevice(device.id) },
                     onViewDetails = { onViewDeviceDetails(device.id) }
@@ -371,68 +372,109 @@ fun DeviceMonitoringCard(
     device: NetworkDevice,
     isSelected: Boolean,
     isSnmpActive: Boolean,
+    snmpInfo: com.netvision.app.monitoring.SnmpDeviceInfo?,
     isArabic: Boolean,
     onClick: () -> Unit,
     onViewDetails: () -> Unit
 ) {
     val isOnline = device.status == DeviceStatus.ONLINE
     val statusColor = if (isOnline) StatusGreen else StatusRed
+    val isUbiquiti = device.manufacturer == Manufacturer.UBIQUITI
+    val isUbiquitiSector = isUbiquiti && (
+        device.deviceType.name == "SECTOR_AP" ||
+        device.deviceType.name == "ACCESS_POINT" ||
+        device.deviceType.name == "CLIENT_DEVICE"
+    )
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .border(
                 width = if (isSelected) 1.5.dp else 1.dp,
-                color = if (isSelected) CyanAccent else MaterialTheme.colorScheme.outline,
-                shape = RoundedCornerShape(12.dp)
+                color = if (isSelected) TealAccent else MaterialTheme.colorScheme.outline,
+                shape = RoundedCornerShape(16.dp)
             )
             .clickable { onClick() },
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
-        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                    Box(Modifier.size(9.dp).clip(CircleShape).background(statusColor))
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        text = device.name,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
-                    )
-                }
-                Surface(color = statusColor.copy(alpha = 0.14f), shape = RoundedCornerShape(6.dp)) {
+                Text(
+                    text = device.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f)
+                )
+                Surface(color = statusColor.copy(alpha = 0.13f), shape = RoundedCornerShape(8.dp)) {
                     Text(
                         text = if (isOnline) (if (isArabic) "متصل" else "Online") else (if (isArabic) "غير متصل" else "Offline"),
                         color = statusColor,
                         fontSize = 11.sp,
+                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp)
+                    )
+                }
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text("IP: ${device.ipAddress}", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                Surface(
+                    color = (if (isSnmpActive) StatusGreen else StatusAmber).copy(alpha = 0.12f),
+                    shape = RoundedCornerShape(7.dp)
+                ) {
+                    Text(
+                        if (isSnmpActive) "SNMP Active" else "SNMP Unavailable",
+                        color = if (isSnmpActive) StatusGreen else StatusAmber,
+                        fontSize = 10.sp,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                     )
                 }
             }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("IP: ${device.ipAddress}", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
-                Surface(
-                    color = (if (isSnmpActive) StatusGreen else StatusAmber).copy(alpha = 0.12f),
-                    shape = RoundedCornerShape(6.dp)
-                ) {
-                    Text(
-                        if (isSnmpActive) "SNMP Active" else "SNMP Failed",
-                        color = if (isSnmpActive) StatusGreen else StatusAmber,
-                        fontSize = 10.sp,
-                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp)
-                    )
+
+            if (isUbiquitiSector && snmpInfo?.isSuccess == true) {
+                val metrics = listOf(
+                    Triple(if (isArabic) "الأجهزة المتصلة" else "Connected", snmpInfo.connectedClientsCount?.toString() ?: "—", Color(0xFF2563EB)),
+                    Triple("Transmit CCQ", snmpInfo.ubntTransmitCcqPercent?.let { "${it}%" } ?: "—", Color(0xFF15803D)),
+                    Triple("AirMAX Quality", snmpInfo.ubntAirMaxQualityPercent?.let { "${it}%" } ?: "—", Color(0xFF0E7490)),
+                    Triple("AirMAX Capacity", snmpInfo.ubntAirMaxCapacityPercent?.let { "${it}%" } ?: "—", Color(0xFFB7791F))
+                )
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                    metrics.take(2).forEach { metric ->
+                        Column(Modifier.weight(1f).background(metric.third.copy(alpha = 0.10f), RoundedCornerShape(10.dp)).padding(9.dp)) {
+                            Text(metric.first, fontSize = 10.sp, color = metric.third)
+                            Text(metric.second, fontSize = 17.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = metric.third)
+                        }
+                    }
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                    metrics.drop(2).forEach { metric ->
+                        Column(Modifier.weight(1f).background(metric.third.copy(alpha = 0.10f), RoundedCornerShape(10.dp)).padding(9.dp)) {
+                            Text(metric.first, fontSize = 10.sp, color = metric.third)
+                            Text(metric.second, fontSize = 17.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = metric.third)
+                        }
+                    }
+                }
+                val extraStats = listOfNotNull(
+                    snmpInfo.ubntCpuLoadPercent?.let { (if (isArabic) "المعالج" else "CPU") to "$it%" },
+                    snmpInfo.ubntMemoryUsagePercent?.let { (if (isArabic) "الذاكرة" else "Memory") to "$it%" },
+                    snmpInfo.ubntNoiseFloorDbm?.let { (if (isArabic) "Noise Floor" else "Noise Floor") to "$it dBm" }
+                )
+                if (extraStats.isNotEmpty()) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        extraStats.forEach { (label, value) ->
+                            Text("$label: $value", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
+                        }
+                    }
+                }
+                if (!snmpInfo.ubntApMac.isNullOrBlank()) {
+                    Text("AP MAC: ${snmpInfo.ubntApMac}", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
                 }
             }
+
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 OutlinedButton(
                     onClick = onViewDetails,
