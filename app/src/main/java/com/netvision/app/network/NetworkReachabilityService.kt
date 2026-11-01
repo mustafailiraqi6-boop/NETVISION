@@ -1,8 +1,11 @@
 package com.netvision.app.network
 
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.Socket
 
@@ -14,26 +17,43 @@ data class ReachabilityResult(
     val failureReason: String? = null
 )
 
-class NetworkReachabilityService {
+class NetworkReachabilityService(private val context: Context) {
 
-    // Common ports tested for network equipment reachability (HTTP Port 80 checked FIRST for WebFig / Web UI)
+    private val connectivityManager =
+        context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+
     private val commonPorts = listOf(80, 443, 8291, 8728, 22, 8080, 8443)
 
     /**
-     * Checks if a target IP is reachable by probing TCP ports (starting with port 80 for WebFig)
-     * and falling back to ICMP ping.
-     * Executed strictly off the main thread on Dispatchers.IO.
+     * Device reachability is valid only through an active Android VPN network.
+     * Every TCP probe is explicitly bound to that VPN; cellular/Wi-Fi fallback
+     * is intentionally forbidden to avoid false ONLINE results off-VPN.
      */
     suspend fun checkHostReachability(
         targetIp: String,
         portsToProbe: List<Int> = commonPorts,
         timeoutMs: Int = 500
     ): ReachabilityResult = withContext(Dispatchers.IO) {
-        // 1. Probe TCP ports sequentially (port 80 first for WebFig)
+        val vpnNetwork: Network? = connectivityManager.allNetworks.firstOrNull { network ->
+            connectivityManager.getNetworkCapabilities(network)
+                ?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true
+        }
+
+        if (vpnNetwork == null) {
+            return@withContext ReachabilityResult(
+                targetIp = targetIp,
+                isReachable = false,
+                portTested = 0,
+                latencyMs = 0,
+                failureReason = "VPN is not connected"
+            )
+        }
+
         for (port in portsToProbe) {
             val startTime = System.currentTimeMillis()
             try {
                 Socket().use { socket ->
+                    vpnNetwork.bindSocket(socket)
                     socket.connect(InetSocketAddress(targetIp, port), timeoutMs)
                     val latency = System.currentTimeMillis() - startTime
                     return@withContext ReachabilityResult(
@@ -43,35 +63,17 @@ class NetworkReachabilityService {
                         latencyMs = latency
                     )
                 }
-            } catch (e: Exception) {
-                // Port connection failed or timed out, probe next port
+            } catch (_: Exception) {
+                // Try the next TCP port, always on the same VPN network.
             }
         }
 
-        // 2. Fallback to ICMP ping if all TCP ports failed
-        val startTime = System.currentTimeMillis()
-        try {
-            val addr = InetAddress.getByName(targetIp)
-            if (addr.isReachable(timeoutMs)) {
-                val latency = System.currentTimeMillis() - startTime
-                return@withContext ReachabilityResult(
-                    targetIp = targetIp,
-                    isReachable = true,
-                    portTested = 0,
-                    latencyMs = latency
-                )
-            }
-        } catch (e: Exception) {
-            // ICMP failed
-        }
-
-        // 3. Both TCP ports and ICMP failed
         ReachabilityResult(
             targetIp = targetIp,
             isReachable = false,
             portTested = 0,
             latencyMs = 0,
-            failureReason = "Host unreachable on TCP ports $portsToProbe and ICMP"
+            failureReason = "No TCP response through VPN on ports $portsToProbe"
         )
     }
 
@@ -80,40 +82,53 @@ class NetworkReachabilityService {
         port: Int = 80,
         timeoutMs: Int = 1200
     ): ReachabilityResult = withContext(Dispatchers.IO) {
+        val vpnNetwork = connectivityManager.allNetworks.firstOrNull { network ->
+            connectivityManager.getNetworkCapabilities(network)
+                ?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true
+        } ?: return@withContext ReachabilityResult(
+            targetIp, false, port, 0, "VPN is not connected"
+        )
+
         val startTime = System.currentTimeMillis()
         try {
             Socket().use { socket ->
+                vpnNetwork.bindSocket(socket)
                 socket.connect(InetSocketAddress(targetIp, port), timeoutMs)
-                val latency = System.currentTimeMillis() - startTime
                 ReachabilityResult(
                     targetIp = targetIp,
                     isReachable = true,
                     portTested = port,
-                    latencyMs = latency
+                    latencyMs = System.currentTimeMillis() - startTime
                 )
             }
         } catch (e: Exception) {
-            val latency = System.currentTimeMillis() - startTime
             ReachabilityResult(
                 targetIp = targetIp,
                 isReachable = false,
                 portTested = port,
-                latencyMs = latency,
-                failureReason = e.localizedMessage ?: "Connection Timeout or Route Unreachable"
+                latencyMs = System.currentTimeMillis() - startTime,
+                failureReason = e.localizedMessage ?: "VPN connection failed"
             )
         }
     }
 
-    suspend fun probeDevicePorts(targetIp: String, timeoutMs: Int = 800): List<Int> = withContext(Dispatchers.IO) {
-        val openPorts = mutableListOf<Int>()
-        for (port in commonPorts) {
-            try {
-                Socket().use { socket ->
-                    socket.connect(InetSocketAddress(targetIp, port), timeoutMs)
-                    openPorts.add(port)
-                }
-            } catch (e: Exception) {}
+    suspend fun probeDevicePorts(targetIp: String, timeoutMs: Int = 800): List<Int> =
+        withContext(Dispatchers.IO) {
+            val vpnNetwork = connectivityManager.allNetworks.firstOrNull { network ->
+                connectivityManager.getNetworkCapabilities(network)
+                    ?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true
+            } ?: return@withContext emptyList()
+
+            val openPorts = mutableListOf<Int>()
+            for (port in commonPorts) {
+                try {
+                    Socket().use { socket ->
+                        vpnNetwork.bindSocket(socket)
+                        socket.connect(InetSocketAddress(targetIp, port), timeoutMs)
+                        openPorts.add(port)
+                    }
+                } catch (_: Exception) { }
+            }
+            openPorts
         }
-        openPorts
-    }
 }
