@@ -37,6 +37,8 @@ data class SnmpDeviceInfo(
     val ubntAirMaxCapacityPercent: Int? = null,
     val ubntCpuLoadPercent: Int? = null,
     val ubntMemoryUsagePercent: Int? = null,
+    val mikrotikCcqPercent: Int? = null,
+    val mikrotikVoltageDecivolts: Int? = null,
     val errorMessage: String? = null,
     val communityUsed: String = "netvision",
     val latencyMs: Long = 0,
@@ -301,6 +303,10 @@ object SnmpV2Client {
                 val ubntAirMaxCapacity = ubntInt("1.3.6.1.4.1.41112.1.4.6.1.4.1", "ubntAirMaxCapacity")
                 val ubntCpuLoad = ubntInt("1.3.6.1.4.1.41112.1.4.8.3", "ubntCpuLoad")
 
+                // MikroTik sector telemetry verified against the user's RouterOS device.
+                val mikrotikCcq = if (isMikroTik) ubntInt("1.3.6.1.4.1.14988.1.1.1.3.1.10.1", "mikrotikCcq") else null
+                val mikrotikVoltage = if (isMikroTik) ubntInt("1.3.6.1.4.1.14988.1.1.3.8.0", "mikrotikVoltage") else null
+
                 val memoryTotal = if (isUbiquiti) ubntInt("1.3.6.1.4.1.2021.4.5.0", "memoryTotal") else null
                 val memoryFree = if (isUbiquiti) ubntInt("1.3.6.1.4.1.2021.4.6.0", "memoryFree") else null
                 val memoryUsage = if (memoryTotal != null && memoryTotal > 0 && memoryFree != null) {
@@ -342,6 +348,8 @@ object SnmpV2Client {
                         ubntAirMaxCapacityPercent = ubntAirMaxCapacity,
                         ubntCpuLoadPercent = ubntCpuLoad,
                         ubntMemoryUsagePercent = memoryUsage,
+                        mikrotikCcqPercent = mikrotikCcq,
+                        mikrotikVoltageDecivolts = mikrotikVoltage,
                         communityUsed = community,
                         latencyMs = totalLatency,
                         networkInterface = lastInterface,
