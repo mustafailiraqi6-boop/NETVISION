@@ -9,6 +9,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.LocalContext
+import android.widget.Toast
+import com.netvision.app.backup.BackupManager
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -34,6 +40,45 @@ fun SettingsScreen(
 ) {
     val isArabic = language == AppLanguage.ARABIC
     val appSettings by viewModel.settings.collectAsState()
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var backupFolder by remember { mutableStateOf(BackupManager.getBackupFolder(context)) }
+    var backupInProgress by remember { mutableStateOf(false) }
+    val folderPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri != null) {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                        android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+            }
+            BackupManager.setBackupFolder(context, uri)
+            backupFolder = uri
+            Toast.makeText(context, if (isArabic) "تم تحديد مجلد النسخ الاحتياطي" else "Backup folder selected", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun runBackup() {
+        val folder = backupFolder
+        if (folder == null) {
+            Toast.makeText(context, if (isArabic) "حدد مجلد النسخ الاحتياطي أولاً" else "Choose a backup folder first", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (backupInProgress) return
+        backupInProgress = true
+        scope.launch {
+            val result = BackupManager.createBackup(context, folder)
+            backupInProgress = false
+            result.onSuccess { name ->
+                Toast.makeText(context, (if (isArabic) "تم إنشاء النسخة: " else "Backup created: ") + name, Toast.LENGTH_LONG).show()
+            }.onFailure { error ->
+                Toast.makeText(context, (if (isArabic) "فشل النسخ الاحتياطي: " else "Backup failed: ") + (error.message ?: ""), Toast.LENGTH_LONG).show()
+            }
+        }
+    }
 
     var communityInput by remember(appSettings.snmpCommunity) { mutableStateOf(appSettings.snmpCommunity) }
     var snmpPortInput by remember(appSettings.snmpPort) { mutableStateOf(appSettings.snmpPort.toString()) }
@@ -296,7 +341,76 @@ fun SettingsScreen(
             }
         }
 
-        // Section 4: About NETVISION
+        // Section 4: Backup & Restore
+        item {
+            SettingsGroupCard(
+                title = if (isArabic) "النسخ الاحتياطي" else "Backup",
+                icon = Icons.Default.Backup
+            ) {
+                Text(
+                    text = if (isArabic)
+                        "احفظ قاعدة بيانات الأجهزة وإعدادات التطبيق في ملف ZIP داخل مجلد تختاره."
+                    else
+                        "Save your device database and app settings to a ZIP file in a folder you choose.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    text = if (backupFolder != null) {
+                        if (isArabic) "مجلد النسخ الاحتياطي محدد" else "Backup folder selected"
+                    } else {
+                        if (isArabic) "لم يتم تحديد مجلد للحفظ" else "No backup folder selected"
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = { folderPicker.launch(null) },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.FolderOpen, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(if (isArabic) "تحديد مكان حفظ النسخ" else "Choose backup location")
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(
+                    onClick = { runBackup() },
+                    enabled = backupFolder != null && !backupInProgress,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    if (backupInProgress) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                    } else {
+                        Icon(Icons.Default.CloudUpload, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                    }
+                    Text(
+                        if (backupInProgress) {
+                            if (isArabic) "جارٍ إنشاء النسخة..." else "Creating backup..."
+                        } else {
+                            if (isArabic) "إنشاء نسخة احتياطية الآن" else "Create backup now"
+                        }
+                    )
+                }
+                Text(
+                    text = if (isArabic)
+                        "سيتم إضافة النسخ التلقائي عند مغادرة التطبيق في الخطوة التالية."
+                    else
+                        "Automatic background/exit backup will be enabled in the next step.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        // Section 5: About NETVISION
         item {
             SettingsGroupCard(
                 title = if (isArabic) "حول تطبيق NETVISION" else "About NETVISION",
