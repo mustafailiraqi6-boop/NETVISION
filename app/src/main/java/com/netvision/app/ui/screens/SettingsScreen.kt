@@ -44,6 +44,13 @@ fun SettingsScreen(
     val scope = rememberCoroutineScope()
     var backupFolder by remember { mutableStateOf(BackupManager.getBackupFolder(context)) }
     var backupInProgress by remember { mutableStateOf(false) }
+    var restoreInProgress by remember { mutableStateOf(false) }
+    var pendingRestoreUri by remember { mutableStateOf<android.net.Uri?>(null) }
+    val restorePicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) pendingRestoreUri = uri
+    }
     val folderPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
     ) { uri ->
@@ -78,6 +85,52 @@ fun SettingsScreen(
                 Toast.makeText(context, (if (isArabic) "فشل النسخ الاحتياطي: " else "Backup failed: ") + (error.message ?: ""), Toast.LENGTH_LONG).show()
             }
         }
+    }
+
+    pendingRestoreUri?.let { uri ->
+        AlertDialog(
+            onDismissRequest = { pendingRestoreUri = null },
+            title = { Text(if (isArabic) "تأكيد استعادة النسخة" else "Confirm backup restore") },
+            text = {
+                Text(
+                    if (isArabic)
+                        "سيتم استبدال قاعدة بيانات الأجهزة الحالية بالبيانات الموجودة في النسخة الاحتياطية. يُفضّل إنشاء نسخة حالية قبل المتابعة. هل تريد الاستمرار؟"
+                    else
+                        "The current device database will be replaced by the selected backup. It is recommended to create a backup first. Continue?"
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !restoreInProgress,
+                    onClick = {
+                        pendingRestoreUri = null
+                        restoreInProgress = true
+                        scope.launch {
+                            val result = BackupManager.restoreBackup(context, uri)
+                            restoreInProgress = false
+                            result.onSuccess {
+                                Toast.makeText(
+                                    context,
+                                    if (isArabic) "تمت الاستعادة. أعد تشغيل التطبيق لتحديث جميع البيانات." else "Restore complete. Restart the app to reload all data.",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }.onFailure { error ->
+                                Toast.makeText(
+                                    context,
+                                    (if (isArabic) "فشلت الاستعادة: " else "Restore failed: ") + (error.message ?: ""),
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        }
+                    }
+                ) { Text(if (isArabic) "استعادة" else "Restore") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingRestoreUri = null }) {
+                    Text(if (isArabic) "إلغاء" else "Cancel")
+                }
+            }
+        )
     }
 
     var communityInput by remember(appSettings.snmpCommunity) { mutableStateOf(appSettings.snmpCommunity) }
@@ -349,9 +402,9 @@ fun SettingsScreen(
             ) {
                 Text(
                     text = if (isArabic)
-                        "احفظ قاعدة بيانات الأجهزة وإعدادات التطبيق في ملف ZIP داخل مجلد تختاره."
+                        "احفظ بيانات الأجهزة والإعدادات في ملف ZIP. يحتفظ التطبيق بآخر نسختين فقط."
                     else
-                        "Save your device database and app settings to a ZIP file in a folder you choose.",
+                        "Save your device database and settings to ZIP. Only the two newest backups are kept.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -399,11 +452,31 @@ fun SettingsScreen(
                         }
                     )
                 }
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = { restorePicker.launch(arrayOf("application/zip", "application/octet-stream")) },
+                    enabled = !restoreInProgress,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    if (restoreInProgress) {
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                    } else {
+                        Icon(Icons.Default.Restore, contentDescription = null)
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        if (restoreInProgress) {
+                            if (isArabic) "جارٍ استعادة النسخة..." else "Restoring backup..."
+                        } else {
+                            if (isArabic) "استعادة نسخة احتياطية" else "Restore backup"
+                        }
+                    )
+                }
                 Text(
                     text = if (isArabic)
-                        "سيتم إضافة النسخ التلقائي عند مغادرة التطبيق في الخطوة التالية."
+                        "يتم الاحتفاظ بآخر نسختين تلقائياً. الاستعادة تستبدل قاعدة البيانات الحالية."
                     else
-                        "Automatic background/exit backup will be enabled in the next step.",
+                        "The two newest backups are retained automatically. Restore replaces the current database.",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
