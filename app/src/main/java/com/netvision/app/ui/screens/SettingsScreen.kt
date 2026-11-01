@@ -70,7 +70,9 @@ fun SettingsScreen(
             }
             BackupManager.setBackupFolder(context, uri)
             backupFolder = uri
-            backupItems = BackupManager.listBackups(context, uri)
+            scope.launch {
+                backupItems = BackupManager.listBackups(context, uri)
+            }
             Toast.makeText(context, if (isArabic) "تم تحديد مجلد النسخ الاحتياطي" else "Backup folder selected", Toast.LENGTH_SHORT).show()
         }
     }
