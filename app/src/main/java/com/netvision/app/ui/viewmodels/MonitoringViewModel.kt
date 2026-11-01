@@ -81,6 +81,11 @@ class MonitoringViewModel(
 
     init {
         startPeriodicPolling()
+        viewModelScope.launch {
+            NetVisionApplication.foregroundEvents.collect {
+                refreshNow()
+            }
+        }
     }
 
     fun selectDevice(deviceId: String) {
