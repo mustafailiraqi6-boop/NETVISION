@@ -121,6 +121,7 @@ object BackupManager {
                     staged.copyTo(settingsFile, overwrite = true)
                 }
                 tempDir.deleteRecursively()
+                Unit
             }
         }
 
