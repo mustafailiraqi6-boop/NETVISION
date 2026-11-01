@@ -21,6 +21,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.navigation.compose.NavHost
@@ -105,9 +106,11 @@ fun NetVisionApp(
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         bottomBar = {
+            val isDarkTheme = themeMode == AppThemeMode.DARK
             NavigationBar(
-                containerColor = Color.White,
-                contentColor = MaterialTheme.colorScheme.onSurface
+                containerColor = if (isDarkTheme) Color(0xFF111A2E) else Color.White,
+                contentColor = MaterialTheme.colorScheme.onSurface,
+                tonalElevation = 0.dp
             ) {
                 bottomNavItems.forEach { screen ->
                     val selected = currentRoute == screen.route
@@ -132,11 +135,11 @@ fun NetVisionApp(
                             Text(text = if (isArabic) screen.titleAr else screen.titleEn)
                         },
                         colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = Color(0xFF6542A6),
-                            selectedTextColor = Color(0xFF6542A6),
-                            indicatorColor = Color(0xFFEEE8FF),
-                            unselectedIconColor = Color(0xFF64748B),
-                            unselectedTextColor = Color(0xFF64748B)
+                            selectedIconColor = if (isDarkTheme) CyanAccent else Color(0xFF6542A6),
+                            selectedTextColor = if (isDarkTheme) CyanAccent else Color(0xFF6542A6),
+                            indicatorColor = if (isDarkTheme) Color(0xFF0A2E5C) else Color(0xFFEEE8FF),
+                            unselectedIconColor = if (isDarkTheme) Color(0xFF94A3B8) else Color(0xFF64748B),
+                            unselectedTextColor = if (isDarkTheme) Color(0xFF94A3B8) else Color(0xFF64748B)
                         )
                     )
                 }
