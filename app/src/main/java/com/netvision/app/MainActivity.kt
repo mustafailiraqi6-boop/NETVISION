@@ -52,7 +52,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             var language by remember { mutableStateOf(AppLanguage.ARABIC) }
-            var themeMode by remember { mutableStateOf(AppThemeMode.DARK) }
+            var themeMode by remember { mutableStateOf(AppThemeMode.LIGHT) }
 
             val isRtl = language == AppLanguage.ARABIC
             val layoutDirection = if (isRtl) LayoutDirection.Rtl else LayoutDirection.Ltr
