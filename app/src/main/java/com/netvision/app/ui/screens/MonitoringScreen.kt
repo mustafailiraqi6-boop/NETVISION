@@ -399,7 +399,15 @@ fun DeviceMonitoringCard(
 ) {
     val isOnline = device.status == DeviceStatus.ONLINE
     val statusColor = if (isOnline) StatusGreen else StatusRed
-    val isUbiquitiSector = device.manufacturer == Manufacturer.UBIQUITI ||
+    val hasAirMaxSectorData = snmpInfo?.let {
+        it.ubntNoiseFloorDbm != null ||
+            it.ubntTransmitCcqPercent != null ||
+            it.ubntAirMaxQualityPercent != null ||
+            it.ubntAirMaxCapacityPercent != null ||
+            it.ubntApMac != null
+    } == true
+    val isUbiquitiSector = hasAirMaxSectorData ||
+        device.manufacturer == Manufacturer.UBIQUITI ||
         snmpInfo?.model?.contains("Ubiquiti", ignoreCase = true) == true ||
         snmpInfo?.sysDescr?.let { it.contains("AirOS", true) || it.contains("UBNT", true) } == true
     val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
