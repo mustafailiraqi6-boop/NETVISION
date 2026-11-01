@@ -31,12 +31,16 @@ val TextSecondaryDark = Color(0xFF94A3B8)
 val TextMutedDark = Color(0xFF64748B)
 
 // Light Theme equivalents
-val SlateLightBg = Color(0xFFF1F5F9)
+val SlateLightBg = Color(0xFFF2F0FA)
 val SlateLightSurface = Color(0xFFFFFFFF)
-val SlateLightCard = Color(0xFFFFFFFF)
-val SlateLightBorder = Color(0xFFE2E8F0)
-val TextPrimaryLight = Color(0xFF0F172A)
-val TextSecondaryLight = Color(0xFF475569)
+val SlateLightCard = Color(0xFFF8F6FF)
+val SlateLightBorder = Color(0xFFDDD6F3)
+val TextPrimaryLight = Color(0xFF211B35)
+val TextSecondaryLight = Color(0xFF625A75)
+val PurplePrimary = Color(0xFF5426B8)
+val PurpleDeep = Color(0xFF3D168F)
+val PurpleContainer = Color(0xFFE8DFFF)
+val TealAccent = Color(0xFF0F9D9A)
 
 private val DarkColorScheme = darkColorScheme(
     primary = CyanAccent,
@@ -55,12 +59,12 @@ private val DarkColorScheme = darkColorScheme(
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = ElectricBlue,
+    primary = PurplePrimary,
     onPrimary = Color.White,
-    primaryContainer = Color(0xFFE0F2FE),
-    onPrimaryContainer = Color(0xFF0369A1),
-    secondary = CyanAccent,
-    onSecondary = Color.Black,
+    primaryContainer = PurpleContainer,
+    onPrimaryContainer = PurpleDeep,
+    secondary = TealAccent,
+    onSecondary = Color.White,
     background = SlateLightBg,
     onBackground = TextPrimaryLight,
     surface = SlateLightSurface,
@@ -72,7 +76,7 @@ private val LightColorScheme = lightColorScheme(
 
 @Composable
 fun NetVisionTheme(
-    darkTheme: Boolean = true,
+    darkTheme: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
