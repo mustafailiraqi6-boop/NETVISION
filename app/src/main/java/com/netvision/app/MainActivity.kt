@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Scaffold
@@ -57,6 +56,7 @@ import com.netvision.app.ui.screens.MonitoringScreen
 import com.netvision.app.ui.screens.ScannerScreen
 import com.netvision.app.ui.screens.SettingsScreen
 import com.netvision.app.ui.viewmodels.MonitoringViewModel
+import com.netvision.app.ui.theme.NetVisionTheme
 
 class MainActivity : ComponentActivity() {
     override fun onStop() {
