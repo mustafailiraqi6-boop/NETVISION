@@ -13,6 +13,14 @@ import com.netvision.app.network.NetworkReachabilityService
 import com.netvision.app.repository.DeviceRepository
 import com.netvision.app.settings.SettingsRepository
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -68,6 +76,8 @@ class MonitoringViewModel(
     val uiState: StateFlow<MonitoringUiState> = _uiState.asStateFlow()
 
     private var pollingJob: Job? = null
+    private val pollSemaphore = Semaphore(10)
+    private val snmpMapMutex = Mutex()
 
     init {
         startPeriodicPolling()
@@ -120,76 +130,99 @@ class MonitoringViewModel(
     }
 
     private suspend fun pollAllDevices() = withContext(Dispatchers.IO) {
-        val currentDevices = savedDevices.value
+        // Wait for Room to emit the saved devices instead of missing the first
+        // polling cycle while StateFlow still contains its initial empty list.
+        val currentDevices = savedDevices.value.ifEmpty {
+            savedDevices.first { it.isNotEmpty() }
+        }
         if (currentDevices.isEmpty()) return@withContext
 
+        if (_uiState.value.isPollingNow) return@withContext
         _uiState.value = _uiState.value.copy(isPollingNow = true)
-        val updatedSnmpMap = _uiState.value.snmpStatusByDevice.toMutableMap()
 
-        val settings = settingsRepository.getSettings()
-        val community = settings.snmpCommunity.ifBlank { "netvision" }
-        val snmpPort = settings.snmpPort
+        try {
+            val settings = settingsRepository.getSettings()
+            val community = settings.snmpCommunity.ifBlank { "netvision" }
+            val snmpPort = settings.snmpPort
 
-        for (device in currentDevices) {
-            // Check reachability via TCP Connect / ICMP
-            val reachability = reachabilityService.checkHostReachability(device.ipAddress)
-            val isOnline = reachability.isReachable
-            val latencyMs = reachability.latencyMs.toInt().coerceAtLeast(0)
+            // Reachability checks run concurrently (bounded to 10 devices).
+            // Each device's online/offline state is persisted immediately after
+            // its reachability result; SNMP is deliberately independent.
+            coroutineScope {
+                currentDevices.map { device ->
+                    async(Dispatchers.IO) {
+                        pollSemaphore.withPermit {
+                            val reachability = reachabilityService.checkHostReachability(
+                                targetIp = device.ipAddress,
+                                timeoutMs = 500
+                            )
+                            val isOnline = reachability.isReachable
+                            val latencyMs = reachability.latencyMs.toInt().coerceAtLeast(0)
 
-            // Perform SNMP query with saved SNMP community string (netvision)
-            var uptime: String? = null
-            var negotiatedVersion: String? = device.snmpVersion
-            try {
-                val snmpRes = SnmpV2Client.queryDeviceInfo(
-                    targetIp = device.ipAddress,
-                    community = community,
-                    port = snmpPort,
-                    preferredVersion = device.snmpVersion,
-                    timeoutMs = 1000
-                )
-                if (snmpRes.isSuccess) {
-                    val info = snmpRes.getOrNull()
-                    if (info != null) {
-                        updatedSnmpMap[device.id] = info
-                        if (info.isSuccess) {
-                            uptime = info.uptimeFormatted
-                            negotiatedVersion = info.snmpVersion
+                            repository.updateDeviceStatus(
+                                deviceId = device.id,
+                                isOnline = isOnline,
+                                latencyMs = latencyMs,
+                                uptime = null,
+                                snmpVersion = device.snmpVersion
+                            )
 
-                            // Identify Ubiquiti from its verified AirMAX SNMP values,
-                            // not only from hostname/OUI heuristics.
-                            val hasUbiquitiTelemetry =
-                                info.ubntApMac != null ||
-                                info.ubntNoiseFloorDbm != null ||
-                                info.ubntTransmitCcqPercent != null ||
-                                info.ubntAirMaxQualityPercent != null ||
-                                info.ubntAirMaxCapacityPercent != null
-                            if (hasUbiquitiTelemetry) {
-                                repository.updateDeviceManufacturer(device.id, com.netvision.app.models.Manufacturer.UBIQUITI)
-                            } else if (info.mikrotikCcqPercent != null || info.mikrotikVoltageDecivolts != null) {
-                                repository.updateDeviceManufacturer(device.id, com.netvision.app.models.Manufacturer.MIKROTIK)
+                            // SNMP must never determine reachability. It runs after
+                            // status persistence and cannot delay the visible status.
+                            try {
+                                val snmpRes = SnmpV2Client.queryDeviceInfo(
+                                    targetIp = device.ipAddress,
+                                    community = community,
+                                    port = snmpPort,
+                                    preferredVersion = device.snmpVersion,
+                                    timeoutMs = 1000
+                                )
+                                val info = snmpRes.getOrNull()
+                                if (snmpRes.isSuccess && info != null) {
+                                    snmpMapMutex.withLock {
+                                        val updated = _uiState.value.snmpStatusByDevice.toMutableMap()
+                                        updated[device.id] = info
+                                        _uiState.value = _uiState.value.copy(snmpStatusByDevice = updated)
+                                    }
+                                    if (info.isSuccess) {
+                                        val manufacturer = when {
+                                            info.ubntApMac != null ||
+                                                info.ubntNoiseFloorDbm != null ||
+                                                info.ubntTransmitCcqPercent != null ||
+                                                info.ubntAirMaxQualityPercent != null ||
+                                                info.ubntAirMaxCapacityPercent != null ->
+                                                com.netvision.app.models.Manufacturer.UBIQUITI
+                                            info.mikrotikCcqPercent != null || info.mikrotikVoltageDecivolts != null ->
+                                                com.netvision.app.models.Manufacturer.MIKROTIK
+                                            else -> null
+                                        }
+                                        if (manufacturer != null) {
+                                            repository.updateDeviceManufacturer(device.id, manufacturer)
+                                        }
+                                        repository.updateDeviceStatus(
+                                            deviceId = device.id,
+                                            isOnline = isOnline,
+                                            latencyMs = latencyMs,
+                                            uptime = info.uptimeFormatted,
+                                            snmpVersion = info.snmpVersion
+                                        )
+                                    }
+                                }
+                            } catch (_: Exception) {
+                                // SNMP failure does not change the online/offline result.
                             }
                         }
                     }
-                }
-            } catch (e: Exception) {
-                // Ignore SNMP exception so device connection status remains ONLINE if TCP/ICMP succeeded
+                }.awaitAll()
             }
 
-            repository.updateDeviceStatus(
-                deviceId = device.id,
-                isOnline = isOnline,
-                latencyMs = latencyMs,
-                uptime = uptime,
-                snmpVersion = negotiatedVersion
+            _uiState.value = _uiState.value.copy(
+                lastRefreshedTime = System.currentTimeMillis(),
+                diagnosticLogs = SnmpV2Client.getDiagnosticHistory().reversed()
             )
+        } finally {
+            _uiState.value = _uiState.value.copy(isPollingNow = false)
         }
-
-        _uiState.value = _uiState.value.copy(
-            isPollingNow = false,
-            lastRefreshedTime = System.currentTimeMillis(),
-            snmpStatusByDevice = updatedSnmpMap,
-            diagnosticLogs = SnmpV2Client.getDiagnosticHistory().reversed()
-        )
     }
 
     override fun onCleared() {
