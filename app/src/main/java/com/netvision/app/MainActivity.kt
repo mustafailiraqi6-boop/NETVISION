@@ -27,6 +27,9 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.lifecycleScope
+import com.netvision.app.backup.BackupManager
+import kotlinx.coroutines.launch
 import com.netvision.app.settings.AppLanguage
 import com.netvision.app.settings.AppThemeMode
 import com.netvision.app.ui.navigation.Screen
@@ -48,6 +51,18 @@ import com.netvision.app.ui.theme.TextPrimaryDark
 import com.netvision.app.ui.viewmodels.MonitoringViewModel
 
 class MainActivity : ComponentActivity() {
+    override fun onStop() {
+        // Android calls onStop when the activity leaves the foreground,
+        // including Back navigation and removing the app from Recents.
+        val backupFolder = BackupManager.getBackupFolder(this)
+        if (backupFolder != null) {
+            lifecycleScope.launch {
+                BackupManager.createBackup(applicationContext, backupFolder)
+            }
+        }
+        super.onStop()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
