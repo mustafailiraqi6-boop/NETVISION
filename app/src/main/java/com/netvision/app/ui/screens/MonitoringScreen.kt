@@ -410,6 +410,9 @@ fun DeviceMonitoringCard(
         device.manufacturer == Manufacturer.UBIQUITI ||
         snmpInfo?.model?.contains("Ubiquiti", ignoreCase = true) == true ||
         snmpInfo?.sysDescr?.let { it.contains("AirOS", true) || it.contains("UBNT", true) } == true
+    val isMikroTikSector = device.manufacturer == Manufacturer.MIKROTIK ||
+        snmpInfo?.mikrotikCcqPercent != null ||
+        snmpInfo?.mikrotikVoltageDecivolts != null
     val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val metricPalette = if (isDark) {
         listOf(
@@ -478,14 +481,22 @@ fun DeviceMonitoringCard(
                 }
             }
 
-            if (isUbiquitiSector && snmpInfo?.isSuccess == true) {
-                val values = listOf(
-                    Triple(if (isArabic) "الأجهزة" else "Clients", snmpInfo.connectedClientsCount?.toString() ?: "—", 0),
-                    Triple("CCQ", snmpInfo.ubntTransmitCcqPercent?.let { "${it}%" } ?: "—", 1),
-                    Triple(if (isArabic) "Noise Floor" else "Noise Floor", snmpInfo.ubntNoiseFloorDbm?.let { "${it} dBm" } ?: "—", 2),
-                    Triple("airMAX Quality", snmpInfo.ubntAirMaxQualityPercent?.let { "${it}%" } ?: "—", 3),
-                    Triple("airMAX Capacity", snmpInfo.ubntAirMaxCapacityPercent?.let { "${it}%" } ?: "—", 4)
-                )
+            if ((isUbiquitiSector || isMikroTikSector) && snmpInfo?.isSuccess == true) {
+                val values = if (isMikroTikSector && !isUbiquitiSector) {
+                    listOf(
+                        Triple(if (isArabic) "الأجهزة" else "Clients", snmpInfo.connectedClientsCount?.toString() ?: "—", 0),
+                        Triple("CCQ", snmpInfo.mikrotikCcqPercent?.let { "${it}%" } ?: "—", 1),
+                        Triple(if (isArabic) "الفولتية" else "Voltage", snmpInfo.mikrotikVoltageDecivolts?.let { String.format(Locale.US, "%.1f V", it / 10.0) } ?: "—", 2)
+                    )
+                } else {
+                    listOf(
+                        Triple(if (isArabic) "الأجهزة" else "Clients", snmpInfo.connectedClientsCount?.toString() ?: "—", 0),
+                        Triple("CCQ", snmpInfo.ubntTransmitCcqPercent?.let { "${it}%" } ?: "—", 1),
+                        Triple(if (isArabic) "Noise Floor" else "Noise Floor", snmpInfo.ubntNoiseFloorDbm?.let { "${it} dBm" } ?: "—", 2),
+                        Triple("airMAX Quality", snmpInfo.ubntAirMaxQualityPercent?.let { "${it}%" } ?: "—", 3),
+                        Triple("airMAX Capacity", snmpInfo.ubntAirMaxCapacityPercent?.let { "${it}%" } ?: "—", 4)
+                    )
+                }
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
                         if (isArabic) "معلومات السكتر" else "Sector information",
