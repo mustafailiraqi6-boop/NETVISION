@@ -174,7 +174,7 @@ private fun UbiquitiStationCard(station: UbiquitiStationInfo, isArabic: Boolean)
                 MetricTile(if (isArabic) "المسافة" else "Distance", station.distance?.let { "$it m" } ?: "—", Color(0xFFFFF2D9), Color(0xFFB7791F), Modifier.weight(1f))
             }
             Row(
-                Modifier.fillMaxWidth().background(Color(0xFFEEE8FF), RoundedCornerShape(10.dp)).padding(11.dp),
+                Modifier.fillMaxWidth().background(if (MaterialTheme.colorScheme.background.luminance() < 0.5f) Color(0xFF34264F) else Color(0xFFEEE8FF), RoundedCornerShape(10.dp)).padding(11.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -216,8 +216,8 @@ private fun MikrotikStationCard(station: MikrotikStationInfo, isArabic: Boolean)
                 MetricTile(if (isArabic) "الإشارة" else "Signal", station.signalDbm?.let { "$it dBm" } ?: "—", Color(0xFFDCFCE7), Color(0xFF15803D), Modifier.weight(1f))
             }
             Row(Modifier.fillMaxWidth().background(if (MaterialTheme.colorScheme.background.luminance() < 0.5f) Color(0xFF34264F) else Color(0xFFEEE8FF), RoundedCornerShape(10.dp)).padding(11.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(if (isArabic) "مدة الاتصال" else "Connection time", color = Color(0xFF6542A6), fontSize = 12.sp)
-                Text(station.connectionTime ?: "—", color = Color(0xFF6542A6), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                Text(if (isArabic) "مدة الاتصال" else "Connection time", color = if (MaterialTheme.colorScheme.background.luminance() < 0.5f) Color(0xFFD8C6FF) else Color(0xFF6542A6), fontSize = 12.sp)
+                Text(station.connectionTime ?: "—", color = if (MaterialTheme.colorScheme.background.luminance() < 0.5f) Color(0xFFD8C6FF) else Color(0xFF6542A6), fontWeight = FontWeight.Bold, fontSize = 12.sp)
             }
         }
     }
