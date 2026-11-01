@@ -27,7 +27,9 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import com.netvision.app.backup.BackupManager
 import kotlinx.coroutines.launch
 import com.netvision.app.settings.AppLanguage
@@ -56,7 +58,7 @@ class MainActivity : ComponentActivity() {
         // including Back navigation and removing the app from Recents.
         val backupFolder = BackupManager.getBackupFolder(this)
         if (backupFolder != null) {
-            lifecycleScope.launch {
+            CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
                 BackupManager.createBackup(applicationContext, backupFolder)
             }
         }
