@@ -12,6 +12,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.platform.LocalContext
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -38,6 +42,32 @@ fun DashboardScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val monitoringState by monitoringViewModel.uiState.collectAsState()
+    val context = LocalContext.current
+    var showVpnWarning by remember { mutableStateOf(false) }
+
+    DisposableEffect(context) {
+        val connectivityManager = context.getSystemService(ConnectivityManager::class.java)
+
+        fun updateVpnWarning() {
+            showVpnWarning = connectivityManager.allNetworks.none { network ->
+                connectivityManager.getNetworkCapabilities(network)
+                    ?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true
+            }
+        }
+
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) = updateVpnWarning()
+            override fun onLost(network: Network) = updateVpnWarning()
+            override fun onCapabilitiesChanged(
+                network: Network,
+                networkCapabilities: NetworkCapabilities
+            ) = updateVpnWarning()
+        }
+
+        updateVpnWarning()
+        connectivityManager.registerDefaultNetworkCallback(callback)
+        onDispose { connectivityManager.unregisterNetworkCallback(callback) }
+    }
 
     LazyColumn(
         modifier = modifier
@@ -87,6 +117,48 @@ fun DashboardScreen(
                                 text = if (isArabic) "نظام حي" else "Live System",
                                 fontSize = 11.sp,
                                 color = CyanAccent
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // VPN warning: visible on any connection type when VPN is inactive.
+        if (showVpnWarning) {
+            item {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(1.dp, StatusAmber.copy(alpha = 0.45f), RoundedCornerShape(14.dp)),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF7E6))
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.VpnKey,
+                            contentDescription = null,
+                            tint = Color(0xFFB7791F)
+                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = if (isArabic) "تنبيه: اتصال VPN غير مفعّل" else "VPN is not connected",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = Color(0xFF8A5A12)
+                            )
+                            Text(
+                                text = if (isArabic)
+                                    "شغّل VPN للوصول إلى أجهزة الشبكة ومراقبتها."
+                                else
+                                    "Connect VPN to access and monitor your network devices.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFF8A5A12)
                             )
                         }
                     }
