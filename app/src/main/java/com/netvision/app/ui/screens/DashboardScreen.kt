@@ -20,6 +20,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.netvision.app.models.DeviceStatus
 import com.netvision.app.models.ActivitySeverity
 import com.netvision.app.models.RecentDeviceActivity
 import com.netvision.app.ui.theme.*
@@ -29,7 +30,7 @@ import java.util.Locale
 @Composable
 fun DashboardScreen(
     isArabic: Boolean,
-    onNavigateToDevices: () -> Unit,
+    onNavigateToDevices: (DeviceStatus?) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: DashboardViewModel = viewModel()
 ) {
@@ -164,7 +165,7 @@ fun DashboardScreen(
                     count = uiState.totalDevices.toString(),
                     accentColor = CyanAccent,
                     icon = Icons.Default.Devices,
-                    onClick = onNavigateToDevices
+                    onClick = { onNavigateToDevices(null) }
                 )
                 StatCard(
                     modifier = Modifier.weight(1f),
@@ -172,7 +173,7 @@ fun DashboardScreen(
                     count = uiState.onlineDevices.toString(),
                     accentColor = StatusGreen,
                     icon = Icons.Default.CheckCircle,
-                    onClick = onNavigateToDevices
+                    onClick = { onNavigateToDevices(DeviceStatus.ONLINE) }
                 )
                 StatCard(
                     modifier = Modifier.weight(1f),
@@ -180,7 +181,7 @@ fun DashboardScreen(
                     count = uiState.offlineDevices.toString(),
                     accentColor = StatusRed,
                     icon = Icons.Default.ErrorOutline,
-                    onClick = onNavigateToDevices
+                    onClick = { onNavigateToDevices(DeviceStatus.OFFLINE) }
                 )
             }
         }
@@ -228,7 +229,7 @@ fun DashboardScreen(
                     text = if (isArabic) "عرض الأجهزة" else "View Devices",
                     style = MaterialTheme.typography.bodySmall,
                     color = CyanAccent,
-                    modifier = Modifier.clickable { onNavigateToDevices() }
+                    modifier = Modifier.clickable { onNavigateToDevices(null) }
                 )
             }
         }
