@@ -4,13 +4,19 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.weight
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -19,13 +25,16 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -47,13 +56,6 @@ import com.netvision.app.ui.screens.DevicesScreen
 import com.netvision.app.ui.screens.MonitoringScreen
 import com.netvision.app.ui.screens.ScannerScreen
 import com.netvision.app.ui.screens.SettingsScreen
-import com.netvision.app.ui.theme.CyanAccent
-import com.netvision.app.ui.theme.ElectricBlue
-import com.netvision.app.ui.theme.NetVisionTheme
-import com.netvision.app.ui.theme.PurplePrimary
-import com.netvision.app.ui.theme.TealAccent
-import com.netvision.app.ui.theme.SlateLightBg
-import com.netvision.app.ui.theme.TextSecondaryLight
 import com.netvision.app.ui.viewmodels.MonitoringViewModel
 
 class MainActivity : ComponentActivity() {
@@ -104,49 +106,68 @@ fun NetVisionApp(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route ?: Screen.Dashboard.route
     val isArabic = language == AppLanguage.ARABIC
+    val isDarkTheme = themeMode == AppThemeMode.DARK
+
+    val navBackground = if (isDarkTheme) Color(0xFF21466D) else Color(0xFFFFFFFF)
+    val inactiveContent = if (isDarkTheme) Color(0xFFF1F5F9) else Color(0xFF64748B)
+    val selectedBackground = Color(0xFFEEE4FF)
+    val selectedContent = Color(0xFF6542A6)
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         bottomBar = {
-            val isDarkTheme = themeMode == AppThemeMode.DARK
-            NavigationBar(
+            Row(
                 modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
                     .padding(horizontal = 16.dp, vertical = 8.dp)
-                    .clip(RoundedCornerShape(28.dp)),
-                containerColor = Color(0xFF21466D),
-                contentColor = Color.White,
-                tonalElevation = 0.dp
+                    .clip(RoundedCornerShape(28.dp))
+                    .background(navBackground)
+                    .padding(horizontal = 4.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 bottomNavItems.forEach { screen ->
                     val selected = currentRoute == screen.route
-                    NavigationBarItem(
-                        selected = selected,
-                        onClick = {
-                            if (currentRoute != screen.route) {
-                                navController.navigate(screen.route) {
-                                    popUpTo(Screen.Dashboard.route) { saveState = true }
-                                    launchSingleTop = true
-                                    restoreState = true
+                    val title = if (isArabic) screen.titleAr else screen.titleEn
+
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(24.dp))
+                            .background(if (selected) selectedBackground else Color.Transparent)
+                            .clickable {
+                                if (currentRoute != screen.route) {
+                                    navController.navigate(screen.route) {
+                                        popUpTo(Screen.Dashboard.route) { saveState = true }
+                                        launchSingleTop = true
+                                        restoreState = true
+                                    }
                                 }
                             }
-                        },
-                        icon = {
+                            .padding(horizontal = 2.dp, vertical = 8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
                             Icon(
                                 imageVector = screen.icon,
-                                contentDescription = if (isArabic) screen.titleAr else screen.titleEn
+                                contentDescription = title,
+                                tint = if (selected) selectedContent else inactiveContent
                             )
-                        },
-                        label = {
-                            Text(text = if (isArabic) screen.titleAr else screen.titleEn)
-                        },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = Color(0xFF6542A6),
-                            selectedTextColor = Color(0xFF6542A6),
-                            indicatorColor = Color(0xFFEEE8FF),
-                            unselectedIconColor = Color(0xFFF1F5F9),
-                            unselectedTextColor = Color(0xFFF1F5F9)
-                        )
-                    )
+                            Text(
+                                text = title,
+                                color = if (selected) selectedContent else inactiveContent,
+                                fontSize = 11.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
                 }
             }
         }
