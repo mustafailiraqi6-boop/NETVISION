@@ -186,6 +186,7 @@ fun NetVisionApp(
             composable(Screen.Dashboard.route) {
                 DashboardScreen(
                     isArabic = isArabic,
+                    monitoringViewModel = monitoringViewModel,
                     onNavigateToDevices = { status ->
                         if (status == null) {
                             navController.navigate(Screen.Devices.route)
