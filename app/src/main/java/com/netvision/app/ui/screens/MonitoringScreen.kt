@@ -37,6 +37,27 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+private fun compareIpv4Addresses(first: String, second: String): Int {
+    fun toNumericAddress(address: String): Long? {
+        val parts = address.substringBefore('/').split('.')
+        if (parts.size != 4) return null
+        var value = 0L
+        for (part in parts) {
+            val octet = part.toIntOrNull()?.takeIf { it in 0..255 } ?: return null
+            value = (value shl 8) or octet.toLong()
+        }
+        return value
+    }
+    val a = toNumericAddress(first)
+    val b = toNumericAddress(second)
+    return when {
+        a != null && b != null -> a.compareTo(b)
+        a != null -> -1
+        b != null -> 1
+        else -> first.compareTo(second, ignoreCase = true)
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MonitoringScreen(
@@ -61,6 +82,8 @@ fun MonitoringScreen(
                     dev.name.contains(uiState.searchQuery, ignoreCase = true) ||
                     dev.ipAddress.contains(uiState.searchQuery)
             matchesFolder && matchesQuery
+        }.sortedWith { first, second ->
+            compareIpv4Addresses(first.ipAddress, second.ipAddress)
         }
     }
 
