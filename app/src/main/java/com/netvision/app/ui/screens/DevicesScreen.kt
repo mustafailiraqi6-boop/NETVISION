@@ -34,9 +34,14 @@ import com.netvision.app.ui.viewmodels.DevicesViewModel
 fun DevicesScreen(
     isArabic: Boolean,
     modifier: Modifier = Modifier,
+    initialStatus: DeviceStatus? = null,
     viewModel: DevicesViewModel = viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+
+    LaunchedEffect(initialStatus) {
+        viewModel.onStatusSelected(initialStatus)
+    }
 
     // Dialog States
     var showAddDeviceDialog by remember { mutableStateOf(false) }
@@ -291,6 +296,44 @@ fun DevicesScreen(
                             )
                         },
                         label = { Text(if (isArabic) "أخرى" else "Other") }
+                    )
+                }
+            }
+        }
+
+        // Filter Chips (Connection Status)
+        item {
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                item {
+                    FilterChip(
+                        selected = uiState.selectedStatus == null,
+                        onClick = { viewModel.onStatusSelected(null) },
+                        label = { Text(if (isArabic) "كل الحالات" else "All Statuses") }
+                    )
+                }
+                item {
+                    FilterChip(
+                        selected = uiState.selectedStatus == DeviceStatus.ONLINE,
+                        onClick = {
+                            viewModel.onStatusSelected(
+                                if (uiState.selectedStatus == DeviceStatus.ONLINE) null else DeviceStatus.ONLINE
+                            )
+                        },
+                        label = { Text(if (isArabic) "متصل" else "Online") }
+                    )
+                }
+                item {
+                    FilterChip(
+                        selected = uiState.selectedStatus == DeviceStatus.OFFLINE,
+                        onClick = {
+                            viewModel.onStatusSelected(
+                                if (uiState.selectedStatus == DeviceStatus.OFFLINE) null else DeviceStatus.OFFLINE
+                            )
+                        },
+                        label = { Text(if (isArabic) "غير متصل" else "Offline") }
                     )
                 }
             }
