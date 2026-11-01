@@ -291,13 +291,15 @@ object SnmpV2Client {
                     querySingleOid(targetIp, community, port, encodeOidString(oid), name, currentVersion, 600, attemptNumber)
                         .takeIf { it.isSuccess }?.stringValue
 
-                val ubntApMac = if (isUbiquiti) ubntString("1.3.6.1.4.1.41112.1.4.5.1.4.1", "ubntApMac")
-                    ?.uppercase(Locale.ROOT) else null
-                val ubntNoiseFloor = if (isUbiquiti) ubntInt("1.3.6.1.4.1.41112.1.4.5.1.8.1", "ubntNoiseFloor") else null
-                val ubntTransmitCcq = if (isUbiquiti) ubntInt("1.3.6.1.4.1.41112.1.4.5.1.7.1", "ubntTransmitCcq") else null
-                val ubntAirMaxQuality = if (isUbiquiti) ubntInt("1.3.6.1.4.1.41112.1.4.6.1.3.1", "ubntAirMaxQuality") else null
-                val ubntAirMaxCapacity = if (isUbiquiti) ubntInt("1.3.6.1.4.1.41112.1.4.6.1.4.1", "ubntAirMaxCapacity") else null
-                val ubntCpuLoad = if (isUbiquiti) ubntInt("1.3.6.1.4.1.41112.1.4.8.3", "ubntCpuLoad") else null
+                // Probe AirMAX sector OIDs directly. Some airOS builds expose a generic Linux
+                // sysDescr/sysObjectID, so vendor detection must not gate these reads.
+                val ubntApMac = ubntString("1.3.6.1.4.1.41112.1.4.5.1.4.1", "ubntApMac")
+                    ?.uppercase(Locale.ROOT)
+                val ubntNoiseFloor = ubntInt("1.3.6.1.4.1.41112.1.4.5.1.8.1", "ubntNoiseFloor")
+                val ubntTransmitCcq = ubntInt("1.3.6.1.4.1.41112.1.4.5.1.7.1", "ubntTransmitCcq")
+                val ubntAirMaxQuality = ubntInt("1.3.6.1.4.1.41112.1.4.6.1.3.1", "ubntAirMaxQuality")
+                val ubntAirMaxCapacity = ubntInt("1.3.6.1.4.1.41112.1.4.6.1.4.1", "ubntAirMaxCapacity")
+                val ubntCpuLoad = ubntInt("1.3.6.1.4.1.41112.1.4.8.3", "ubntCpuLoad")
 
                 val memoryTotal = if (isUbiquiti) ubntInt("1.3.6.1.4.1.2021.4.5.0", "memoryTotal") else null
                 val memoryFree = if (isUbiquiti) ubntInt("1.3.6.1.4.1.2021.4.6.0", "memoryFree") else null
