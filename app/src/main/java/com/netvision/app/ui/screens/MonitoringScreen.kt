@@ -1,5 +1,8 @@
 package com.netvision.app.ui.screens
 
+import android.content.Intent
+import android.net.Uri
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -19,6 +22,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -397,6 +401,8 @@ fun DeviceMonitoringCard(
     onClick: () -> Unit,
     onViewDetails: () -> Unit
 ) {
+    val context = LocalContext.current
+
     val isOnline = device.status == DeviceStatus.ONLINE
     val statusColor = if (isOnline) StatusGreen else StatusRed
     val hasAirMaxSectorData = snmpInfo?.let {
@@ -467,7 +473,16 @@ fun DeviceMonitoringCard(
                 }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text("IP: ${device.ipAddress}", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                Text(
+                    text = "IP: ${device.ipAddress}",
+                    color = TealAccent,
+                    fontSize = 12.sp,
+                    modifier = Modifier.clickable {
+                        val address = device.ipAddress.trim().removePrefix("http://").removePrefix("https://").trimEnd('/')
+                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("http://$address"))
+                        context.startActivity(intent)
+                    }
+                )
                 Surface(
                     color = (if (isSnmpActive) StatusGreen else StatusAmber).copy(alpha = 0.12f),
                     shape = RoundedCornerShape(7.dp)
