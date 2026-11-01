@@ -85,9 +85,9 @@ fun NetVisionTheme(
         SideEffect {
             val window = (view.context as Activity).window
             window.statusBarColor = colorScheme.background.toArgb()
-            window.navigationBarColor = colorScheme.primary.toArgb()
+            window.navigationBarColor = (if (darkTheme) NavyDark else Color.White).toArgb()
             WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
-            WindowCompat.getInsetsController(window, view).isAppearanceLightNavigationBars = false
+            WindowCompat.getInsetsController(window, view).isAppearanceLightNavigationBars = !darkTheme
         }
     }
 
