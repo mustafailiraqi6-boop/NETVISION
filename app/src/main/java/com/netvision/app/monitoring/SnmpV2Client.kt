@@ -30,6 +30,13 @@ data class SnmpDeviceInfo(
     val connectedStationsMacs: List<String> = emptyList(),
     val connectedStations: List<UbiquitiStationInfo> = emptyList(),
     val connectedMikrotikStations: List<MikrotikStationInfo> = emptyList(),
+    val ubntApMac: String? = null,
+    val ubntNoiseFloorDbm: Int? = null,
+    val ubntTransmitCcqPercent: Int? = null,
+    val ubntAirMaxQualityPercent: Int? = null,
+    val ubntAirMaxCapacityPercent: Int? = null,
+    val ubntCpuLoadPercent: Int? = null,
+    val ubntMemoryUsagePercent: Int? = null,
     val errorMessage: String? = null,
     val communityUsed: String = "netvision",
     val latencyMs: Long = 0,
@@ -274,6 +281,30 @@ object SnmpV2Client {
                     )
                 } else emptyList()
 
+                // Optional Ubiquiti AirMAX AP telemetry. Each field remains null when
+                // the device/firmware does not expose the corresponding MIB object.
+                fun ubntInt(oid: String, name: String): Int? =
+                    querySingleOid(targetIp, community, port, encodeOidString(oid), name, currentVersion, 600, attemptNumber)
+                        .takeIf { it.isSuccess }?.intValue
+
+                fun ubntString(oid: String, name: String): String? =
+                    querySingleOid(targetIp, community, port, encodeOidString(oid), name, currentVersion, 600, attemptNumber)
+                        .takeIf { it.isSuccess }?.stringValue
+
+                val ubntApMac = if (isUbiquiti) ubntString("1.3.6.1.4.1.41112.1.4.5.1.4.1", "ubntApMac")
+                    ?.uppercase(Locale.ROOT) else null
+                val ubntNoiseFloor = if (isUbiquiti) ubntInt("1.3.6.1.4.1.41112.1.4.5.1.8.1", "ubntNoiseFloor") else null
+                val ubntTransmitCcq = if (isUbiquiti) ubntInt("1.3.6.1.4.1.41112.1.4.5.1.7.1", "ubntTransmitCcq") else null
+                val ubntAirMaxQuality = if (isUbiquiti) ubntInt("1.3.6.1.4.1.41112.1.4.6.1.3.1", "ubntAirMaxQuality") else null
+                val ubntAirMaxCapacity = if (isUbiquiti) ubntInt("1.3.6.1.4.1.41112.1.4.6.1.4.1", "ubntAirMaxCapacity") else null
+                val ubntCpuLoad = if (isUbiquiti) ubntInt("1.3.6.1.4.1.41112.1.4.8.3.0", "ubntCpuLoad") else null
+
+                val memoryTotal = if (isUbiquiti) ubntInt("1.3.6.1.4.1.2021.4.5.0", "memoryTotal") else null
+                val memoryFree = if (isUbiquiti) ubntInt("1.3.6.1.4.1.2021.4.6.0", "memoryFree") else null
+                val memoryUsage = if (memoryTotal != null && memoryTotal > 0 && memoryFree != null) {
+                    (((memoryTotal - memoryFree).toDouble() / memoryTotal) * 100).toInt().coerceIn(0, 100)
+                } else null
+
                 val totalLatency = System.currentTimeMillis() - totalStart
                 val descr = descrRes.stringValue
                 val sysObjId = sysObjRes.stringValue
@@ -302,6 +333,13 @@ object SnmpV2Client {
                         connectedStationsMacs = if (detailedStations.isNotEmpty()) detailedStations.map { it.macAddress } else stationResult.macAddresses,
                         connectedStations = detailedStations,
                         connectedMikrotikStations = detailedMikrotikStations,
+                        ubntApMac = ubntApMac,
+                        ubntNoiseFloorDbm = ubntNoiseFloor,
+                        ubntTransmitCcqPercent = ubntTransmitCcq,
+                        ubntAirMaxQualityPercent = ubntAirMaxQuality,
+                        ubntAirMaxCapacityPercent = ubntAirMaxCapacity,
+                        ubntCpuLoadPercent = ubntCpuLoad,
+                        ubntMemoryUsagePercent = memoryUsage,
                         communityUsed = community,
                         latencyMs = totalLatency,
                         networkInterface = lastInterface,
