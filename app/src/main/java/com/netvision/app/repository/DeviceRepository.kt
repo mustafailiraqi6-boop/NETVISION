@@ -58,6 +58,13 @@ class DeviceRepository(
         )
     }
 
+    suspend fun updateDeviceManufacturer(deviceId: String, manufacturer: Manufacturer) {
+        val entity = deviceDao?.getDeviceById(deviceId) ?: return
+        if (entity.manufacturer != manufacturer.name) {
+            deviceDao.insertOrUpdate(entity.copy(manufacturer = manufacturer.name))
+        }
+    }
+
     suspend fun updateDevice(device: NetworkDevice) {
         val folderId = if (device.folderId.isBlank()) DeviceFolderEntity.DEFAULT_FOLDER_ID else device.folderId
         deviceDao?.insertOrUpdate(DeviceEntity.fromDomainModel(device.copy(folderId = folderId)))
