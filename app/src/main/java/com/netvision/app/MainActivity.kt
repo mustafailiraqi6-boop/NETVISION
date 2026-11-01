@@ -33,6 +33,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import com.netvision.app.backup.BackupManager
 import kotlinx.coroutines.launch
+import com.netvision.app.models.DeviceStatus
 import com.netvision.app.settings.AppLanguage
 import com.netvision.app.settings.AppThemeMode
 import com.netvision.app.ui.navigation.Screen
@@ -148,10 +149,24 @@ fun NetVisionApp(
             modifier = Modifier.padding(innerPadding)
         ) {
             composable(Screen.Dashboard.route) {
-                DashboardScreen(isArabic = isArabic, onNavigateToDevices = { navController.navigate(Screen.Devices.route) })
+                DashboardScreen(
+                    isArabic = isArabic,
+                    onNavigateToDevices = { status ->
+                        if (status == null) {
+                            navController.navigate(Screen.Devices.route)
+                        } else {
+                            navController.navigate("devices-filter/${status.name}")
+                        }
+                    }
+                )
             }
             composable(Screen.Devices.route) {
                 DevicesScreen(isArabic = isArabic)
+            }
+            composable("devices-filter/{status}") { backStackEntry ->
+                val status = backStackEntry.arguments?.getString("status")
+                    ?.let { runCatching { DeviceStatus.valueOf(it) }.getOrNull() }
+                DevicesScreen(isArabic = isArabic, initialStatus = status)
             }
             composable(Screen.Scanner.route) {
                 ScannerScreen(isArabic = isArabic)
