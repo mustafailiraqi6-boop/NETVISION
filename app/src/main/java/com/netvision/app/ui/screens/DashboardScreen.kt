@@ -67,7 +67,7 @@ fun DashboardScreen(
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
-                            .background(NavySurface)
+                            .background(MaterialTheme.colorScheme.background)
                             .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp))
                             .padding(horizontal = 10.dp, vertical = 6.dp)
                     ) {
