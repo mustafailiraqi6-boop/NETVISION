@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.netvision.app.database.DeviceFolderEntity
+import com.netvision.app.models.DeviceFolder
 import com.netvision.app.models.DeviceStatus
 import com.netvision.app.models.Manufacturer
 import com.netvision.app.models.NetworkDevice
@@ -190,7 +191,7 @@ fun MonitoringScreen(
                     )
                 }
 
-                val towerOptions: List<DeviceFolderEntity?> = listOf(null) + savedFolders
+                val towerOptions: List<DeviceFolder?> = listOf(null) + savedFolders
                 towerOptions.chunked(2).forEach { rowOptions ->
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -205,8 +206,11 @@ fun MonitoringScreen(
                                 isUnassigned -> if (isArabic) "أجهزة غير تابعة" else "Unassigned"
                                 else -> folder?.name.orEmpty()
                             }
-                            val count = if (isAll) savedFolders.count { it.id != DeviceFolderEntity.DEFAULT_FOLDER_ID }
-                                else folder?.deviceCount ?: 0
+                            val count = when {
+                                isAll -> savedDevices.size
+                                isUnassigned -> savedDevices.count { it.folderId.isBlank() || it.folderId == DeviceFolderEntity.DEFAULT_FOLDER_ID }
+                                else -> folder?.deviceCount ?: 0
+                            }
                             val icon = when {
                                 isAll -> Icons.Default.CellTower
                                 isUnassigned -> Icons.Default.FolderOpen
