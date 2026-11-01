@@ -297,7 +297,7 @@ object SnmpV2Client {
                 val ubntTransmitCcq = if (isUbiquiti) ubntInt("1.3.6.1.4.1.41112.1.4.5.1.7.1", "ubntTransmitCcq") else null
                 val ubntAirMaxQuality = if (isUbiquiti) ubntInt("1.3.6.1.4.1.41112.1.4.6.1.3.1", "ubntAirMaxQuality") else null
                 val ubntAirMaxCapacity = if (isUbiquiti) ubntInt("1.3.6.1.4.1.41112.1.4.6.1.4.1", "ubntAirMaxCapacity") else null
-                val ubntCpuLoad = if (isUbiquiti) ubntInt("1.3.6.1.4.1.41112.1.4.8.3.0", "ubntCpuLoad") else null
+                val ubntCpuLoad = if (isUbiquiti) ubntInt("1.3.6.1.4.1.41112.1.4.8.3", "ubntCpuLoad") else null
 
                 val memoryTotal = if (isUbiquiti) ubntInt("1.3.6.1.4.1.2021.4.5.0", "memoryTotal") else null
                 val memoryFree = if (isUbiquiti) ubntInt("1.3.6.1.4.1.2021.4.6.0", "memoryFree") else null
