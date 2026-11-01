@@ -55,7 +55,7 @@ class MonitoringViewModel(
     } catch (e: Exception) {
         SettingsRepository(NetVisionApplication.instance)
     },
-    private val reachabilityService: NetworkReachabilityService = NetworkReachabilityService()
+    private val reachabilityService: NetworkReachabilityService = NetworkReachabilityService(NetVisionApplication.instance)
 ) : ViewModel() {
 
     val savedDevices: StateFlow<List<NetworkDevice>> = repository.getAllDevices()
