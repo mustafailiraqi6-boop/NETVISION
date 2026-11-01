@@ -87,8 +87,8 @@ fun NetVisionApp(
         modifier = Modifier.fillMaxSize(),
         bottomBar = {
             NavigationBar(
-                containerColor = NavySurface,
-                contentColor = TextPrimaryDark
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary
             ) {
                 bottomNavItems.forEach { screen ->
                     val selected = currentRoute == screen.route
@@ -113,11 +113,11 @@ fun NetVisionApp(
                             Text(text = if (isArabic) screen.titleAr else screen.titleEn)
                         },
                         colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = NavySurface,
-                            selectedTextColor = CyanAccent,
-                            indicatorColor = CyanAccent,
-                            unselectedIconColor = TextMutedDark,
-                            unselectedTextColor = TextMutedDark
+                            selectedIconColor = MaterialTheme.colorScheme.primary,
+                            selectedTextColor = MaterialTheme.colorScheme.onPrimary,
+                            indicatorColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.18f),
+                            unselectedIconColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.72f),
+                            unselectedTextColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.72f)
                         )
                     )
                 }
