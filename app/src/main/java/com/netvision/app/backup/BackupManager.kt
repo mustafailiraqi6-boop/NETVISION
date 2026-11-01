@@ -18,8 +18,47 @@ import java.util.Locale
 object BackupManager {
     private const val PREFS_NAME = "netvision_backup"
     private const val KEY_TREE_URI = "backup_tree_uri"
-    private const val MAX_BACKUPS = 2
+    private const val MAX_BACKUPS = 3
     private const val DATABASE_NAME = "netvision_database"
+
+    data class BackupInfo(val name: String, val uri: Uri, val modifiedAt: Long)
+
+    suspend fun listBackups(context: Context, treeUri: Uri): List<BackupInfo> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val resolver = context.contentResolver
+                val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(
+                    treeUri, DocumentsContract.getTreeDocumentId(treeUri)
+                )
+                val backups = mutableListOf<BackupInfo>()
+                resolver.query(
+                    childrenUri,
+                    arrayOf(
+                        DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                        DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                        DocumentsContract.Document.COLUMN_LAST_MODIFIED
+                    ),
+                    null, null,
+                    "${DocumentsContract.Document.COLUMN_LAST_MODIFIED} DESC"
+                )?.use { cursor ->
+                    val idIndex = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
+                    val nameIndex = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
+                    val modifiedIndex = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_LAST_MODIFIED)
+                    while (cursor.moveToNext()) {
+                        val name = cursor.getString(nameIndex) ?: continue
+                        if (name.startsWith("NETVISION_Backup_") && name.endsWith(".zip")) {
+                            val id = cursor.getString(idIndex)
+                            backups += BackupInfo(
+                                name,
+                                DocumentsContract.buildDocumentUriUsingTree(treeUri, id),
+                                if (modifiedIndex >= 0) cursor.getLong(modifiedIndex) else 0L
+                            )
+                        }
+                    }
+                }
+                backups.sortedByDescending { it.modifiedAt }.take(MAX_BACKUPS)
+            }.getOrDefault(emptyList())
+        }
 
     fun getBackupFolder(context: Context): Uri? {
         val raw = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -37,7 +76,18 @@ object BackupManager {
             runCatching {
                 val resolver = context.contentResolver
                 val database = AppDatabase.getDatabase(context)
-                database.openHelper.writableDatabase.query("PRAGMA wal_checkpoint(FULL)").use { }
+                val sqlite = database.openHelper.writableDatabase
+                val deviceCount = sqlite.query("SELECT COUNT(*) FROM devices").use { cursor ->
+                    check(cursor.moveToFirst()) { "Unable to read saved device count" }
+                    cursor.getInt(0)
+                }
+                sqlite.query("PRAGMA wal_checkpoint(TRUNCATE)").use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        check(cursor.getInt(0) == 0) { "Database is busy; retry backup in a moment" }
+                    }
+                }
+                // Close Room after checkpoint to make the main database file a complete snapshot.
+                AppDatabase.closeDatabase()
 
                 val root = DocumentsContract.buildDocumentUriUsingTree(
                     treeUri, DocumentsContract.getTreeDocumentId(treeUri)
