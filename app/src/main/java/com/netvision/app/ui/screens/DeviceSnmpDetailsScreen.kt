@@ -16,6 +16,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -125,12 +126,15 @@ fun DeviceSnmpDetailsScreen(
 
 @Composable
 private fun MetricTile(label: String, value: String, background: Color, foreground: Color, modifier: Modifier = Modifier) {
+    val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    val tileBackground = if (isDark) foreground.copy(alpha = 0.16f) else background
+    val tileForeground = if (isDark) foreground.copy(alpha = 0.98f) else foreground
     Column(
-        modifier = modifier.background(background, RoundedCornerShape(10.dp)).padding(horizontal = 7.dp, vertical = 10.dp),
+        modifier = modifier.background(tileBackground, RoundedCornerShape(10.dp)).padding(horizontal = 7.dp, vertical = 9.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        Text(label, color = foreground, fontSize = 10.sp, maxLines = 1)
-        Text(value, color = MaterialTheme.colorScheme.onSurface, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+        Text(label, color = tileForeground, fontSize = 10.sp, maxLines = 1)
+        Text(value, color = if (isDark) MaterialTheme.colorScheme.onSurface else tileForeground, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1)
     }
 }
 
@@ -174,8 +178,8 @@ private fun UbiquitiStationCard(station: UbiquitiStationInfo, isArabic: Boolean)
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(if (isArabic) "مدة الاتصال" else "Connection time", color = Color(0xFF6542A6), fontSize = 12.sp)
-                Text(station.connectionTime ?: "—", color = Color(0xFF6542A6), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                Text(if (isArabic) "مدة الاتصال" else "Connection time", color = if (MaterialTheme.colorScheme.background.luminance() < 0.5f) Color(0xFFD8C6FF) else Color(0xFF6542A6), fontSize = 12.sp)
+                Text(station.connectionTime ?: "—", color = if (MaterialTheme.colorScheme.background.luminance() < 0.5f) Color(0xFFD8C6FF) else Color(0xFF6542A6), fontWeight = FontWeight.Bold, fontSize = 12.sp)
             }
         }
     }
@@ -211,7 +215,7 @@ private fun MikrotikStationCard(station: MikrotikStationInfo, isArabic: Boolean)
                 MetricTile("RX", rate(station.rxRateMbps), Color(0xFFE5F0FF), Color(0xFF2563EB), Modifier.weight(1f))
                 MetricTile(if (isArabic) "الإشارة" else "Signal", station.signalDbm?.let { "$it dBm" } ?: "—", Color(0xFFDCFCE7), Color(0xFF15803D), Modifier.weight(1f))
             }
-            Row(Modifier.fillMaxWidth().background(Color(0xFFEEE8FF), RoundedCornerShape(10.dp)).padding(11.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+            Row(Modifier.fillMaxWidth().background(if (MaterialTheme.colorScheme.background.luminance() < 0.5f) Color(0xFF34264F) else Color(0xFFEEE8FF), RoundedCornerShape(10.dp)).padding(11.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(if (isArabic) "مدة الاتصال" else "Connection time", color = Color(0xFF6542A6), fontSize = 12.sp)
                 Text(station.connectionTime ?: "—", color = Color(0xFF6542A6), fontWeight = FontWeight.Bold, fontSize = 12.sp)
             }
