@@ -563,7 +563,7 @@ fun DeviceMonitoringCard(
 
             if (isSwitchCard && snmpInfo?.isSuccess == true) {
                 val switchMetrics = buildList {
-                    add(Triple(if (isArabic) "المنافذ الفيزيائية" else "Physical ports", ethernetSnapshot?.totalCount?.toString() ?: "—", 0))
+                    add(Triple(if (isArabic) "عدد المنافذ" else "Port count", ethernetSnapshot?.let { "${it.totalCount}/${it.connectedCount}" } ?: "—", 0))
                     add(Triple("CPU", snmpInfo.cpuLoadPercent?.let { "$it%" } ?: "—", 1))
                     snmpInfo.mikrotikVoltageDecivolts?.let {
                         add(Triple(if (isArabic) "الفولتية" else "Voltage", String.format(Locale.US, "%.1f V", it / 10.0), 2))
