@@ -65,6 +65,25 @@ class DeviceRepository(
         }
     }
 
+    /**
+     * Refresh an automatically generated device label from SNMP without
+     * overwriting a name entered manually by the user.
+     */
+    suspend fun updateDeviceSnmpName(deviceId: String, snmpName: String) {
+        val cleanName = snmpName.trim().take(64)
+        if (cleanName.isBlank()) return
+        val entity = deviceDao?.getDeviceById(deviceId) ?: return
+        val currentName = entity.name.trim()
+        val isGeneratedName = currentName.startsWith("Host (", ignoreCase = true) ||
+            currentName.startsWith("MikroTik (", ignoreCase = true) ||
+            currentName.startsWith("Ubiquiti (", ignoreCase = true) ||
+            currentName.startsWith("Mimosa (", ignoreCase = true) ||
+            currentName == entity.ipAddress
+        if (isGeneratedName && !cleanName.equals(entity.ipAddress, ignoreCase = true)) {
+            deviceDao.insertOrUpdate(entity.copy(name = cleanName))
+        }
+    }
+
     suspend fun updateDevice(device: NetworkDevice) {
         val folderId = if (device.folderId.isBlank()) DeviceFolderEntity.DEFAULT_FOLDER_ID else device.folderId
         deviceDao?.insertOrUpdate(DeviceEntity.fromDomainModel(device.copy(folderId = folderId)))

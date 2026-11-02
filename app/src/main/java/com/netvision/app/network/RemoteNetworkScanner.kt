@@ -171,8 +171,14 @@ class RemoteNetworkScanner(
         // 6. Classify Vendor & Device Type
         val (vendor, devType, modelName) = classifyDevice(activePort, snmpSysDescr, hostname, arpMac)
 
+        val usefulModelName = modelName.takeIf {
+            it.isNotBlank() &&
+                !it.equals("Unknown Device", ignoreCase = true) &&
+                !it.equals("Host", ignoreCase = true)
+        }
         val finalName = when {
-            !hostname.isNullOrBlank() -> hostname
+            !hostname.isNullOrBlank() && !hostname.equals(targetIp, ignoreCase = true) -> hostname
+            usefulModelName != null && vendor != Manufacturer.GENERIC -> usefulModelName
             vendor == Manufacturer.MIKROTIK -> "MikroTik ($targetIp)"
             vendor == Manufacturer.UBIQUITI -> "Ubiquiti ($targetIp)"
             vendor == Manufacturer.MIMOSA -> "Mimosa ($targetIp)"

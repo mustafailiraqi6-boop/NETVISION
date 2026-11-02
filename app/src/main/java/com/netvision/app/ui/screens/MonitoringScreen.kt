@@ -525,11 +525,22 @@ fun DeviceMonitoringCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = if (
-                        device.manufacturer == Manufacturer.MIMOSA ||
-                        snmpInfo?.sysDescr?.contains("Mimosa", ignoreCase = true) == true ||
-                        snmpInfo?.mimosaLinkUptimeTicks != null
-                    ) snmpInfo?.mimosaSsid?.takeIf { it.isNotBlank() } ?: device.name else device.name,
+                    text = when {
+                        (device.manufacturer == Manufacturer.MIMOSA ||
+                            snmpInfo?.sysDescr?.contains("Mimosa", ignoreCase = true) == true ||
+                            snmpInfo?.mimosaLinkUptimeTicks != null) ->
+                            snmpInfo?.mimosaSsid?.trim()?.takeIf { it.isNotBlank() } ?: device.name
+                        snmpInfo?.sysName?.trim()?.takeIf {
+                            it.isNotBlank() && !it.equals(device.ipAddress, ignoreCase = true)
+                        } != null -> snmpInfo.sysName.trim()
+                        snmpInfo?.model?.trim()?.takeIf {
+                            it.isNotBlank() && !it.equals("Unknown Device", ignoreCase = true)
+                        } != null && (device.name.startsWith("Host (", true) ||
+                            device.name.startsWith("MikroTik (", true) ||
+                            device.name.startsWith("Ubiquiti (", true) ||
+                            device.name.startsWith("Mimosa (", true)) -> snmpInfo.model.trim()
+                        else -> device.name
+                    },
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface,
                     fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,

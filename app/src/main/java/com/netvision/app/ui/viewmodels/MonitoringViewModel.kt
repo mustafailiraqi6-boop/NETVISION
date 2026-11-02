@@ -212,6 +212,12 @@ class MonitoringViewModel(
                                         if (manufacturer != null) {
                                             repository.updateDeviceManufacturer(device.id, manufacturer)
                                         }
+                                        // Prefer the device's configured SNMP sysName.
+                                        // Only generated Host/IP labels are replaced; manual labels stay intact.
+                                        info.sysName
+                                            ?.trim()
+                                            ?.takeIf { it.isNotBlank() && !it.equals(device.ipAddress, ignoreCase = true) }
+                                            ?.let { repository.updateDeviceSnmpName(device.id, it) }
                                         repository.updateDeviceStatus(
                                             deviceId = device.id,
                                             isOnline = isOnline,
