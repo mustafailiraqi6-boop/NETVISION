@@ -396,56 +396,64 @@ fun ScannerScreen(
 
                     Text(
                         text = if (isArabic) "الشركة المصنعة:" else "Manufacturer:",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        fontSize = 18.sp,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
-                    LazyRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        items(listOf(Manufacturer.MIKROTIK, Manufacturer.UBIQUITI, Manufacturer.MIMOSA, Manufacturer.OTHER)) { vendor ->
-                            FilterChip(
-                                selected = selectedManufacturer == vendor,
-                                onClick = { selectedManufacturer = vendor },
-                                label = {
-                                    Text(
-                                        if (vendor == Manufacturer.OTHER) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        listOf(Manufacturer.MIKROTIK, Manufacturer.UBIQUITI, Manufacturer.MIMOSA, Manufacturer.OTHER)
+                            .chunked(2).forEach { rowVendors ->
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    rowVendors.forEach { vendor ->
+                                        val selected = selectedManufacturer == vendor
+                                        val label = if (vendor == Manufacturer.OTHER) {
                                             if (isArabic) "أخرى" else "Other"
-                                        } else vendor.displayName,
-                                        fontSize = 11.sp
-                                    )
+                                        } else vendor.displayName
+                                        Surface(
+                                            Modifier.weight(1f).height(58.dp).clickable { selectedManufacturer = vendor },
+                                            shape = RoundedCornerShape(14.dp),
+                                            color = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                                            border = BorderStroke(if (selected) 2.dp else 1.dp, if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant)
+                                        ) {
+                                            Box(contentAlignment = Alignment.Center) {
+                                                Text(label, fontSize = 16.sp,
+                                                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                                                    color = MaterialTheme.colorScheme.onSurface, textAlign = TextAlign.Center)
+                                            }
+                                        }
+                                    }
                                 }
-                            )
-                        }
+                            }
                     }
 
                     Text(
                         text = if (isArabic) "نوع الجهاز:" else "Device Type:",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        fontSize = 18.sp,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
-                    LazyRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        items(listOf(
-                            DeviceType.ROUTER,
-                            DeviceType.SECTOR_AP,
-                            DeviceType.SWITCH,
-                            DeviceType.CLIENT_DEVICE,
-                            DeviceType.OTHER
-                        )) { type ->
-                            FilterChip(
-                                selected = selectedDeviceType == type,
-                                onClick = { selectedDeviceType = type },
-                                label = {
-                                    Text(
-                                        if (isArabic) type.labelAr else type.labelEn,
-                                        fontSize = 11.sp
-                                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        listOf(DeviceType.ROUTER, DeviceType.SECTOR_AP, DeviceType.SWITCH, DeviceType.CLIENT_DEVICE, DeviceType.OTHER)
+                            .chunked(2).forEach { rowTypes ->
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    rowTypes.forEach { type ->
+                                        val selected = selectedDeviceType == type
+                                        Surface(
+                                            Modifier.weight(1f).height(58.dp).clickable { selectedDeviceType = type },
+                                            shape = RoundedCornerShape(14.dp),
+                                            color = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                                            border = BorderStroke(if (selected) 2.dp else 1.dp, if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant)
+                                        ) {
+                                            Box(contentAlignment = Alignment.Center) {
+                                                Text(if (isArabic) type.labelAr else type.labelEn, fontSize = 15.sp,
+                                                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                                                    color = MaterialTheme.colorScheme.onSurface, textAlign = TextAlign.Center)
+                                            }
+                                        }
+                                    }
+                                    if (rowTypes.size == 1) Spacer(Modifier.weight(1f))
                                 }
-                            )
-                        }
+                            }
                     }
 
                     Text(
@@ -497,7 +505,7 @@ fun ScannerScreen(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = CyanAccent, contentColor = NavyDark)
                 ) {
-                    Text(if (isArabic) "حفظ وإضافة للمراقبة" else "Save & Add")
+                    Text(if (isArabic) "حفظ" else "Save")
                 }
             },
             dismissButton = {
