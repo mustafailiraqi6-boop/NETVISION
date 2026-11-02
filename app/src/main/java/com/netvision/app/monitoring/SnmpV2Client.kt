@@ -738,7 +738,7 @@ object SnmpV2Client {
                     timeReceived = System.currentTimeMillis()
 
                     val responseData = buffer.copyOf(receivePacket.length)
-                    val parsed = parseSnmpResponse(responseData, reqId, community)
+                    val parsed = parseSnmpResponse(responseData, reqId, community, preferHexForSixByteString = !preserveOctetString)
 
                     if (!parsed.isSuccess || parsed.responseOid == null) {
                         // Error, endOfMibView, or noSuchInstance.
@@ -801,7 +801,8 @@ object SnmpV2Client {
         version: String = "v2c",
         timeoutMs: Int = 1000,
         attemptNumber: Int = 1,
-        useGetNext: Boolean = false
+        useGetNext: Boolean = false,
+        preserveOctetString: Boolean = false
     ): SingleOidResult {
         val reqId = requestIdCounter.incrementAndGet()
         val versionInt = if (version.equals("v1", ignoreCase = true)) 0 else 1
@@ -1045,7 +1046,7 @@ object SnmpV2Client {
         val errorDetail: String? = null
     )
 
-    fun parseSnmpResponse(data: ByteArray, expectedReqId: Int, expectedCommunity: String): ParsedResponse {
+    fun parseSnmpResponse(data: ByteArray, expectedReqId: Int, expectedCommunity: String, preferHexForSixByteString: Boolean = true): ParsedResponse {
         try {
             var i = 0
 
@@ -1182,7 +1183,7 @@ object SnmpV2Client {
                 0x04 -> { // OCTET STRING
                     val str = String(data, vDataNext, vDataLen, Charsets.UTF_8).trim()
                     val hexStr = data.sliceArray(vDataNext until (vDataNext + vDataLen)).joinToString(":") { "%02x".format(it) }
-                    val displayStr = if (vDataLen == 6) hexStr else str
+                    val displayStr = if (vDataLen == 6 && preferHexForSixByteString) hexStr else str
                     return ParsedResponse(
                         isSuccess = true,
                         versionDecoded = versionDecoded,
