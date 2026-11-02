@@ -199,7 +199,17 @@ class ScannerViewModel(
             val updated = _uiState.value.addedDeviceIds.toMutableSet()
             updated.add(device.id)
             updated.add(device.ipAddress)
-            _uiState.value = _uiState.value.copy(addedDeviceIds = updated)
+            val updatedDiscoveredDevices = _uiState.value.discoveredDevices.map { discovered ->
+                if (discovered.id == device.id || discovered.ipAddress == device.ipAddress) {
+                    deviceWithFolder
+                } else {
+                    discovered
+                }
+            }
+            _uiState.value = _uiState.value.copy(
+                addedDeviceIds = updated,
+                discoveredDevices = updatedDiscoveredDevices
+            )
         }
     }
 
