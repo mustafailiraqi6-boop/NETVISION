@@ -32,7 +32,9 @@ class SettingsRepository(context: Context) {
     fun getCommunitiesForDevice(ip: String): List<String> {
         val configured = getSettings().snmpCommunities.ifEmpty { listOf(getSettings().snmpCommunity.ifBlank { "public" }) }
         val saved = prefs.getString("snmp_device_community_$ip", null)
-        return (listOfNotNull(saved?.takeIf { it in configured }) + configured.filter { it != saved }).distinct()
+        // Mimosa radios commonly ship with the read community "mimosa".
+        // Keep the user's configured communities first, then try the vendor default.
+        return (listOfNotNull(saved?.takeIf { it in configured }) + configured.filter { it != saved } + "mimosa").distinct()
     }
 
     suspend fun queryDeviceInfo(ip: String, port: Int, preferredVersion: String? = null, timeoutMs: Int = 1000): Result<SnmpDeviceInfo> {
