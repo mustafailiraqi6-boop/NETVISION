@@ -39,6 +39,7 @@ data class SnmpDeviceInfo(
     val ubntMemoryUsagePercent: Int? = null,
     val mikrotikCcqPercent: Int? = null,
     val mikrotikVoltageDecivolts: Int? = null,
+    val cpuLoadPercent: Int? = null,
     val errorMessage: String? = null,
     val communityUsed: String = "netvision",
     val latencyMs: Long = 0,
@@ -302,6 +303,10 @@ object SnmpV2Client {
                 val ubntAirMaxQuality = ubntInt("1.3.6.1.4.1.41112.1.4.6.1.3.1", "ubntAirMaxQuality")
                 val ubntAirMaxCapacity = ubntInt("1.3.6.1.4.1.41112.1.4.6.1.4.1", "ubntAirMaxCapacity")
                 val ubntCpuLoad = ubntInt("1.3.6.1.4.1.41112.1.4.8.3", "ubntCpuLoad")
+                // HOST-RESOURCES-MIB processor load (first CPU instance).
+                // CRS326 was verified to expose this as INTEGER 1.
+                val genericCpuLoad = ubntInt("1.3.6.1.2.1.25.3.3.1.2.1", "hrProcessorLoad")
+                    ?.takeIf { it in 0..100 }
 
                 // MikroTik sector telemetry verified against the user's RouterOS device.
                 val mikrotikCcq = if (isMikroTik) ubntInt("1.3.6.1.4.1.14988.1.1.1.3.1.10.1", "mikrotikCcq") else null
@@ -350,6 +355,7 @@ object SnmpV2Client {
                         ubntMemoryUsagePercent = memoryUsage,
                         mikrotikCcqPercent = mikrotikCcq,
                         mikrotikVoltageDecivolts = mikrotikVoltage,
+                        cpuLoadPercent = genericCpuLoad ?: ubntCpuLoad,
                         communityUsed = community,
                         latencyMs = totalLatency,
                         networkInterface = lastInterface,
