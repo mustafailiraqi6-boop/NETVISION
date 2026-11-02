@@ -721,8 +721,7 @@ private fun SwitchPortsDetailPage(
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                                 Text(port.name, color = MaterialTheme.colorScheme.onSurface, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                                    Box(Modifier.size(10.dp).background(if (connected) StatusGreen else StatusRed, CircleShape))
-                                    Text("●", color = if (connected) StatusGreen else StatusRed, fontSize = 16.sp)
+                                    Box(Modifier.size(12.dp).background(if (connected) StatusGreen else StatusRed, CircleShape))
                                 }
                             }
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
