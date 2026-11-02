@@ -30,18 +30,15 @@ data class EthernetMonitoringSnapshot(
     val error: String? = null
 ) {
     val connectedCount: Int get() = ports.count { it.operStatus == 1 }
-    // Physical Ethernet and SFP ports; suffixes such as ether4_UNMS_SERVER are valid.
-    val totalCount: Int get() = ports.count {
-        val name = it.name.lowercase()
-        Regex("^ether[0-9]+(?:[-_ ].*)?$").matches(name) ||
-            Regex("^sfp(?:[-_].*)?$").matches(name) ||
-            name.startsWith("sfp")
-    }
+    // read() only adds interfaces whose IF-MIB ifType is ethernetCsmacd(6).
+    // This includes physical Ethernet and SFP/SFP+ ports regardless of link state.
+    val totalCount: Int get() = ports.size
 }
 
 object EthernetPortMonitor {
-    private const val IF_NUMBER = "1.3.6.1.2.1.2.1.0"
     private const val IF_NAME = "1.3.6.1.2.1.31.1.1.1.1"
+    private const val IF_TYPE = "1.3.6.1.2.1.2.2.1.3"
+    private const val ETHERNET_CSMACD = 6L
     private const val IF_SPEED = "1.3.6.1.2.1.2.2.1.5"
     private const val IF_ADMIN = "1.3.6.1.2.1.2.2.1.7"
     private const val IF_OPER = "1.3.6.1.2.1.2.2.1.8"
@@ -57,9 +54,8 @@ object EthernetPortMonitor {
         timeoutMs: Int = 900
     ): EthernetMonitoringSnapshot = withContext(Dispatchers.IO) {
         val versionToUse = if (version.equals("v1", true)) "v1" else "v2c"
-        // Walk the ifName column with GETNEXT. This discovers the actual ifIndex
-        // values and does not assume that table indexes are contiguous or that every
-        // individual GET will succeed.
+        // Walk ifName to discover real ifIndex values; indexes are not assumed
+        // to be contiguous and are reused for every subsequent IF-MIB lookup.
         val rows = mutableListOf<EthernetPortSnapshot>()
         var cursor = IF_NAME
         val seenIndexes = mutableSetOf<Int>()
@@ -74,12 +70,17 @@ object EthernetPortMonitor {
             if (!seenIndexes.add(index)) break
             cursor = responseOid
             val name = next.stringValue?.trim().orEmpty()
-            val lower = name.lowercase()
-            val isPhysicalPort = Regex("^ether[0-9]+(?:[-_ ].*)?$").matches(lower) ||
-                lower.startsWith("sfp") || lower.startsWith("combo")
-            if (!isPhysicalPort) continue
+            if (name.isBlank()) continue
 
-            // Keep the six per-port telemetry reads together, but avoid launching
+            // RouterOS exposes physical Ethernet and SFP/SFP+ ports as
+            // ethernetCsmacd(6). Virtual interfaces (bridge, VLAN, PPP, etc.)
+            // have different ifType values and are deliberately excluded.
+            val interfaceType = get(
+                ip, community, port, "$IF_TYPE.$index", "ifType.$index", versionToUse, timeoutMs
+            ).longValue
+            if (interfaceType != ETHERNET_CSMACD) continue
+
+            // Keep the per-port telemetry reads together, but avoid launching
             // requests for every interface at the same time.
             val values = coroutineScope {
                 listOf(
