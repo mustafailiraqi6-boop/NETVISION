@@ -15,6 +15,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.ui.window.Dialog
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -29,6 +30,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.netvision.app.database.DeviceFolderEntity
 import com.netvision.app.models.DeviceFolder
 import com.netvision.app.models.DeviceStatus
+import com.netvision.app.models.DeviceType
 import com.netvision.app.models.Manufacturer
 import com.netvision.app.models.NetworkDevice
 import com.netvision.app.monitoring.EthernetMonitoringSnapshot
@@ -71,10 +73,27 @@ fun MonitoringScreen(
     val savedDevices by viewModel.savedDevices.collectAsState()
     val savedFolders by viewModel.savedFolders.collectAsState()
     val uiState by viewModel.uiState.collectAsState()
+    var selectedCategory by remember { mutableStateOf(false) } // false: sectors/devices, true: switches
+    var selectedSwitchId by remember { mutableStateOf<String?>(null) }
+
+    val selectedSwitch = savedDevices.firstOrNull { it.id == selectedSwitchId }
+
+    if (selectedSwitch != null) {
+        Dialog(onDismissRequest = { selectedSwitchId = null }, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
+            SwitchPortsDetailPage(
+                device = selectedSwitch,
+                snapshot = uiState.ethernetPortsByDevice[selectedSwitch.id],
+                isArabic = isArabic,
+                onBack = { selectedSwitchId = null },
+                onRefresh = { viewModel.refreshNow() }
+            )
+        }
+    }
 
     // Filtering devices based on selected tower and search query
-    val filteredDevices = remember(savedDevices, uiState.selectedFolderId, uiState.searchQuery) {
+    val filteredDevices = remember(savedDevices, uiState.selectedFolderId, uiState.searchQuery, selectedCategory) {
         savedDevices.filter { dev ->
+            val matchesCategory = if (selectedCategory) dev.deviceType == DeviceType.SWITCH else dev.deviceType != DeviceType.SWITCH
             val matchesFolder = when (uiState.selectedFolderId) {
                 null -> true
                 DeviceFolderEntity.DEFAULT_FOLDER_ID -> dev.folderId.isBlank() || dev.folderId == DeviceFolderEntity.DEFAULT_FOLDER_ID
@@ -83,7 +102,7 @@ fun MonitoringScreen(
             val matchesQuery = uiState.searchQuery.isBlank() ||
                     dev.name.contains(uiState.searchQuery, ignoreCase = true) ||
                     dev.ipAddress.contains(uiState.searchQuery)
-            matchesFolder && matchesQuery
+            matchesCategory && matchesFolder && matchesQuery
         }.sortedWith { first, second ->
             compareIpv4Addresses(first.ipAddress, second.ipAddress)
         }
@@ -154,6 +173,23 @@ fun MonitoringScreen(
                             text = if (isArabic) "تحديث الآن" else "Refresh",
                             fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
                         )
+                    }
+                }
+            }
+        }
+
+        item {
+            Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface, RoundedCornerShape(13.dp)).padding(4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf(if (isArabic) "السكترات والأجهزة" else "Sectors & devices", if (isArabic) "السويجات" else "Switches").forEachIndexed { index, label ->
+                    val selected = selectedCategory == (index == 1)
+                    Surface(
+                        modifier = Modifier.weight(1f).clickable { selectedCategory = index == 1 },
+                        color = if (selected) TealAccent.copy(alpha = 0.16f) else Color.Transparent,
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text(label, modifier = Modifier.padding(vertical = 11.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            color = if (selected) TealAccent else MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontWeight = if (selected) androidx.compose.ui.text.font.FontWeight.Bold else androidx.compose.ui.text.font.FontWeight.Normal, fontSize = 13.sp)
                     }
                 }
             }
@@ -406,10 +442,9 @@ fun MonitoringScreen(
                     isSelected = isSelected,
                     isSnmpActive = isSnmpActive,
                     snmpInfo = devSnmp,
-                    ethernetSnapshot = uiState.ethernetPortsByDevice[device.id],
                     isArabic = isArabic,
                     onClick = { viewModel.selectDevice(device.id) },
-                    onViewDetails = { onViewDeviceDetails(device.id) }
+                    onViewDetails = { if (device.deviceType == DeviceType.SWITCH) selectedSwitchId = device.id else onViewDeviceDetails(device.id) }
                 )
             }
         }
@@ -423,13 +458,11 @@ fun DeviceMonitoringCard(
     isSelected: Boolean,
     isSnmpActive: Boolean,
     snmpInfo: com.netvision.app.monitoring.SnmpDeviceInfo?,
-    ethernetSnapshot: EthernetMonitoringSnapshot? = null,
     isArabic: Boolean,
     onClick: () -> Unit,
     onViewDetails: () -> Unit
 ) {
     val context = LocalContext.current
-    var expandedPortIndex by remember(device.id) { mutableStateOf<Int?>(null) }
 
     val isOnline = device.status == DeviceStatus.ONLINE
     val statusColor = if (isOnline) StatusGreen else StatusRed
@@ -577,59 +610,13 @@ fun DeviceMonitoringCard(
                 }
             }
 
-            if (isMikroTikSector && ethernetSnapshot != null) {
-                val ports = ethernetSnapshot.ports
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                        Text(if (isArabic) "منافذ Ethernet" else "Ethernet ports", fontSize = 13.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                        Text("${ethernetSnapshot.connectedCount}/${ethernetSnapshot.totalCount} ${if (isArabic) "متصل" else "connected"}", fontSize = 11.sp, color = StatusGreen)
-                    }
-                    if (ports.isEmpty()) {
-                        Text(ethernetSnapshot.error ?: if (isArabic) "لا توجد بيانات منافذ" else "No port data", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    } else {
-                        ports.chunked(2).forEach { pair ->
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                pair.forEach { port ->
-                                    val connected = port.operStatus == 1
-                                    val accent = if (connected) StatusGreen else StatusRed
-                                    val tileBg = accent.copy(alpha = if (isDark) 0.16f else 0.09f)
-                                    Column(
-                                        Modifier.weight(1f).background(tileBg, RoundedCornerShape(10.dp)).clickable {
-                                            expandedPortIndex = if (expandedPortIndex == port.index) null else port.index
-                                        }.padding(9.dp),
-                                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                                    ) {
-                                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                            Text(port.name, fontSize = 12.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = accent)
-                                            Text(if (connected) (if (isArabic) "متصل" else "UP") else if (port.operStatus == 2) (if (isArabic) "مفصول" else "DOWN") else "—", fontSize = 10.sp, color = accent)
-                                        }
-                                        Text(if (port.speedBps != null && port.speedBps > 0) "${if (port.speedBps >= 1_000_000_000L) String.format(Locale.US, "%.1f Gbps", port.speedBps / 1_000_000_000.0) else "${port.speedBps / 1_000_000} Mbps"}" else "Rate: —", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                            Text("TX ${port.txMbps?.let { String.format(Locale.US, "%.2f", it) } ?: "—"} Mbps", fontSize = 9.sp, color = Color(0xFF3B82F6))
-                                            Text("RX ${port.rxMbps?.let { String.format(Locale.US, "%.2f", it) } ?: "—"} Mbps", fontSize = 9.sp, color = Color(0xFF06B6D4))
-                                        }
-                                        if (expandedPortIndex == port.index) {
-                                            HorizontalDivider(color = accent.copy(alpha = 0.3f))
-                                            Text("TX total: ${port.txOctets?.let { String.format(Locale.US, "%.2f GB", it / 1_000_000_000.0) } ?: "—"}", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurface)
-                                            Text("RX total: ${port.rxOctets?.let { String.format(Locale.US, "%.2f GB", it / 1_000_000_000.0) } ?: "—"}", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurface)
-                                            Text(if (isArabic) "مرات انقطاع الرابط: غير متاح" else "Link downs: unavailable", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                        }
-                                    }
-                                }
-                                if (pair.size == 1) Spacer(Modifier.weight(1f))
-                            }
-                        }
-                    }
-                }
-            }
-
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 OutlinedButton(
                     onClick = onViewDetails,
                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
                     shape = RoundedCornerShape(9.dp)
                 ) {
-                    Text(if (isArabic) "عرض المحطات المتصلة" else "View connected stations", fontSize = 12.sp)
+                    Text(if (device.deviceType == DeviceType.SWITCH) { if (isArabic) "عرض منافذ السويج" else "View switch ports" } else { if (isArabic) "عرض المحطات المتصلة" else "View connected stations" }, fontSize = 12.sp)
                     Spacer(Modifier.width(5.dp))
                     Icon(Icons.Default.ChevronLeft, contentDescription = null, modifier = Modifier.size(16.dp))
                 }
@@ -696,3 +683,63 @@ fun SnmpFieldRow(
         )
     }
 }
+
+@Composable
+private fun SwitchPortsDetailPage(
+    device: NetworkDevice,
+    snapshot: EthernetMonitoringSnapshot?,
+    isArabic: Boolean,
+    onBack: () -> Unit,
+    onRefresh: () -> Unit
+) {
+    var expandedIndex by remember(device.id) { mutableStateOf<Int?>(null) }
+    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+        Column(Modifier.fillMaxSize().padding(horizontal = 18.dp, vertical = 12.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = if (isArabic) "رجوع" else "Back") }
+                Text(if (isArabic) "منافذ السويج" else "Switch ports", style = MaterialTheme.typography.titleLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                IconButton(onClick = onRefresh) { Icon(Icons.Default.Refresh, contentDescription = if (isArabic) "تحديث" else "Refresh") }
+            }
+            Text(device.name, style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+            Text("IP: ${device.ipAddress}", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+            Spacer(Modifier.height(12.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(if (isArabic) "المنافذ الفيزيائية" else "Physical ports", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                Text("${snapshot?.connectedCount ?: 0}/${snapshot?.totalCount ?: 0} ${if (isArabic) "متصل" else "connected"}", color = StatusGreen)
+            }
+            Spacer(Modifier.height(10.dp))
+            if (snapshot == null || snapshot.ports.isEmpty()) {
+                Text(snapshot?.error ?: if (isArabic) "بانتظار بيانات SNMP للمنافذ" else "Waiting for SNMP port data", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(9.dp), contentPadding = PaddingValues(bottom = 20.dp)) {
+                    items(snapshot.ports, key = { it.index }) { port ->
+                        val connected = port.operStatus == 1
+                        val accent = if (connected) StatusGreen else StatusRed
+                        val bg = accent.copy(alpha = if (MaterialTheme.colorScheme.background.luminance() < 0.5f) 0.16f else 0.09f)
+                        Column(Modifier.fillMaxWidth().background(bg, RoundedCornerShape(12.dp)).clickable { expandedIndex = if (expandedIndex == port.index) null else port.index }.padding(13.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                Text(port.name, color = MaterialTheme.colorScheme.onSurface, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                                    Box(Modifier.size(10.dp).background(if (connected) StatusGreen else StatusRed, CircleShape))
+                                    Text(if (connected) (if (isArabic) "متصل" else "UP") else if (port.operStatus == 2) (if (isArabic) "مفصول" else "DOWN") else "—", color = accent, fontSize = 11.sp)
+                                }
+                            }
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text(if (port.speedBps != null && port.speedBps > 0) if (port.speedBps >= 1_000_000_000L) String.format(Locale.US, "%.1f Gbps", port.speedBps / 1_000_000_000.0) else "${port.speedBps / 1_000_000} Mbps" else "Rate: —", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                                Text("TX ${port.txMbps?.let { String.format(Locale.US, "%.2f", it) } ?: "—"} Mbps", color = Color(0xFF3B82F6), fontSize = 11.sp)
+                                Text("RX ${port.rxMbps?.let { String.format(Locale.US, "%.2f", it) } ?: "—"} Mbps", color = Color(0xFF06B6D4), fontSize = 11.sp)
+                            }
+                            if (expandedIndex == port.index) {
+                                HorizontalDivider(color = accent.copy(alpha = 0.3f))
+                                Text("TX total: ${port.txOctets?.let { String.format(Locale.US, "%.2f GB", it / 1_000_000_000.0) } ?: "—"}", fontSize = 11.sp)
+                                Text("RX total: ${port.rxOctets?.let { String.format(Locale.US, "%.2f GB", it / 1_000_000_000.0) } ?: "—"}", fontSize = 11.sp)
+                                Text(if (isArabic) "مرات انقطاع الرابط: غير متاح حالياً" else "Link downs: unavailable", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
