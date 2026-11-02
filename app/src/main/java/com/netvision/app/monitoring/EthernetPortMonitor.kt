@@ -66,7 +66,7 @@ object EthernetPortMonitor {
         for (step in 0 until 128) {
             val next = SnmpV2Client.querySingleOid(
                 ip, community, port, SnmpV2Client.encodeOidString(cursor),
-                "ifName.walk", versionToUse, timeoutMs, useGetNext = true
+                "ifName.walk", versionToUse, timeoutMs, useGetNext = true, preserveOctetString = true
             )
             val responseOid = next.responseOid ?: break
             if (!next.isSuccess || !responseOid.startsWith("$IF_NAME.")) break
