@@ -563,7 +563,7 @@ fun DeviceMonitoringCard(
 
             if (isSwitchCard && snmpInfo?.isSuccess == true) {
                 val switchMetrics = buildList {
-                    add(Triple(if (isArabic) "عدد المنافذ" else "Port count", ethernetSnapshot?.let { "${it.totalCount}/${it.connectedCount}" } ?: "—", 0))
+                    add(Triple(if (isArabic) "عدد المنافذ" else "Port count", ethernetSnapshot?.totalCount?.toString() ?: "—", 0))
                     add(Triple("CPU", snmpInfo.cpuLoadPercent?.let { "$it%" } ?: "—", 1))
                     snmpInfo.mikrotikVoltageDecivolts?.let {
                         add(Triple(if (isArabic) "الفولتية" else "Voltage", String.format(Locale.US, "%.1f V", it / 10.0), 2))
@@ -742,7 +742,7 @@ private fun SwitchPortsDetailPage(
             Spacer(Modifier.height(12.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(if (isArabic) "عدد المنافذ" else "Port count", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
-                Text("${snapshot?.totalCount ?: 0}/${snapshot?.connectedCount ?: 0}", color = StatusGreen)
+                Text("${snapshot?.totalCount ?: 0}", color = StatusGreen)
             }
             Spacer(Modifier.height(10.dp))
             if (snapshot == null || snapshot.ports.isEmpty()) {
@@ -759,13 +759,6 @@ private fun SwitchPortsDetailPage(
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                                     Box(Modifier.size(12.dp).background(if (connected) StatusGreen else StatusRed, CircleShape))
                                 }
-                            }
-                            port.alias?.let { comment ->
-                                Text(
-                                    (if (isArabic) "التعليق: " else "Comment: ") + comment,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    fontSize = 12.sp
-                                )
                             }
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                 Text(if (port.speedBps != null && port.speedBps > 0) if (port.speedBps >= 1_000_000_000L) String.format(Locale.US, "%.1f Gbps", port.speedBps / 1_000_000_000.0) else "${port.speedBps / 1_000_000} Mbps" else "Rate: —", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
