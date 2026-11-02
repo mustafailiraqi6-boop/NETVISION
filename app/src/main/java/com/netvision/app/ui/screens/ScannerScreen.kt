@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.netvision.app.database.DeviceFolderEntity
 import com.netvision.app.models.DeviceFolder
+import com.netvision.app.models.DeviceType
 import com.netvision.app.models.Manufacturer
 import com.netvision.app.models.NetworkDevice
 import com.netvision.app.models.NetworkRange
@@ -363,7 +364,8 @@ fun ScannerScreen(
     // -------------------------------------------------------------
     if (deviceToAdd != null) {
         val target = deviceToAdd!!
-        var selectedFolderId by remember { mutableStateOf(DeviceFolderEntity.DEFAULT_FOLDER_ID) }
+        var selectedFolderId by remember(target.id) { mutableStateOf(DeviceFolderEntity.DEFAULT_FOLDER_ID) }
+        var selectedDeviceType by remember(target.id) { mutableStateOf<DeviceType?>(null) }
 
         AlertDialog(
             onDismissRequest = { deviceToAdd = null },
@@ -387,6 +389,40 @@ fun ScannerScreen(
                     )
 
                     Spacer(modifier = Modifier.height(4.dp))
+
+                    Text(
+                        text = if (isArabic) "ما نوع الجهاز؟" else "Device Type",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Medium
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        listOf(
+                            DeviceType.SWITCH,
+                            DeviceType.SECTOR_AP,
+                            DeviceType.ROUTER
+                        ).forEach { type ->
+                            FilterChip(
+                                modifier = Modifier.weight(1f),
+                                selected = selectedDeviceType == type,
+                                onClick = { selectedDeviceType = type },
+                                label = {
+                                    Text(
+                                        text = when (type) {
+                                            DeviceType.SWITCH -> if (isArabic) "سويج" else "Switch"
+                                            DeviceType.SECTOR_AP -> if (isArabic) "سكتر" else "Sector"
+                                            else -> if (isArabic) "راوتر" else "Router"
+                                        },
+                                        fontSize = 11.sp
+                                    )
+                                }
+                            )
+                        }
+                    }
 
                     Text(
                         text = if (isArabic) "اختر البرج التابع له الجهاز:" else "Select Assigned Tower:",
