@@ -738,7 +738,7 @@ object SnmpV2Client {
                     timeReceived = System.currentTimeMillis()
 
                     val responseData = buffer.copyOf(receivePacket.length)
-                    val parsed = parseSnmpResponse(responseData, reqId, community, preferHexForSixByteString = !preserveOctetString)
+                    val parsed = parseSnmpResponse(responseData, reqId, community)
 
                     if (!parsed.isSuccess || parsed.responseOid == null) {
                         // Error, endOfMibView, or noSuchInstance.
@@ -847,7 +847,7 @@ object SnmpV2Client {
                 val latency = timeReceived - timeSent
                 val responseData = buffer.copyOf(receivePacket.length)
 
-                val parsed = parseSnmpResponse(responseData, reqId, community)
+                val parsed = parseSnmpResponse(responseData, reqId, community, preferHexForSixByteString = !preserveOctetString)
 
                 val record = SnmpDiagnosticRecord(
                     targetIp = ip,
