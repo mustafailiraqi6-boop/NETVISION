@@ -28,9 +28,8 @@ class SettingsViewModel(
         repository.updateSettings(newSettings)
     }
 
-    fun updateSnmpCommunity(community: String) {
-        val current = repository.getSettings()
-        repository.updateSettings(current.copy(snmpCommunity = community.trim()))
+    fun updateSnmpCommunities(communities: List<String>) {
+        repository.updateSnmpCommunities(communities)
     }
 
     fun updateSnmpVersion(version: String) {
