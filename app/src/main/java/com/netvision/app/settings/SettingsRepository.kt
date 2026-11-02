@@ -5,6 +5,8 @@ import android.content.SharedPreferences
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import com.netvision.app.monitoring.SnmpDeviceInfo
+import com.netvision.app.monitoring.SnmpV2Client
 
 class SettingsRepository(context: Context) {
 
@@ -14,6 +16,37 @@ class SettingsRepository(context: Context) {
     val settings: StateFlow<AppSettings> = _settings.asStateFlow()
 
     fun getSettings(): AppSettings = _settings.value
+
+    fun updateSnmpCommunities(values: List<String>) {
+        val safeList = values.map { it.trim() }.filter { it.isNotEmpty() }.distinct().ifEmpty { listOf("public") }
+        val current = getSettings()
+        updateSettings(current.copy(snmpCommunities = safeList, snmpCommunity = safeList.first()))
+        val editor = prefs.edit()
+        prefs.all.keys.filter { it.startsWith("snmp_device_community_") }.forEach { key ->
+            val saved = prefs.getString(key, null)
+            if (saved != null && saved !in safeList) editor.remove(key)
+        }
+        editor.apply()
+    }
+
+    fun getCommunitiesForDevice(ip: String): List<String> {
+        val configured = getSettings().snmpCommunities.ifEmpty { listOf(getSettings().snmpCommunity.ifBlank { "public" }) }
+        val saved = prefs.getString("snmp_device_community_$ip", null)
+        return (listOfNotNull(saved?.takeIf { it in configured }) + configured.filter { it != saved }).distinct()
+    }
+
+    suspend fun queryDeviceInfo(ip: String, port: Int, preferredVersion: String? = null, timeoutMs: Int = 1000): Result<SnmpDeviceInfo> {
+        var lastFailure: Result<SnmpDeviceInfo>? = null
+        for (community in getCommunitiesForDevice(ip)) {
+            val result = SnmpV2Client.queryDeviceInfo(ip, community, port, preferredVersion, timeoutMs)
+            if (result.isSuccess && result.getOrNull()?.isSuccess == true) {
+                prefs.edit().putString("snmp_device_community_$ip", community).apply()
+                return result
+            }
+            lastFailure = result
+        }
+        return lastFailure ?: Result.failure(IllegalStateException("No SNMP community configured"))
+    }
 
     fun updateSettings(newSettings: AppSettings) {
         prefs.edit().apply {
@@ -25,6 +58,7 @@ class SettingsRepository(context: Context) {
             putBoolean("enable_mndp", newSettings.enableMikroTikMndp)
             putBoolean("enable_snmp", newSettings.enableSnmpPolling)
             putString("snmp_community", newSettings.snmpCommunity)
+            putString("snmp_communities", newSettings.snmpCommunities.joinToString("\n"))
             putString("snmp_version", newSettings.snmpVersion)
             putInt("snmp_port", newSettings.snmpPort)
             putInt("refresh_interval_sec", newSettings.monitoringRefreshIntervalSec)
@@ -47,7 +81,8 @@ class SettingsRepository(context: Context) {
             enableUbiquitiDiscovery = prefs.getBoolean("enable_ubnt", true),
             enableMikroTikMndp = prefs.getBoolean("enable_mndp", true),
             enableSnmpPolling = prefs.getBoolean("enable_snmp", true),
-            snmpCommunity = prefs.getString("snmp_community", "netvision") ?: "netvision",
+            snmpCommunity = prefs.getString("snmp_community", "public") ?: "public",
+            snmpCommunities = prefs.getString("snmp_communities", null)?.split("\n")?.map { it.trim() }?.filter { it.isNotEmpty() }?.distinct() ?: listOf(prefs.getString("snmp_community", "public") ?: "public"),
             snmpVersion = prefs.getString("snmp_version", "v2c") ?: "v2c",
             snmpPort = prefs.getInt("snmp_port", 161),
             monitoringRefreshIntervalSec = prefs.getInt("refresh_interval_sec", 5)
