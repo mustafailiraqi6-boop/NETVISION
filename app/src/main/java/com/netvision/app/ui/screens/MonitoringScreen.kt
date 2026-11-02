@@ -93,7 +93,7 @@ fun MonitoringScreen(
     // Filtering devices based on selected tower and search query
     val filteredDevices = remember(savedDevices, uiState.selectedFolderId, uiState.searchQuery, selectedCategory) {
         savedDevices.filter { dev ->
-            val isSwitch = $predicate
+            val isSwitch = dev.deviceType == DeviceType.SWITCH || dev.name.contains("switch", ignoreCase = true) || dev.model.contains("CRS", ignoreCase = true) || dev.model.contains("switch", ignoreCase = true)
             val matchesCategory = if (selectedCategory) isSwitch else !isSwitch
             val matchesFolder = when (uiState.selectedFolderId) {
                 null -> true
