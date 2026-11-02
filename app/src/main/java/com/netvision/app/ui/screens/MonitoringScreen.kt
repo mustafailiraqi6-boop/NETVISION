@@ -478,9 +478,10 @@ fun DeviceMonitoringCard(
         device.manufacturer == Manufacturer.UBIQUITI ||
         snmpInfo?.model?.contains("Ubiquiti", ignoreCase = true) == true ||
         snmpInfo?.sysDescr?.let { it.contains("AirOS", true) || it.contains("UBNT", true) } == true
-    val isMikroTikSector = device.manufacturer == Manufacturer.MIKROTIK ||
+    val isSwitchCard = device.deviceType == DeviceType.SWITCH || device.name.contains("switch", true) || device.model.contains("CRS", true) || device.model.contains("switch", true)
+    val isMikroTikSector = !isSwitchCard && (device.manufacturer == Manufacturer.MIKROTIK ||
         snmpInfo?.mikrotikCcqPercent != null ||
-        snmpInfo?.mikrotikVoltageDecivolts != null
+        snmpInfo?.mikrotikVoltageDecivolts != null)
     val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val metricPalette = if (isDark) {
         listOf(
@@ -733,7 +734,7 @@ private fun SwitchPortsDetailPage(
                                 HorizontalDivider(color = accent.copy(alpha = 0.3f))
                                 Text("TX total: ${port.txOctets?.let { String.format(Locale.US, "%.2f GB", it / 1_000_000_000.0) } ?: "—"}", fontSize = 11.sp)
                                 Text("RX total: ${port.rxOctets?.let { String.format(Locale.US, "%.2f GB", it / 1_000_000_000.0) } ?: "—"}", fontSize = 11.sp)
-                                Text(if (isArabic) "مرات انقطاع الرابط: غير متاح حالياً" else "Link downs: unavailable", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text((if (isArabic) "مرات انقطاع الرابط: " else "Link downs: ") + (port.linkDowns?.toString() ?: if (isArabic) "غير متاح" else "unavailable"), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                     }
