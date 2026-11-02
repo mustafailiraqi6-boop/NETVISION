@@ -59,13 +59,20 @@ object EthernetPortMonitor {
         val rows = mutableListOf<EthernetPortSnapshot>()
         var cursor = IF_NAME
         val seenIndexes = mutableSetOf<Int>()
+        // SNMP is UDP: a single lost response must not truncate the physical-port
+        // inventory. Retry the same cursor before declaring the walk complete.
+        val walkTimeoutMs = maxOf(timeoutMs, 1500)
         for (step in 0 until 128) {
-            val next = SnmpV2Client.querySingleOid(
-                ip, community, port, SnmpV2Client.encodeOidString(cursor),
-                "ifName.walk", versionToUse, timeoutMs, useGetNext = true, preserveOctetString = true
-            )
+            val next = retrySnmpRead(attempts = 3) {
+                SnmpV2Client.querySingleOid(
+                    ip, community, port, SnmpV2Client.encodeOidString(cursor),
+                    "ifName.walk", versionToUse, walkTimeoutMs,
+                    useGetNext = true, preserveOctetString = true
+                )
+            }
+            if (!next.isSuccess) break
             val responseOid = next.responseOid ?: break
-            if (!next.isSuccess || !responseOid.startsWith("$IF_NAME.")) break
+            if (!responseOid.startsWith("$IF_NAME.")) break
             val index = responseOid.removePrefix("$IF_NAME.").toIntOrNull() ?: break
             if (!seenIndexes.add(index)) break
             cursor = responseOid
@@ -75,9 +82,10 @@ object EthernetPortMonitor {
             // RouterOS exposes physical Ethernet and SFP/SFP+ ports as
             // ethernetCsmacd(6). Virtual interfaces (bridge, VLAN, PPP, etc.)
             // have different ifType values and are deliberately excluded.
-            val interfaceType = get(
-                ip, community, port, "$IF_TYPE.$index", "ifType.$index", versionToUse, timeoutMs
-            ).longValue
+            val typeResult = retrySnmpRead(attempts = 3) {
+                get(ip, community, port, "$IF_TYPE.$index", "ifType.$index", versionToUse, walkTimeoutMs)
+            }
+            val interfaceType = typeResult.takeIf { it.isSuccess }?.longValue
             if (interfaceType != ETHERNET_CSMACD) continue
 
             // Keep the per-port telemetry reads together, but avoid launching
@@ -100,6 +108,22 @@ object EthernetPortMonitor {
             )
         }
         EthernetMonitoringSnapshot(rows.sortedBy { it.index })
+    }
+
+    private inline fun retrySnmpRead(
+        attempts: Int,
+        request: () -> SnmpV2Client.SingleOidResult
+    ): SnmpV2Client.SingleOidResult {
+        var lastResult: SnmpV2Client.SingleOidResult? = null
+        repeat(attempts) {
+            val result = request()
+            lastResult = result
+            if (result.isSuccess) return result
+        }
+        return lastResult ?: SnmpV2Client.SingleOidResult(
+            isSuccess = false,
+            errorMessage = "SNMP request failed after $attempts attempts"
+        )
     }
 
     private fun get(ip: String, community: String, port: Int, oid: String, label: String, version: String, timeout: Int): SnmpV2Client.SingleOidResult =
