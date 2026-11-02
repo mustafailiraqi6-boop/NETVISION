@@ -20,7 +20,8 @@ data class AppSettings(
     val enableUbiquitiDiscovery: Boolean = true,
     val enableMikroTikMndp: Boolean = true,
     val enableSnmpPolling: Boolean = true,
-    val snmpCommunity: String = "netvision",
+    val snmpCommunity: String = "public",
+    val snmpCommunities: List<String> = listOf("public"),
     val snmpVersion: String = "v2c",
     val snmpPort: Int = 161,
     val monitoringRefreshIntervalSec: Int = 5
