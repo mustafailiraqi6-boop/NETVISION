@@ -400,7 +400,7 @@ fun ScannerScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        items(listOf(Manufacturer.MIKROTIK, Manufacturer.UBIQUITI, Manufacturer.OTHER)) { vendor ->
+                        items(listOf(Manufacturer.MIKROTIK, Manufacturer.UBIQUITI, Manufacturer.MIMOSA, Manufacturer.OTHER)) { vendor ->
                             FilterChip(
                                 selected = selectedManufacturer == vendor,
                                 onClick = { selectedManufacturer = vendor },
