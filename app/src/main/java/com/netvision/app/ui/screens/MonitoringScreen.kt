@@ -484,6 +484,9 @@ fun DeviceMonitoringCard(
     val isMikroTikSector = !isSwitchCard && (device.manufacturer == Manufacturer.MIKROTIK ||
         snmpInfo?.mikrotikCcqPercent != null ||
         snmpInfo?.mikrotikVoltageDecivolts != null)
+    val isMimosaSector = device.manufacturer == Manufacturer.MIMOSA ||
+        snmpInfo?.sysDescr?.contains("Mimosa", ignoreCase = true) == true ||
+        snmpInfo?.mimosaLinkUptimeTicks != null
     val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val metricPalette = if (isDark) {
         listOf(
@@ -522,7 +525,11 @@ fun DeviceMonitoringCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = device.name,
+                    text = if (
+                        device.manufacturer == Manufacturer.MIMOSA ||
+                        snmpInfo?.sysDescr?.contains("Mimosa", ignoreCase = true) == true ||
+                        snmpInfo?.mimosaLinkUptimeTicks != null
+                    ) snmpInfo?.mimosaSsid?.takeIf { it.isNotBlank() } ?: device.name else device.name,
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface,
                     fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
@@ -590,6 +597,55 @@ fun DeviceMonitoringCard(
                         horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                         Text(if (isArabic) "مدة التشغيل" else "Uptime", color = durationForeground, fontSize = 11.sp)
                         Text(snmpInfo.uptimeFormatted ?: "—", color = durationForeground, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, fontSize = 11.sp)
+                    }
+                }
+            }
+
+            if (isMimosaSector && snmpInfo?.isSuccess == true) {
+                val phyTx = listOfNotNull(snmpInfo.mimosaPhyTxStream1Mbps, snmpInfo.mimosaPhyTxStream2Mbps)
+                    .takeIf { it.isNotEmpty() }?.sum()
+                val phyRx = listOfNotNull(snmpInfo.mimosaPhyRxStream1Mbps, snmpInfo.mimosaPhyRxStream2Mbps)
+                    .takeIf { it.isNotEmpty() }?.sum()
+                val uptime = snmpInfo.mimosaLinkUptimeTicks?.let { ticks ->
+                    val totalSeconds = ticks / 100L
+                    "${totalSeconds / 86400}d ${(totalSeconds % 86400) / 3600}h ${(totalSeconds % 3600) / 60}m"
+                } ?: "—"
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        if (isArabic) "معلومات Mimosa" else "Mimosa information",
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 12.sp,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
+                    )
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        val metrics = listOf(
+                            Triple("PHY TX", phyTx?.let { "$it Mbps" } ?: "—", 0),
+                            Triple("PHY RX", phyRx?.let { "$it Mbps" } ?: "—", 3),
+                            Triple(if (isArabic) "الإشارة 1" else "Signal 1", snmpInfo.mimosaSignalChain1Dbm?.let { "$it dBm" } ?: "—", 1)
+                        )
+                        metrics.forEach { (label, value, colorIndex) ->
+                            val colors = metricPalette[colorIndex]
+                            Column(Modifier.weight(1f).background(colors.first, RoundedCornerShape(9.dp)).padding(horizontal = 7.dp, vertical = 7.dp),
+                                verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                Text(label, fontSize = 9.sp, color = colors.second, maxLines = 1)
+                                Text(value, fontSize = 13.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = colors.second, maxLines = 1)
+                            }
+                        }
+                    }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        val colors = metricPalette[3]
+                        Column(Modifier.weight(1f).background(colors.first, RoundedCornerShape(9.dp)).padding(horizontal = 7.dp, vertical = 7.dp)) {
+                            Text(if (isArabic) "الإشارة 2" else "Signal 2", fontSize = 9.sp, color = colors.second)
+                            Text(snmpInfo.mimosaSignalChain2Dbm?.let { "$it dBm" } ?: "—", fontSize = 13.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = colors.second)
+                        }
+                        Spacer(Modifier.weight(2f))
+                    }
+                    val durationBackground = if (isDark) Color(0xFF34264F) else Color(0xFFEEE8FF)
+                    val durationForeground = if (isDark) Color(0xFFD8C6FF) else Color(0xFF6542A6)
+                    Row(Modifier.fillMaxWidth().background(durationBackground, RoundedCornerShape(9.dp)).padding(horizontal = 10.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        Text(if (isArabic) "مدة تشغيل السكتر" else "Link uptime", color = durationForeground, fontSize = 11.sp)
+                        Text(uptime, color = durationForeground, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, fontSize = 11.sp)
                     }
                 }
             }

@@ -47,6 +47,7 @@ data class SnmpDeviceInfo(
     val snmpVersion: String = "v2c",
     val negotiationSummary: String? = null,
     val mimosaLinkUptimeTicks: Long? = null,
+    val mimosaSsid: String? = null,
     val mimosaSignalChain1Dbm: Int? = null,
     val mimosaSignalChain2Dbm: Int? = null,
     val mimosaPhyTxStream1Mbps: Int? = null,
@@ -335,6 +336,10 @@ object SnmpV2Client {
                 fun mimosaLong(oid: String, name: String): Long? =
                     querySingleOid(targetIp, community, port, encodeOidString(oid), name, currentVersion, 700, attemptNumber)
                         .takeIf { it.isSuccess }?.longValue
+                fun mimosaString(oid: String, name: String): String? =
+                    querySingleOid(targetIp, community, port, encodeOidString(oid), name, currentVersion, 700, attemptNumber)
+                        .takeIf { it.isSuccess }?.stringValue
+                val mimosaSsid = if (isMimosa) mimosaString("1.3.6.1.4.1.43356.2.1.2.3.1.0", "mimosaSsid") else null
                 val mimosaLinkUptime = if (isMimosa) mimosaLong("1.3.6.1.4.1.43356.2.1.2.3.4.0", "mimosaLinkUptime") else null
                 val mimosaSignal1 = if (isMimosa) mimosaInt("1.3.6.1.4.1.43356.2.1.2.6.1.1.3.1", "mimosaRxPower1") else null
                 val mimosaSignal2 = if (isMimosa) mimosaInt("1.3.6.1.4.1.43356.2.1.2.6.1.1.3.2", "mimosaRxPower2") else null
@@ -389,6 +394,7 @@ object SnmpV2Client {
                         snmpVersion = currentVersion,
                         negotiationSummary = negSummary,
                         mimosaLinkUptimeTicks = mimosaLinkUptime,
+                        mimosaSsid = mimosaSsid,
                         mimosaSignalChain1Dbm = mimosaSignal1,
                         mimosaSignalChain2Dbm = mimosaSignal2,
                         mimosaPhyTxStream1Mbps = mimosaPhyTx1,
