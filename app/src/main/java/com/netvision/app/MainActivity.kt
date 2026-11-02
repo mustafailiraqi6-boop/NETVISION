@@ -57,6 +57,7 @@ import com.netvision.app.ui.screens.MonitoringScreen
 import com.netvision.app.ui.screens.ScannerScreen
 import com.netvision.app.ui.screens.SettingsScreen
 import com.netvision.app.ui.viewmodels.MonitoringViewModel
+import com.netvision.app.ui.viewmodels.SettingsViewModel
 import com.netvision.app.ui.theme.NetVisionTheme
 
 class MainActivity : ComponentActivity() {
@@ -81,19 +82,19 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            var language by remember { mutableStateOf(AppLanguage.ARABIC) }
-            var themeMode by remember { mutableStateOf(AppThemeMode.LIGHT) }
-
+            val settingsViewModel: SettingsViewModel = viewModel()
+            val savedSettings by settingsViewModel.settings.collectAsState()
+            val language = savedSettings.language
+            val themeMode = savedSettings.themeMode
             val isRtl = language == AppLanguage.ARABIC
             val layoutDirection = if (isRtl) LayoutDirection.Rtl else LayoutDirection.Ltr
-
             CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) {
                 NetVisionTheme(darkTheme = themeMode == AppThemeMode.DARK) {
                     NetVisionApp(
                         language = language,
-                        onLanguageChange = { language = it },
+                        onLanguageChange = { selected -> settingsViewModel.updateSettings(savedSettings.copy(language = selected)) },
                         themeMode = themeMode,
-                        onThemeModeChange = { themeMode = it }
+                        onThemeModeChange = { selected -> settingsViewModel.updateSettings(savedSettings.copy(themeMode = selected)) }
                     )
                 }
             }

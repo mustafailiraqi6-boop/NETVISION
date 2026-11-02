@@ -3,6 +3,8 @@ package com.netvision.app.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -30,6 +32,22 @@ import com.netvision.app.models.NetworkDevice
 import com.netvision.app.models.NetworkRange
 import com.netvision.app.ui.theme.*
 import com.netvision.app.ui.viewmodels.ScannerViewModel
+
+
+private fun selectionCardBackground(index: Int, dark: Boolean): Color = when (index % 5) {
+    0 -> if (dark) Color(0xFF263F5A) else Color(0xFFDCEBFA)
+    1 -> if (dark) Color(0xFF24483D) else Color(0xFFDDF3E8)
+    2 -> if (dark) Color(0xFF463452) else Color(0xFFF0E4F8)
+    3 -> if (dark) Color(0xFF51402D) else Color(0xFFFCEBD9)
+    else -> if (dark) Color(0xFF4D4A2D) else Color(0xFFF5EFCF)
+}
+private fun selectionCardBorder(index: Int): Color = when (index % 5) {
+    0 -> Color(0xFF83B7E8)
+    1 -> Color(0xFF83C9A5)
+    2 -> Color(0xFFC4A1E0)
+    3 -> Color(0xFFE8BD87)
+    else -> Color(0xFFD9CE7E)
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -378,7 +396,7 @@ fun ScannerScreen(
             },
             text = {
                 Column(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 480.dp).verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Text(
@@ -404,21 +422,21 @@ fun ScannerScreen(
                         listOf(Manufacturer.MIKROTIK, Manufacturer.UBIQUITI, Manufacturer.MIMOSA, Manufacturer.OTHER)
                             .chunked(2).forEach { rowVendors ->
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    rowVendors.forEach { vendor ->
+                                    rowVendors.forEachIndexed { index, vendor ->
                                         val selected = selectedManufacturer == vendor
                                         val label = if (vendor == Manufacturer.OTHER) {
                                             if (isArabic) "أخرى" else "Other"
                                         } else vendor.displayName
                                         Surface(
-                                            Modifier.weight(1f).height(58.dp).clickable { selectedManufacturer = vendor },
-                                            shape = RoundedCornerShape(14.dp),
-                                            color = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant,
-                                            border = BorderStroke(if (selected) 2.dp else 1.dp, if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant)
+                                            Modifier.weight(1f).height(54.dp).clickable { selectedManufacturer = vendor },
+                                            shape = RoundedCornerShape(13.dp),
+                                            color = selectionCardBackground(index, androidx.compose.foundation.isSystemInDarkTheme()),
+                                            border = BorderStroke(if (selected) 2.dp else 1.dp, if (selected) selectionCardBorder(index) else MaterialTheme.colorScheme.outlineVariant)
                                         ) {
                                             Box(contentAlignment = Alignment.Center) {
                                                 Text(label, fontSize = 16.sp,
                                                     fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
-                                                    color = MaterialTheme.colorScheme.onSurface, textAlign = TextAlign.Center)
+                                                    color = if (androidx.compose.foundation.isSystemInDarkTheme()) Color.White else Color(0xFF263445), textAlign = TextAlign.Center)
                                             }
                                         }
                                     }
@@ -436,18 +454,18 @@ fun ScannerScreen(
                         listOf(DeviceType.ROUTER, DeviceType.SECTOR_AP, DeviceType.SWITCH, DeviceType.CLIENT_DEVICE, DeviceType.OTHER)
                             .chunked(2).forEach { rowTypes ->
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    rowTypes.forEach { type ->
+                                    rowTypes.forEachIndexed { index, type ->
                                         val selected = selectedDeviceType == type
                                         Surface(
-                                            Modifier.weight(1f).height(58.dp).clickable { selectedDeviceType = type },
-                                            shape = RoundedCornerShape(14.dp),
-                                            color = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant,
-                                            border = BorderStroke(if (selected) 2.dp else 1.dp, if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant)
+                                            Modifier.weight(1f).height(54.dp).clickable { selectedDeviceType = type },
+                                            shape = RoundedCornerShape(13.dp),
+                                            color = selectionCardBackground(index, androidx.compose.foundation.isSystemInDarkTheme()),
+                                            border = BorderStroke(if (selected) 2.dp else 1.dp, if (selected) selectionCardBorder(index) else MaterialTheme.colorScheme.outlineVariant)
                                         ) {
                                             Box(contentAlignment = Alignment.Center) {
                                                 Text(if (isArabic) type.labelAr else type.labelEn, fontSize = 15.sp,
                                                     fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
-                                                    color = MaterialTheme.colorScheme.onSurface, textAlign = TextAlign.Center)
+                                                    color = if (androidx.compose.foundation.isSystemInDarkTheme()) Color.White else Color(0xFF263445), textAlign = TextAlign.Center)
                                             }
                                         }
                                     }
@@ -463,30 +481,29 @@ fun ScannerScreen(
                         fontWeight = androidx.compose.ui.text.font.FontWeight.Medium
                     )
 
-                    LazyRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        items(savedFolders) { folder ->
-                            val isUnassigned = folder.id == DeviceFolderEntity.DEFAULT_FOLDER_ID
-                            val folderLabel = if (isUnassigned) {
-                                if (isArabic) "أجهزة غير تابعة لبرج" else "Unassigned Devices"
-                            } else {
-                                folder.name
-                            }
-
-                            FilterChip(
-                                selected = selectedFolderId == folder.id,
-                                onClick = { selectedFolderId = folder.id },
-                                label = { Text(folderLabel, fontSize = 11.sp) },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = if (isUnassigned) Icons.Default.FolderOpen else Icons.Default.CellTower,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(14.dp)
-                                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        savedFolders.chunked(2).forEachIndexed { rowIndex, rowFolders ->
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                rowFolders.forEachIndexed { columnIndex, folder ->
+                                    val index = rowIndex * 2 + columnIndex
+                                    val selected = selectedFolderId == folder.id
+                                    val unassigned = folder.id == DeviceFolderEntity.DEFAULT_FOLDER_ID
+                                    val label = if (unassigned) { if (isArabic) "أجهزة غير تابعة لبرج" else "Unassigned Devices" } else folder.name
+                                    Surface(Modifier.weight(1f).height(56.dp).clickable { selectedFolderId = folder.id },
+                                        shape = RoundedCornerShape(13.dp),
+                                        color = selectionCardBackground(index, androidx.compose.foundation.isSystemInDarkTheme()),
+                                        border = BorderStroke(if (selected) 2.dp else 1.dp, if (selected) selectionCardBorder(index) else MaterialTheme.colorScheme.outlineVariant)) {
+                                        Row(Modifier.fillMaxSize().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
+                                            Icon(if (unassigned) Icons.Default.FolderOpen else Icons.Default.CellTower, null, modifier = Modifier.size(18.dp))
+                                            Spacer(Modifier.width(6.dp))
+                                            Text(label, fontSize = 13.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                                                color = if (androidx.compose.foundation.isSystemInDarkTheme()) Color.White else Color(0xFF263445), textAlign = TextAlign.Center, maxLines = 2)
+                                            if (selected) { Spacer(Modifier.width(4.dp)); Icon(Icons.Default.CheckCircle, null, modifier = Modifier.size(15.dp)) }
+                                        }
+                                    }
                                 }
-                            )
+                                if (rowFolders.size == 1) Spacer(Modifier.weight(1f))
+                            }
                         }
                     }
                 }
