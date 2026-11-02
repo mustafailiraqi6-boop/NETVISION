@@ -9,6 +9,9 @@ import com.netvision.app.models.NetworkDevice
 import com.netvision.app.monitoring.SnmpDeviceInfo
 import com.netvision.app.monitoring.SnmpDiagnosticRecord
 import com.netvision.app.monitoring.SnmpV2Client
+import com.netvision.app.monitoring.EthernetPortMonitor
+import com.netvision.app.monitoring.EthernetMonitoringSnapshot
+import com.netvision.app.monitoring.EthernetPortSnapshot
 import com.netvision.app.network.NetworkReachabilityService
 import com.netvision.app.repository.DeviceRepository
 import com.netvision.app.settings.SettingsRepository
@@ -41,7 +44,8 @@ data class MonitoringUiState(
     val lastRefreshedTime: Long = 0L,
     val isPollingNow: Boolean = false,
     val snmpStatusByDevice: Map<String, SnmpDeviceInfo> = emptyMap(),
-    val diagnosticLogs: List<SnmpDiagnosticRecord> = emptyList()
+    val diagnosticLogs: List<SnmpDiagnosticRecord> = emptyList(),
+    val ethernetPortsByDevice: Map<String, EthernetMonitoringSnapshot> = emptyMap()
 )
 
 class MonitoringViewModel(
@@ -78,6 +82,7 @@ class MonitoringViewModel(
     private var pollingJob: Job? = null
     private val pollSemaphore = Semaphore(10)
     private val snmpMapMutex = Mutex()
+    private val previousPortCounters = mutableMapOf<String, Pair<Long, Long>>()
 
     init {
         startPeriodicPolling()
@@ -211,6 +216,40 @@ class MonitoringViewModel(
                                             uptime = info.uptimeFormatted,
                                             snmpVersion = info.snmpVersion
                                         )
+
+                                        // Read physical Ethernet/SFP interfaces for MikroTik devices.
+                                        // The collector uses SnmpV2Client, which binds each UDP socket to VPN.
+                                        if (manufacturer == com.netvision.app.models.Manufacturer.MIKROTIK) {
+                                            try {
+                                                val snapshot = EthernetPortMonitor.read(
+                                                    ip = device.ipAddress,
+                                                    community = community,
+                                                    port = snmpPort,
+                                                    version = info.snmpVersion,
+                                                    timeoutMs = 900
+                                                )
+                                                val now = System.currentTimeMillis()
+                                                val withRates = snapshot.copy(ports = snapshot.ports.map { portInfo ->
+                                                    val key = "${device.id}:${portInfo.index}"
+                                                    val previous = previousPortCounters[key]
+                                                    val elapsed = if (previous != null) (now - previous.first).coerceAtLeast(1L) / 1000.0 else 0.0
+                                                    previousPortCounters[key] = now to (portInfo.rxOctets ?: 0L)
+                                                    val previousTxKey = "${key}:tx"
+                                                    val previousTx = previousPortCounters[previousTxKey]
+                                                    previousPortCounters[previousTxKey] = now to (portInfo.txOctets ?: 0L)
+                                                    val rx = if (previous != null && elapsed > 0 && portInfo.rxOctets != null && portInfo.rxOctets >= previous.second) ((portInfo.rxOctets - previous.second) * 8.0 / elapsed / 1_000_000.0) else null
+                                                    val tx = if (previousTx != null && elapsed > 0 && portInfo.txOctets != null && portInfo.txOctets >= previousTx.second) ((portInfo.txOctets - previousTx.second) * 8.0 / elapsed / 1_000_000.0) else null
+                                                    portInfo.copy(rxMbps = rx, txMbps = tx)
+                                                })
+                                                snmpMapMutex.withLock {
+                                                    val updated = _uiState.value.ethernetPortsByDevice.toMutableMap()
+                                                    updated[device.id] = withRates
+                                                    _uiState.value = _uiState.value.copy(ethernetPortsByDevice = updated)
+                                                }
+                                            } catch (_: Exception) {
+                                                // Keep the last successful interface snapshot on a transient SNMP failure.
+                                            }
+                                        }
                                     }
                                 }
                             } catch (_: Exception) {
