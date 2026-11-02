@@ -91,12 +91,6 @@ class RemoteNetworkScanner(
      * Guaranteed to return a NetworkDevice ONLY if the device is genuinely reachable.
      */
     suspend fun probeHost(targetIp: String): NetworkDevice? = withContext(Dispatchers.IO) {
-        val configuredCommunity = try {
-            NetVisionApplication.instance.settingsRepository.getSettings().snmpCommunity
-        } catch (e: Exception) {
-            "netvision"
-        }
-
         var isOnline = false
         var activePort = 0
         var latencyMs: Long = 0
@@ -134,7 +128,7 @@ class RemoteNetworkScanner(
         var snmpSysName: String? = null
         var snmpUptime: String? = null
 
-        val snmpRes = SnmpV2Client.queryDeviceInfo(targetIp, community = configuredCommunity, timeoutMs = 500)
+        val snmpRes = NetVisionApplication.instance.settingsRepository.queryDeviceInfo(targetIp, NetVisionApplication.instance.settingsRepository.getSettings().snmpPort, timeoutMs = 500)
         if (snmpRes.isSuccess) {
             val info = snmpRes.getOrNull()
             if (info != null && info.isSuccess) {
