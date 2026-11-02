@@ -56,28 +56,34 @@ object EthernetPortMonitor {
             ?: return@withContext EthernetMonitoringSnapshot(emptyList(), supported = false, error = "IF-MIB غير مدعوم")
         if (count <= 0) return@withContext EthernetMonitoringSnapshot(emptyList(), supported = false, error = "لا توجد واجهات")
 
-        val indices = (1..count.coerceAtMost(256)).toList()
-        val rows = coroutineScope {
-            indices.map { index ->
-                async(Dispatchers.IO) {
-                    val name = get(ip, community, port, "$IF_NAME.$index", "ifName.$index", versionToUse, timeoutMs).stringValue?.trim()
-                        ?: get(ip, community, port, "1.3.6.1.2.1.2.2.1.2.$index", "ifDescr.$index", versionToUse, timeoutMs).stringValue?.trim()
-                        ?: return@async null
-                    val lower = name.lowercase()
-                    if (!(lower.startsWith("ether") || lower.startsWith("sfp") || lower.startsWith("combo"))) return@async null
-                    val values = coroutineScope {
-                        listOf(
-                            async { get(ip, community, port, "$IF_ADMIN.$index", "ifAdminStatus.$index", versionToUse, timeoutMs).longValue?.toInt() },
-                            async { get(ip, community, port, "$IF_OPER.$index", "ifOperStatus.$index", versionToUse, timeoutMs).longValue?.toInt() },
-                            async { get(ip, community, port, "$IF_SPEED.$index", "ifSpeed.$index", versionToUse, timeoutMs).longValue },
-                            async { get(ip, community, port, "$IF_HC_IN.$index", "ifHCInOctets.$index", versionToUse, timeoutMs).longValue },
-                            async { get(ip, community, port, "$IF_HC_OUT.$index", "ifHCOutOctets.$index", versionToUse, timeoutMs).longValue },
-                            async { get(ip, community, port, "$MIKROTIK_LINK_DOWNS.$index", "linkDowns.$index", versionToUse, timeoutMs).longValue }
-                        ).awaitAll()
-                    }
-                    EthernetPortSnapshot(index, name, values[0] as Int?, values[1] as Int?, values[2] as Long?, values[3] as Long?, values[4] as Long?, linkDowns = values[5] as Long?)
-                }
-            }.awaitAll().filterNotNull()
+        // Read interface names sequentially. Large parallel SNMP bursts can cause
+        // MikroTik devices to drop replies, producing an incomplete port list.
+        val rows = mutableListOf<EthernetPortSnapshot>()
+        for (index in 1..count.coerceAtMost(256)) {
+            val name = get(ip, community, port, "$IF_NAME.$index", "ifName.$index", versionToUse, timeoutMs).stringValue?.trim()
+                ?: get(ip, community, port, "1.3.6.1.2.1.2.2.1.2.$index", "ifDescr.$index", versionToUse, timeoutMs).stringValue?.trim()
+                ?: continue
+            val lower = name.lowercase()
+            if (!(lower.startsWith("ether") || lower.startsWith("sfp") || lower.startsWith("combo"))) continue
+
+            // Keep the six per-port telemetry reads together, but avoid launching
+            // requests for every interface at the same time.
+            val values = coroutineScope {
+                listOf(
+                    async { get(ip, community, port, "$IF_ADMIN.$index", "ifAdminStatus.$index", versionToUse, timeoutMs).longValue?.toInt() },
+                    async { get(ip, community, port, "$IF_OPER.$index", "ifOperStatus.$index", versionToUse, timeoutMs).longValue?.toInt() },
+                    async { get(ip, community, port, "$IF_SPEED.$index", "ifSpeed.$index", versionToUse, timeoutMs).longValue },
+                    async { get(ip, community, port, "$IF_HC_IN.$index", "ifHCInOctets.$index", versionToUse, timeoutMs).longValue },
+                    async { get(ip, community, port, "$IF_HC_OUT.$index", "ifHCOutOctets.$index", versionToUse, timeoutMs).longValue },
+                    async { get(ip, community, port, "$MIKROTIK_LINK_DOWNS.$index", "linkDowns.$index", versionToUse, timeoutMs).longValue }
+                ).awaitAll()
+            }
+            rows += EthernetPortSnapshot(
+                index, name,
+                values[0] as Int?, values[1] as Int?, values[2] as Long?,
+                values[3] as Long?, values[4] as Long?,
+                linkDowns = values[5] as Long?
+            )
         }
         EthernetMonitoringSnapshot(rows.sortedBy { it.index })
     }
