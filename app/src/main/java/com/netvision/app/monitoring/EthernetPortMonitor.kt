@@ -77,7 +77,7 @@ object EthernetPortMonitor {
             val lower = name.lowercase()
             val isPhysicalPort = Regex("^ether[0-9]+(?:_.*)?$").matches(lower) ||
                 lower.startsWith("sfp") || lower.startsWith("combo")
-            if (!isPhysicalPort) return@repeat
+            if (!isPhysicalPort) continue
 
             // Keep the six per-port telemetry reads together, but avoid launching
             // requests for every interface at the same time.
