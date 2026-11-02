@@ -740,10 +740,6 @@ private fun SwitchPortsDetailPage(
             Text(device.name, style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
             Text("IP: ${device.ipAddress}", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
             Spacer(Modifier.height(12.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(if (isArabic) "عدد المنافذ" else "Port count", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
-                Text("${snapshot?.totalCount ?: 0}", color = StatusGreen)
-            }
             Spacer(Modifier.height(10.dp))
             if (snapshot == null || snapshot.ports.isEmpty()) {
                 Text(snapshot?.error ?: if (isArabic) "بانتظار بيانات SNMP للمنافذ" else "Waiting for SNMP port data", color = MaterialTheme.colorScheme.onSurfaceVariant)
