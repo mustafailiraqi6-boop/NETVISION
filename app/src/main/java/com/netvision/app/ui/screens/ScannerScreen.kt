@@ -594,6 +594,7 @@ fun DiscoveredDeviceCard(
     onAddClick: () -> Unit
 ) {
     val vendorColor = when (device.manufacturer) {
+        Manufacturer.MIMOSA -> Color(0xFF0D9488)
         Manufacturer.UBIQUITI -> ElectricBlue
         Manufacturer.MIKROTIK -> CyanAccent
         Manufacturer.CISCO -> Color(0xFF38BDF8)
