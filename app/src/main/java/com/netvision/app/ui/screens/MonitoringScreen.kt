@@ -93,7 +93,8 @@ fun MonitoringScreen(
     // Filtering devices based on selected tower and search query
     val filteredDevices = remember(savedDevices, uiState.selectedFolderId, uiState.searchQuery, selectedCategory) {
         savedDevices.filter { dev ->
-            val matchesCategory = if (selectedCategory) dev.deviceType == DeviceType.SWITCH else dev.deviceType != DeviceType.SWITCH
+            val isSwitch = $predicate
+            val matchesCategory = if (selectedCategory) isSwitch else !isSwitch
             val matchesFolder = when (uiState.selectedFolderId) {
                 null -> true
                 DeviceFolderEntity.DEFAULT_FOLDER_ID -> dev.folderId.isBlank() || dev.folderId == DeviceFolderEntity.DEFAULT_FOLDER_ID
@@ -444,7 +445,7 @@ fun MonitoringScreen(
                     snmpInfo = devSnmp,
                     isArabic = isArabic,
                     onClick = { viewModel.selectDevice(device.id) },
-                    onViewDetails = { if (device.deviceType == DeviceType.SWITCH) selectedSwitchId = device.id else onViewDeviceDetails(device.id) }
+                    onViewDetails = { if (device.deviceType == DeviceType.SWITCH || device.name.contains("switch", true) || device.model.contains("CRS", true) || device.model.contains("switch", true)) selectedSwitchId = device.id else onViewDeviceDetails(device.id) }
                 )
             }
         }
@@ -616,7 +617,7 @@ fun DeviceMonitoringCard(
                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
                     shape = RoundedCornerShape(9.dp)
                 ) {
-                    Text(if (device.deviceType == DeviceType.SWITCH) { if (isArabic) "عرض منافذ السويج" else "View switch ports" } else { if (isArabic) "عرض المحطات المتصلة" else "View connected stations" }, fontSize = 12.sp)
+                    Text(if (device.deviceType == DeviceType.SWITCH || device.name.contains("switch", true) || device.model.contains("CRS", true) || device.model.contains("switch", true)) { if (isArabic) "عرض منافذ السويج" else "View switch ports" } else { if (isArabic) "عرض المحطات المتصلة" else "View connected stations" }, fontSize = 12.sp)
                     Spacer(Modifier.width(5.dp))
                     Icon(Icons.Default.ChevronLeft, contentDescription = null, modifier = Modifier.size(16.dp))
                 }
@@ -721,7 +722,7 @@ private fun SwitchPortsDetailPage(
                                 Text(port.name, color = MaterialTheme.colorScheme.onSurface, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                                     Box(Modifier.size(10.dp).background(if (connected) StatusGreen else StatusRed, CircleShape))
-                                    Text(if (connected) (if (isArabic) "متصل" else "UP") else if (port.operStatus == 2) (if (isArabic) "مفصول" else "DOWN") else "—", color = accent, fontSize = 11.sp)
+                                    Text("●", color = if (connected) StatusGreen else StatusRed, fontSize = 16.sp)
                                 }
                             }
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
