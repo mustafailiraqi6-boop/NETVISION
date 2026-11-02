@@ -152,7 +152,6 @@ class MonitoringViewModel(
 
         try {
             val settings = settingsRepository.getSettings()
-            val community = settings.snmpCommunity.ifBlank { "netvision" }
             val snmpPort = settings.snmpPort
 
             // Reachability checks run concurrently (bounded to 10 devices).
@@ -180,9 +179,8 @@ class MonitoringViewModel(
                             // SNMP must never determine reachability. It runs after
                             // status persistence and cannot delay the visible status.
                             try {
-                                val snmpRes = SnmpV2Client.queryDeviceInfo(
-                                    targetIp = device.ipAddress,
-                                    community = community,
+                                val snmpRes = settingsRepository.queryDeviceInfo(
+                                    ip = device.ipAddress,
                                     port = snmpPort,
                                     preferredVersion = device.snmpVersion,
                                     timeoutMs = 1000
@@ -230,7 +228,7 @@ class MonitoringViewModel(
                                             try {
                                                 val snapshot = EthernetPortMonitor.read(
                                                     ip = device.ipAddress,
-                                                    community = community,
+                                                    community = info.communityUsed,
                                                     port = snmpPort,
                                                     version = info.snmpVersion,
                                                     timeoutMs = 900
