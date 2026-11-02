@@ -81,12 +81,6 @@ fun DeviceSnmpDetailsScreen(
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(device.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                         Text("IP: ${device.ipAddress}", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
-                        if (!isMimosa) {
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                Text(if (isArabic) "المحطات المتصلة" else "Connected stations", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                                Text(info?.connectedClientsCount?.toString() ?: "—", color = TealAccent, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                            }
-                        }
                     }
                 }
 
