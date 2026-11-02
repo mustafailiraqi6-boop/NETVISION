@@ -741,8 +741,8 @@ private fun SwitchPortsDetailPage(
             Text("IP: ${device.ipAddress}", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
             Spacer(Modifier.height(12.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(if (isArabic) "المنافذ الفيزيائية" else "Physical ports", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
-                Text("${snapshot?.connectedCount ?: 0}/${snapshot?.totalCount ?: 0} ${if (isArabic) "متصل" else "connected"}", color = StatusGreen)
+                Text(if (isArabic) "عدد المنافذ" else "Port count", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                Text("${snapshot?.totalCount ?: 0}/${snapshot?.connectedCount ?: 0}", color = StatusGreen)
             }
             Spacer(Modifier.height(10.dp))
             if (snapshot == null || snapshot.ports.isEmpty()) {
@@ -759,6 +759,13 @@ private fun SwitchPortsDetailPage(
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                                     Box(Modifier.size(12.dp).background(if (connected) StatusGreen else StatusRed, CircleShape))
                                 }
+                            }
+                            port.alias?.let { comment ->
+                                Text(
+                                    (if (isArabic) "التعليق: " else "Comment: ") + comment,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 12.sp
+                                )
                             }
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                 Text(if (port.speedBps != null && port.speedBps > 0) if (port.speedBps >= 1_000_000_000L) String.format(Locale.US, "%.1f Gbps", port.speedBps / 1_000_000_000.0) else "${port.speedBps / 1_000_000} Mbps" else "Rate: —", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
