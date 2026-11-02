@@ -63,15 +63,15 @@ object EthernetPortMonitor {
         val rows = mutableListOf<EthernetPortSnapshot>()
         var cursor = IF_NAME
         val seenIndexes = mutableSetOf<Int>()
-        repeat(128) {
+        for (step in 0 until 128) {
             val next = SnmpV2Client.querySingleOid(
                 ip, community, port, SnmpV2Client.encodeOidString(cursor),
                 "ifName.walk", versionToUse, timeoutMs, useGetNext = true
             )
-            val responseOid = next.responseOid ?: return@repeat
-            if (!next.isSuccess || !responseOid.startsWith("$IF_NAME.")) return@repeat
-            val index = responseOid.removePrefix("$IF_NAME.").toIntOrNull() ?: return@repeat
-            if (!seenIndexes.add(index)) return@repeat
+            val responseOid = next.responseOid ?: break
+            if (!next.isSuccess || !responseOid.startsWith("$IF_NAME.")) break
+            val index = responseOid.removePrefix("$IF_NAME.").toIntOrNull() ?: break
+            if (!seenIndexes.add(index)) break
             cursor = responseOid
             val name = next.stringValue?.trim().orEmpty()
             val lower = name.lowercase()
