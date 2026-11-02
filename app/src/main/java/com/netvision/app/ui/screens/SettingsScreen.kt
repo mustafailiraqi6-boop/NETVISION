@@ -143,10 +143,17 @@ fun SettingsScreen(
         )
     }
 
-    var communityInput by remember(appSettings.snmpCommunity) { mutableStateOf(appSettings.snmpCommunity) }
-    var snmpPortInput by remember(appSettings.snmpPort) { mutableStateOf(appSettings.snmpPort.toString()) }
+    var communityInput by remember { mutableStateOf("") }
     var isCommunityVisible by remember { mutableStateOf(false) }
-
+    val communityList = appSettings.snmpCommunities
+    fun addCommunity() {
+        val value = communityInput.trim()
+        if (value.isNotEmpty() && value !in communityList) {
+            viewModel.updateSnmpCommunities(communityList + value)
+            communityInput = ""
+        }
+    }
+    var snmpPortInput by remember(appSettings.snmpPort) { mutableStateOf(appSettings.snmpPort.toString()) }
     var defaultSubnet by remember(appSettings.defaultSubnet) { mutableStateOf(appSettings.defaultSubnet) }
     var scanTimeoutMs by remember(appSettings.scanTimeoutMs) { mutableStateOf(appSettings.scanTimeoutMs.toString()) }
 
@@ -192,29 +199,38 @@ fun SettingsScreen(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                // SNMP Community String Input with Password Mask
                 OutlinedTextField(
                     value = communityInput,
-                    onValueChange = {
-                        communityInput = it
-                        viewModel.updateSnmpCommunity(it)
-                    },
+                    onValueChange = { communityInput = it },
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text(if (isArabic) "اسم مجتمع SNMP (Community)" else "SNMP Community String") },
                     singleLine = true,
                     visualTransformation = if (isCommunityVisible) VisualTransformation.None else PasswordVisualTransformation(),
                     trailingIcon = {
-                        IconButton(onClick = { isCommunityVisible = !isCommunityVisible }) {
-                            Icon(
-                                imageVector = if (isCommunityVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-                                contentDescription = "Toggle Visibility",
-                                tint = CyanAccent
-                            )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(onClick = { isCommunityVisible = !isCommunityVisible }) {
+                                Icon(if (isCommunityVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff, contentDescription = null, tint = CyanAccent)
+                            }
+                            IconButton(onClick = { addCommunity() }, enabled = communityInput.isNotBlank()) {
+                                Icon(Icons.Default.Add, contentDescription = if (isArabic) "إضافة" else "Add", tint = CyanAccent)
+                            }
                         }
                     },
                     shape = RoundedCornerShape(10.dp)
                 )
-
+                Text(
+                    text = if (isArabic) "المجاميع المحفوظة (تُجرّب بالترتيب):" else "Saved communities (tried in order):",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                communityList.forEachIndexed { index, community ->
+                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(text = "${index + 1}. " + if (isCommunityVisible) community else "••••••", modifier = Modifier.weight(1f), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface)
+                        IconButton(onClick = { if (index > 0) viewModel.updateSnmpCommunities(communityList.toMutableList().also { val item = it.removeAt(index); it.add(index - 1, item) }) }, enabled = index > 0) { Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Move up") }
+                        IconButton(onClick = { if (index < communityList.lastIndex) viewModel.updateSnmpCommunities(communityList.toMutableList().also { val item = it.removeAt(index); it.add(index + 1, item) }) }, enabled = index < communityList.lastIndex) { Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Move down") }
+                        IconButton(onClick = { if (communityList.size > 1) viewModel.updateSnmpCommunities(communityList - community) }) { Icon(Icons.Default.DeleteOutline, contentDescription = if (isArabic) "حذف" else "Remove", tint = MaterialTheme.colorScheme.error) }
+                    }
+                }
                 Spacer(modifier = Modifier.height(12.dp))
 
                 // SNMP Version Selection
