@@ -33,7 +33,7 @@ data class EthernetMonitoringSnapshot(
     // Physical Ethernet and SFP ports; suffixes such as ether4_UNMS_SERVER are valid.
     val totalCount: Int get() = ports.count {
         val name = it.name.lowercase()
-        Regex("^ether[0-9]+(?:_.*)?$").matches(name) ||
+        Regex("^ether[0-9]+(?:[-_ ].*)?$").matches(name) ||
             Regex("^sfp(?:[-_].*)?$").matches(name) ||
             name.startsWith("sfp")
     }
@@ -75,7 +75,7 @@ object EthernetPortMonitor {
             cursor = responseOid
             val name = next.stringValue?.trim().orEmpty()
             val lower = name.lowercase()
-            val isPhysicalPort = Regex("^ether[0-9]+(?:_.*)?$").matches(lower) ||
+            val isPhysicalPort = Regex("^ether[0-9]+(?:[-_ ].*)?$").matches(lower) ||
                 lower.startsWith("sfp") || lower.startsWith("combo")
             if (!isPhysicalPort) continue
 
