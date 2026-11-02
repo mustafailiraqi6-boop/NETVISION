@@ -788,7 +788,8 @@ object SnmpV2Client {
         val errorMessage: String? = null,
         val networkInterface: String = "Default",
         val latencyMs: Long = 0,
-        val versionUsed: String = "v2c"
+        val versionUsed: String = "v2c",
+        val responseOid: String? = null
     )
 
     fun querySingleOid(
@@ -799,11 +800,13 @@ object SnmpV2Client {
         oidName: String,
         version: String = "v2c",
         timeoutMs: Int = 1000,
-        attemptNumber: Int = 1
+        attemptNumber: Int = 1,
+        useGetNext: Boolean = false
     ): SingleOidResult {
         val reqId = requestIdCounter.incrementAndGet()
         val versionInt = if (version.equals("v1", ignoreCase = true)) 0 else 1
-        val packetBytes = buildGetRequest(reqId, community, oidBytes, versionInt)
+        val packetBytes = if (useGetNext) buildGetNextRequest(reqId, community, oidBytes, versionInt)
+            else buildGetRequest(reqId, community, oidBytes, versionInt)
         val maskedComm = maskCommunity(community)
 
         var timeSent = 0L
@@ -872,7 +875,8 @@ object SnmpV2Client {
                         intValue = parsed.intValue,
                         networkInterface = ifaceName,
                         latencyMs = latency,
-                        versionUsed = parsed.versionDecoded
+                        versionUsed = parsed.versionDecoded,
+                        responseOid = parsed.responseOid
                     )
                 } else {
                     return SingleOidResult(
