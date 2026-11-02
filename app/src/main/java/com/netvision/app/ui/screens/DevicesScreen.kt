@@ -461,7 +461,7 @@ fun DevicesScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        listOf(Manufacturer.MIKROTIK, Manufacturer.UBIQUITI, Manufacturer.OTHER).forEach { vendor ->
+                        listOf(Manufacturer.MIKROTIK, Manufacturer.UBIQUITI, Manufacturer.MIMOSA, Manufacturer.OTHER).forEach { vendor ->
                             FilterChip(
                                 selected = selectedVendor == vendor,
                                 onClick = { selectedVendor = vendor },
@@ -734,6 +734,7 @@ fun SavedDeviceCardItem(
         Manufacturer.UBIQUITI -> ElectricBlue
         Manufacturer.MIKROTIK -> CyanAccent
         Manufacturer.CISCO -> Color(0xFF38BDF8)
+        Manufacturer.MIMOSA -> Color(0xFF0D9488)
         Manufacturer.OTHER -> Color(0xFFA78BFA)
         Manufacturer.GENERIC -> TextMutedDark
     }

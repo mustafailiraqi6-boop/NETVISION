@@ -14,6 +14,7 @@ enum class DeviceType(val labelEn: String, val labelAr: String) {
 enum class Manufacturer(val displayName: String) {
     MIKROTIK("MikroTik"),
     UBIQUITI("Ubiquiti (UBNT)"),
+    MIMOSA("Mimosa Networks"),
     CISCO("Cisco"),
     OTHER("Other"),
     GENERIC("Generic / Other")

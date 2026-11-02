@@ -45,7 +45,16 @@ data class SnmpDeviceInfo(
     val latencyMs: Long = 0,
     val networkInterface: String = "VPN (Auto)",
     val snmpVersion: String = "v2c",
-    val negotiationSummary: String? = null
+    val negotiationSummary: String? = null,
+    val mimosaLinkUptimeTicks: Long? = null,
+    val mimosaSignalChain1Dbm: Int? = null,
+    val mimosaSignalChain2Dbm: Int? = null,
+    val mimosaPhyTxStream1Mbps: Int? = null,
+    val mimosaPhyTxStream2Mbps: Int? = null,
+    val mimosaPhyRxStream1Mbps: Int? = null,
+    val mimosaPhyRxStream2Mbps: Int? = null,
+    val mimosaTrafficTxKbps: Long? = null,
+    val mimosaTrafficRxKbps: Long? = null
 )
 
 data class UbiquitiStationInfo(
@@ -318,6 +327,24 @@ object SnmpV2Client {
                     (((memoryTotal - memoryFree).toDouble() / memoryTotal) * 100).toInt().coerceIn(0, 100)
                 } else null
 
+                val isMimosa = descrRes.stringValue?.contains("MIMOSA", true) == true ||
+                    sysObjRes.stringValue?.contains("43356") == true
+                fun mimosaInt(oid: String, name: String): Int? =
+                    querySingleOid(targetIp, community, port, encodeOidString(oid), name, currentVersion, 700, attemptNumber)
+                        .takeIf { it.isSuccess }?.intValue
+                fun mimosaLong(oid: String, name: String): Long? =
+                    querySingleOid(targetIp, community, port, encodeOidString(oid), name, currentVersion, 700, attemptNumber)
+                        .takeIf { it.isSuccess }?.longValue
+                val mimosaLinkUptime = if (isMimosa) mimosaLong("1.3.6.1.4.1.43356.2.1.2.3.4.0", "mimosaLinkUptime") else null
+                val mimosaSignal1 = if (isMimosa) mimosaInt("1.3.6.1.4.1.43356.2.1.2.6.1.1.3.1", "mimosaRxPower1") else null
+                val mimosaSignal2 = if (isMimosa) mimosaInt("1.3.6.1.4.1.43356.2.1.2.6.1.1.3.2", "mimosaRxPower2") else null
+                val mimosaPhyTx1 = if (isMimosa) mimosaInt("1.3.6.1.4.1.43356.2.1.2.6.2.1.2.1", "mimosaPhyTx1") else null
+                val mimosaPhyTx2 = if (isMimosa) mimosaInt("1.3.6.1.4.1.43356.2.1.2.6.2.1.2.2", "mimosaPhyTx2") else null
+                val mimosaPhyRx1 = if (isMimosa) mimosaInt("1.3.6.1.4.1.43356.2.1.2.6.2.1.5.1", "mimosaPhyRx1") else null
+                val mimosaPhyRx2 = if (isMimosa) mimosaInt("1.3.6.1.4.1.43356.2.1.2.6.2.1.5.2", "mimosaPhyRx2") else null
+                val mimosaTrafficTx = if (isMimosa) mimosaLong("1.3.6.1.4.1.43356.2.1.2.7.1.0", "mimosaTrafficTx") else null
+                val mimosaTrafficRx = if (isMimosa) mimosaLong("1.3.6.1.4.1.43356.2.1.2.7.2.0", "mimosaTrafficRx") else null
+
                 val totalLatency = System.currentTimeMillis() - totalStart
                 val descr = descrRes.stringValue
                 val sysObjId = sysObjRes.stringValue
@@ -360,7 +387,16 @@ object SnmpV2Client {
                         latencyMs = totalLatency,
                         networkInterface = lastInterface,
                         snmpVersion = currentVersion,
-                        negotiationSummary = negSummary
+                        negotiationSummary = negSummary,
+                        mimosaLinkUptimeTicks = mimosaLinkUptime,
+                        mimosaSignalChain1Dbm = mimosaSignal1,
+                        mimosaSignalChain2Dbm = mimosaSignal2,
+                        mimosaPhyTxStream1Mbps = mimosaPhyTx1,
+                        mimosaPhyTxStream2Mbps = mimosaPhyTx2,
+                        mimosaPhyRxStream1Mbps = mimosaPhyRx1,
+                        mimosaPhyRxStream2Mbps = mimosaPhyRx2,
+                        mimosaTrafficTxKbps = mimosaTrafficTx,
+                        mimosaTrafficRxKbps = mimosaTrafficRx
                     )
                 )
             } else {
