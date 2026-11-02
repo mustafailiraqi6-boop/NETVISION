@@ -13,6 +13,7 @@ import kotlinx.coroutines.withContext
 data class EthernetPortSnapshot(
     val index: Int,
     val name: String,
+    val alias: String? = null,
     val adminStatus: Int?,
     val operStatus: Int?,
     val speedBps: Long?,
@@ -36,6 +37,7 @@ data class EthernetMonitoringSnapshot(
 object EthernetPortMonitor {
     private const val IF_NUMBER = "1.3.6.1.2.1.2.1.0"
     private const val IF_NAME = "1.3.6.1.2.1.31.1.1.1.1"
+    private const val IF_ALIAS = "1.3.6.1.2.1.31.1.1.1.18"
     private const val IF_SPEED = "1.3.6.1.2.1.2.2.1.5"
     private const val IF_ADMIN = "1.3.6.1.2.1.2.2.1.7"
     private const val IF_OPER = "1.3.6.1.2.1.2.2.1.8"
@@ -68,6 +70,7 @@ object EthernetPortMonitor {
 
             // Keep the six per-port telemetry reads together, but avoid launching
             // requests for every interface at the same time.
+            val alias = get(ip, community, port, "$IF_ALIAS.$index", "ifAlias.$index", versionToUse, timeoutMs).stringValue?.trim()?.takeIf { it.isNotBlank() }
             val values = coroutineScope {
                 listOf(
                     async { get(ip, community, port, "$IF_ADMIN.$index", "ifAdminStatus.$index", versionToUse, timeoutMs).longValue?.toInt() },
@@ -79,7 +82,7 @@ object EthernetPortMonitor {
                 ).awaitAll()
             }
             rows += EthernetPortSnapshot(
-                index, name,
+                index, name, alias,
                 values[0] as Int?, values[1] as Int?, values[2] as Long?,
                 values[3] as Long?, values[4] as Long?,
                 linkDowns = values[5] as Long?
