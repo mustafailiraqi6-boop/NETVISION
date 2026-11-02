@@ -30,10 +30,12 @@ data class EthernetMonitoringSnapshot(
     val error: String? = null
 ) {
     val connectedCount: Int get() = ports.count { it.operStatus == 1 }
-    // Match the tested Termux snmpwalk filter: ether followed by digits, or SFP interfaces.
+    // Physical Ethernet and SFP ports; suffixes such as ether4_UNMS_SERVER are valid.
     val totalCount: Int get() = ports.count {
         val name = it.name.lowercase()
-        name.matches(Regex("ether[0-9]+")) || name.startsWith("sfp")
+        Regex("^ether[0-9]+(?:_.*)?$").matches(name) ||
+            Regex("^sfp(?:[-_].*)?$").matches(name) ||
+            name.startsWith("sfp")
     }
 }
 
@@ -55,20 +57,27 @@ object EthernetPortMonitor {
         timeoutMs: Int = 900
     ): EthernetMonitoringSnapshot = withContext(Dispatchers.IO) {
         val versionToUse = if (version.equals("v1", true)) "v1" else "v2c"
-        val countResult = get(ip, community, port, IF_NUMBER, "ifNumber", versionToUse, timeoutMs)
-        val count = countResult.intValue ?: countResult.longValue?.toInt()
-            ?: return@withContext EthernetMonitoringSnapshot(emptyList(), supported = false, error = "IF-MIB غير مدعوم")
-        if (count <= 0) return@withContext EthernetMonitoringSnapshot(emptyList(), supported = false, error = "لا توجد واجهات")
-
-        // Read interface names sequentially. Large parallel SNMP bursts can cause
-        // MikroTik devices to drop replies, producing an incomplete port list.
+        // Walk the ifName column with GETNEXT. This discovers the actual ifIndex
+        // values and does not assume that table indexes are contiguous or that every
+        // individual GET will succeed.
         val rows = mutableListOf<EthernetPortSnapshot>()
-        for (index in 1..count.coerceAtMost(256)) {
-            val name = get(ip, community, port, "$IF_NAME.$index", "ifName.$index", versionToUse, timeoutMs).stringValue?.trim()
-                ?: get(ip, community, port, "1.3.6.1.2.1.2.2.1.2.$index", "ifDescr.$index", versionToUse, timeoutMs).stringValue?.trim()
-                ?: continue
+        var cursor = IF_NAME
+        val seenIndexes = mutableSetOf<Int>()
+        repeat(128) {
+            val next = SnmpV2Client.querySingleOid(
+                ip, community, port, SnmpV2Client.encodeOidString(cursor),
+                "ifName.walk", versionToUse, timeoutMs, useGetNext = true
+            )
+            val responseOid = next.responseOid ?: return@repeat
+            if (!next.isSuccess || !responseOid.startsWith("$IF_NAME.")) return@repeat
+            val index = responseOid.removePrefix("$IF_NAME.").toIntOrNull() ?: return@repeat
+            if (!seenIndexes.add(index)) return@repeat
+            cursor = responseOid
+            val name = next.stringValue?.trim().orEmpty()
             val lower = name.lowercase()
-            if (!(lower.startsWith("ether") || lower.startsWith("sfp") || lower.startsWith("combo"))) continue
+            val isPhysicalPort = Regex("^ether[0-9]+(?:_.*)?$").matches(lower) ||
+                lower.startsWith("sfp") || lower.startsWith("combo")
+            if (!isPhysicalPort) return@repeat
 
             // Keep the six per-port telemetry reads together, but avoid launching
             // requests for every interface at the same time.
