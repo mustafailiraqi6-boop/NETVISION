@@ -219,7 +219,14 @@ class MonitoringViewModel(
 
                                         // Read physical Ethernet/SFP interfaces for MikroTik devices.
                                         // The collector uses SnmpV2Client, which binds each UDP socket to VPN.
-                                        if (manufacturer == com.netvision.app.models.Manufacturer.MIKROTIK) {
+                                        if (
+                                            device.manufacturer == com.netvision.app.models.Manufacturer.MIKROTIK ||
+                                            manufacturer == com.netvision.app.models.Manufacturer.MIKROTIK ||
+                                            info.model?.contains("MikroTik", ignoreCase = true) == true ||
+                                            info.sysDescr?.contains("MikroTik", ignoreCase = true) == true ||
+                                            device.model.contains("CRS", ignoreCase = true) ||
+                                            device.model.contains("RouterBOARD", ignoreCase = true)
+                                        ) {
                                             try {
                                                 val snapshot = EthernetPortMonitor.read(
                                                     ip = device.ipAddress,
