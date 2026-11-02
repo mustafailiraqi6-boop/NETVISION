@@ -41,6 +41,7 @@ object EthernetPortMonitor {
     private const val IF_OPER = "1.3.6.1.2.1.2.2.1.8"
     private const val IF_HC_IN = "1.3.6.1.2.1.31.1.1.1.6"
     private const val IF_HC_OUT = "1.3.6.1.2.1.31.1.1.1.10"
+    private const val MIKROTIK_LINK_DOWNS = "1.3.6.1.4.1.14988.1.1.14.1.1.90"
 
     suspend fun read(
         ip: String,
@@ -70,10 +71,11 @@ object EthernetPortMonitor {
                             async { get(ip, community, port, "$IF_OPER.$index", "ifOperStatus.$index", versionToUse, timeoutMs).longValue?.toInt() },
                             async { get(ip, community, port, "$IF_SPEED.$index", "ifSpeed.$index", versionToUse, timeoutMs).longValue },
                             async { get(ip, community, port, "$IF_HC_IN.$index", "ifHCInOctets.$index", versionToUse, timeoutMs).longValue },
-                            async { get(ip, community, port, "$IF_HC_OUT.$index", "ifHCOutOctets.$index", versionToUse, timeoutMs).longValue }
+                            async { get(ip, community, port, "$IF_HC_OUT.$index", "ifHCOutOctets.$index", versionToUse, timeoutMs).longValue },
+                            async { get(ip, community, port, "$MIKROTIK_LINK_DOWNS.$index", "linkDowns.$index", versionToUse, timeoutMs).longValue }
                         ).awaitAll()
                     }
-                    EthernetPortSnapshot(index, name, values[0] as Int?, values[1] as Int?, values[2] as Long?, values[3] as Long?, values[4] as Long?)
+                    EthernetPortSnapshot(index, name, values[0] as Int?, values[1] as Int?, values[2] as Long?, values[3] as Long?, values[4] as Long?, linkDowns = values[5] as Long?)
                 }
             }.awaitAll().filterNotNull()
         }
