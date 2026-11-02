@@ -443,6 +443,7 @@ fun MonitoringScreen(
                     isSelected = isSelected,
                     isSnmpActive = isSnmpActive,
                     snmpInfo = devSnmp,
+                    ethernetSnapshot = uiState.ethernetPortsByDevice[device.id],
                     isArabic = isArabic,
                     onClick = { viewModel.selectDevice(device.id) },
                     onViewDetails = { if (device.deviceType == DeviceType.SWITCH || device.name.contains("switch", true) || device.model.contains("CRS", true) || device.model.contains("switch", true)) selectedSwitchId = device.id else onViewDeviceDetails(device.id) }
@@ -459,6 +460,7 @@ fun DeviceMonitoringCard(
     isSelected: Boolean,
     isSnmpActive: Boolean,
     snmpInfo: com.netvision.app.monitoring.SnmpDeviceInfo?,
+    ethernetSnapshot: EthernetMonitoringSnapshot?,
     isArabic: Boolean,
     onClick: () -> Unit,
     onViewDetails: () -> Unit
@@ -556,6 +558,39 @@ fun DeviceMonitoringCard(
                         fontSize = 10.sp,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                     )
+                }
+            }
+
+            if (isSwitchCard && snmpInfo?.isSuccess == true) {
+                val switchMetrics = buildList {
+                    add(Triple(if (isArabic) "المنافذ الفيزيائية" else "Physical ports", ethernetSnapshot?.totalCount?.toString() ?: "—", 0))
+                    add(Triple("CPU", snmpInfo.cpuLoadPercent?.let { "$it%" } ?: "—", 1))
+                    snmpInfo.mikrotikVoltageDecivolts?.let {
+                        add(Triple(if (isArabic) "الفولتية" else "Voltage", String.format(Locale.US, "%.1f V", it / 10.0), 2))
+                    }
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(if (isArabic) "معلومات السويج" else "Switch information",
+                        color = MaterialTheme.colorScheme.onSurface, fontSize = 12.sp,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        switchMetrics.forEach { (label, value, colorIndex) ->
+                            val colors = metricPalette[colorIndex]
+                            Column(Modifier.weight(1f).background(colors.first, RoundedCornerShape(9.dp)).padding(horizontal = 7.dp, vertical = 7.dp),
+                                verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                Text(label, fontSize = 9.sp, color = colors.second, maxLines = 1)
+                                Text(value, fontSize = 14.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = colors.second)
+                            }
+                        }
+                        if (switchMetrics.size < 3) repeat(3 - switchMetrics.size) { Spacer(Modifier.weight(1f)) }
+                    }
+                    val durationBackground = if (isDark) Color(0xFF34264F) else Color(0xFFEEE8FF)
+                    val durationForeground = if (isDark) Color(0xFFD8C6FF) else Color(0xFF6542A6)
+                    Row(Modifier.fillMaxWidth().background(durationBackground, RoundedCornerShape(9.dp)).padding(horizontal = 10.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        Text(if (isArabic) "مدة التشغيل" else "Uptime", color = durationForeground, fontSize = 11.sp)
+                        Text(snmpInfo.uptimeFormatted ?: "—", color = durationForeground, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, fontSize = 11.sp)
+                    }
                 }
             }
 
