@@ -31,6 +31,8 @@ import com.netvision.app.models.DeviceFolder
 import com.netvision.app.models.DeviceStatus
 import com.netvision.app.models.Manufacturer
 import com.netvision.app.models.NetworkDevice
+import com.netvision.app.monitoring.EthernetMonitoringSnapshot
+import com.netvision.app.monitoring.EthernetPortSnapshot
 import com.netvision.app.ui.theme.*
 import com.netvision.app.ui.viewmodels.MonitoringViewModel
 import java.text.SimpleDateFormat
@@ -404,6 +406,7 @@ fun MonitoringScreen(
                     isSelected = isSelected,
                     isSnmpActive = isSnmpActive,
                     snmpInfo = devSnmp,
+                    ethernetSnapshot = uiState.ethernetPortsByDevice[device.id],
                     isArabic = isArabic,
                     onClick = { viewModel.selectDevice(device.id) },
                     onViewDetails = { onViewDeviceDetails(device.id) }
@@ -420,11 +423,13 @@ fun DeviceMonitoringCard(
     isSelected: Boolean,
     isSnmpActive: Boolean,
     snmpInfo: com.netvision.app.monitoring.SnmpDeviceInfo?,
+    ethernetSnapshot: EthernetMonitoringSnapshot? = null,
     isArabic: Boolean,
     onClick: () -> Unit,
     onViewDetails: () -> Unit
 ) {
     val context = LocalContext.current
+    var expandedPortIndex by remember(device.id) { mutableStateOf<Int?>(null) }
 
     val isOnline = device.status == DeviceStatus.ONLINE
     val statusColor = if (isOnline) StatusGreen else StatusRed
@@ -568,6 +573,52 @@ fun DeviceMonitoringCard(
                     ) {
                         Text(if (isArabic) "مدة تشغيل السكتر" else "Sector uptime", color = durationForeground, fontSize = 11.sp)
                         Text(snmpInfo.uptimeFormatted ?: "—", color = durationForeground, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, fontSize = 11.sp)
+                    }
+                }
+            }
+
+            if (isMikroTikSector && ethernetSnapshot != null) {
+                val ports = ethernetSnapshot.ports
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        Text(if (isArabic) "منافذ Ethernet" else "Ethernet ports", fontSize = 13.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                        Text("${ethernetSnapshot.connectedCount}/${ethernetSnapshot.totalCount} ${if (isArabic) "متصل" else "connected"}", fontSize = 11.sp, color = StatusGreen)
+                    }
+                    if (ports.isEmpty()) {
+                        Text(ethernetSnapshot.error ?: if (isArabic) "لا توجد بيانات منافذ" else "No port data", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    } else {
+                        ports.chunked(2).forEach { pair ->
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                pair.forEach { port ->
+                                    val connected = port.operStatus == 1
+                                    val accent = if (connected) StatusGreen else StatusRed
+                                    val tileBg = accent.copy(alpha = if (isDark) 0.16f else 0.09f)
+                                    Column(
+                                        Modifier.weight(1f).background(tileBg, RoundedCornerShape(10.dp)).clickable {
+                                            expandedPortIndex = if (expandedPortIndex == port.index) null else port.index
+                                        }.padding(9.dp),
+                                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                            Text(port.name, fontSize = 12.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = accent)
+                                            Text(if (connected) (if (isArabic) "متصل" else "UP") else if (port.operStatus == 2) (if (isArabic) "مفصول" else "DOWN") else "—", fontSize = 10.sp, color = accent)
+                                        }
+                                        Text(if (port.speedBps != null && port.speedBps > 0) "${if (port.speedBps >= 1_000_000_000L) String.format(Locale.US, "%.1f Gbps", port.speedBps / 1_000_000_000.0) else "${port.speedBps / 1_000_000} Mbps"}" else "Rate: —", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                            Text("TX ${port.txMbps?.let { String.format(Locale.US, "%.2f", it) } ?: "—"} Mbps", fontSize = 9.sp, color = Color(0xFF3B82F6))
+                                            Text("RX ${port.rxMbps?.let { String.format(Locale.US, "%.2f", it) } ?: "—"} Mbps", fontSize = 9.sp, color = Color(0xFF06B6D4))
+                                        }
+                                        if (expandedPortIndex == port.index) {
+                                            HorizontalDivider(color = accent.copy(alpha = 0.3f))
+                                            Text("TX total: ${port.txOctets?.let { String.format(Locale.US, "%.2f GB", it / 1_000_000_000.0) } ?: "—"}", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurface)
+                                            Text("RX total: ${port.rxOctets?.let { String.format(Locale.US, "%.2f GB", it / 1_000_000_000.0) } ?: "—"}", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurface)
+                                            Text(if (isArabic) "مرات انقطاع الرابط: غير متاح" else "Link downs: unavailable", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                    }
+                                }
+                                if (pair.size == 1) Spacer(Modifier.weight(1f))
+                            }
+                        }
                     }
                 }
             }
