@@ -202,6 +202,11 @@ class MonitoringViewModel(
                                                 com.netvision.app.models.Manufacturer.UBIQUITI
                                             info.mikrotikCcqPercent != null || info.mikrotikVoltageDecivolts != null ->
                                                 com.netvision.app.models.Manufacturer.MIKROTIK
+                                            info.sysDescr?.contains("Mimosa", ignoreCase = true) == true ||
+                                                info.model?.contains("Mimosa", ignoreCase = true) == true ||
+                                                info.mimosaLinkUptimeTicks != null ||
+                                                info.mimosaSignalChain1Dbm != null ->
+                                                com.netvision.app.models.Manufacturer.MIMOSA
                                             else -> null
                                         }
                                         if (manufacturer != null) {

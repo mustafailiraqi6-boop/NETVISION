@@ -128,15 +128,26 @@ class RemoteNetworkScanner(
         var snmpSysName: String? = null
         var snmpUptime: String? = null
 
-        val snmpRes = NetVisionApplication.instance.settingsRepository.queryDeviceInfo(targetIp, NetVisionApplication.instance.settingsRepository.getSettings().snmpPort, timeoutMs = 500)
-        if (snmpRes.isSuccess) {
-            val info = snmpRes.getOrNull()
-            if (info != null && info.isSuccess) {
-                isOnline = true
-                snmpSysDescr = info.sysDescr
-                snmpSysName = info.sysName
-                snmpUptime = info.uptimeFormatted
-            }
+        val settingsRepository = NetVisionApplication.instance.settingsRepository
+        val snmpPort = settingsRepository.getSettings().snmpPort
+        var snmpInfo = settingsRepository.queryDeviceInfo(targetIp, snmpPort, timeoutMs = 500)
+            .getOrNull()?.takeIf { it.isSuccess }
+
+        // Mimosa C5c commonly uses the vendor community "mimosa".
+        // Try it as a fallback without changing the user's saved community list.
+        if (snmpInfo == null) {
+            snmpInfo = SnmpV2Client.queryDeviceInfo(
+                targetIp = targetIp,
+                community = "mimosa",
+                port = snmpPort,
+                timeoutMs = 700
+            ).getOrNull()?.takeIf { it.isSuccess }
+        }
+        if (snmpInfo != null) {
+            isOnline = true
+            snmpSysDescr = snmpInfo.sysDescr
+            snmpSysName = snmpInfo.sysName
+            snmpUptime = snmpInfo.uptimeFormatted
         }
 
         if (!isOnline) {
@@ -164,6 +175,7 @@ class RemoteNetworkScanner(
             !hostname.isNullOrBlank() -> hostname
             vendor == Manufacturer.MIKROTIK -> "MikroTik ($targetIp)"
             vendor == Manufacturer.UBIQUITI -> "Ubiquiti ($targetIp)"
+            vendor == Manufacturer.MIMOSA -> "Mimosa ($targetIp)"
             else -> "Host ($targetIp)"
         }
 
@@ -223,7 +235,13 @@ class RemoteNetworkScanner(
             return Triple(Manufacturer.MIKROTIK, DeviceType.ROUTER, model)
         }
 
-        // 3. Cisco
+        // 3. Mimosa wireless radios (C5 / C5c / B5 family)
+        if (descr.contains("mimosa") || host.contains("mimosa")) {
+            return Triple(Manufacturer.MIMOSA, DeviceType.SECTOR_AP,
+                snmpDescr?.takeIf { it.isNotBlank() }?.take(32) ?: "Mimosa Wireless")
+        }
+
+        // 4. Cisco
         if (descr.contains("cisco") || host.contains("cisco") || macLower.startsWith("00:1e:13")) {
             return Triple(Manufacturer.CISCO, DeviceType.SWITCH, "Catalyst / IOS")
         }
