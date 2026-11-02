@@ -365,7 +365,8 @@ fun ScannerScreen(
     if (deviceToAdd != null) {
         val target = deviceToAdd!!
         var selectedFolderId by remember(target.id) { mutableStateOf(DeviceFolderEntity.DEFAULT_FOLDER_ID) }
-        var selectedDeviceType by remember(target.id) { mutableStateOf<DeviceType?>(null) }
+        var selectedManufacturer by remember(target.id) { mutableStateOf(target.manufacturer) }
+        var selectedDeviceType by remember(target.id) { mutableStateOf(target.deviceType) }
 
         AlertDialog(
             onDismissRequest = { deviceToAdd = null },
@@ -391,32 +392,52 @@ fun ScannerScreen(
                     Spacer(modifier = Modifier.height(4.dp))
 
                     Text(
-                        text = if (isArabic) "ما نوع الجهاز؟" else "Device Type",
+                        text = if (isArabic) "الشركة المصنعة:" else "Manufacturer:",
                         fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontWeight = androidx.compose.ui.text.font.FontWeight.Medium
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-
-                    Row(
+                    LazyRow(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        listOf(
-                            DeviceType.SWITCH,
-                            DeviceType.SECTOR_AP,
-                            DeviceType.ROUTER
-                        ).forEach { type ->
+                        items(listOf(Manufacturer.MIKROTIK, Manufacturer.UBIQUITI, Manufacturer.OTHER)) { vendor ->
                             FilterChip(
-                                modifier = Modifier.weight(1f),
+                                selected = selectedManufacturer == vendor,
+                                onClick = { selectedManufacturer = vendor },
+                                label = {
+                                    Text(
+                                        if (vendor == Manufacturer.OTHER) {
+                                            if (isArabic) "أخرى" else "Other"
+                                        } else vendor.displayName,
+                                        fontSize = 11.sp
+                                    )
+                                }
+                            )
+                        }
+                    }
+
+                    Text(
+                        text = if (isArabic) "نوع الجهاز:" else "Device Type:",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    LazyRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        items(listOf(
+                            DeviceType.ROUTER,
+                            DeviceType.SECTOR_AP,
+                            DeviceType.SWITCH,
+                            DeviceType.CLIENT_DEVICE,
+                            DeviceType.OTHER
+                        )) { type ->
+                            FilterChip(
                                 selected = selectedDeviceType == type,
                                 onClick = { selectedDeviceType = type },
                                 label = {
                                     Text(
-                                        text = when (type) {
-                                            DeviceType.SWITCH -> if (isArabic) "سويج" else "Switch"
-                                            DeviceType.SECTOR_AP -> if (isArabic) "سكتر" else "Sector"
-                                            else -> if (isArabic) "راوتر" else "Router"
-                                        },
+                                        if (isArabic) type.labelAr else type.labelEn,
                                         fontSize = 11.sp
                                     )
                                 }
@@ -462,7 +483,13 @@ fun ScannerScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        viewModel.addDeviceToMonitoring(target, selectedFolderId)
+                        viewModel.addDeviceToMonitoring(
+                            target.copy(
+                                manufacturer = selectedManufacturer,
+                                deviceType = selectedDeviceType
+                            ),
+                            selectedFolderId
+                        )
                         deviceToAdd = null
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = CyanAccent, contentColor = NavyDark)
