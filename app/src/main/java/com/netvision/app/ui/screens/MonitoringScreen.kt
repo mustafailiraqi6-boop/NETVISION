@@ -633,12 +633,16 @@ fun DeviceMonitoringCard(
                         }
                     }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        val colors = metricPalette[3]
-                        Column(Modifier.weight(1f).background(colors.first, RoundedCornerShape(9.dp)).padding(horizontal = 7.dp, vertical = 7.dp)) {
-                            Text(if (isArabic) "الإشارة 2" else "Signal 2", fontSize = 9.sp, color = colors.second)
-                            Text(snmpInfo.mimosaSignalChain2Dbm?.let { "$it dBm" } ?: "—", fontSize = 13.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = colors.second)
+                        val signalColors = metricPalette[3]
+                        Column(Modifier.weight(1f).background(signalColors.first, RoundedCornerShape(9.dp)).padding(horizontal = 7.dp, vertical = 7.dp)) {
+                            Text(if (isArabic) "الإشارة 2" else "Signal 2", fontSize = 9.sp, color = signalColors.second)
+                            Text(snmpInfo.mimosaSignalChain2Dbm?.let { "$it dBm" } ?: "—", fontSize = 13.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = signalColors.second)
                         }
-                        Spacer(Modifier.weight(2f))
+                        val ethernetColors = metricPalette[0]
+                        Column(Modifier.weight(1f).background(ethernetColors.first, RoundedCornerShape(9.dp)).padding(horizontal = 7.dp, vertical = 7.dp)) {
+                            Text(if (isArabic) "سرعة Ethernet" else "Ethernet speed", fontSize = 9.sp, color = ethernetColors.second)
+                            Text(snmpInfo.mimosaEthernetSpeedMbps?.let { "$it Mbps" } ?: "—", fontSize = 13.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = ethernetColors.second)
+                        }
                     }
                     val durationBackground = if (isDark) Color(0xFF34264F) else Color(0xFFEEE8FF)
                     val durationForeground = if (isDark) Color(0xFFD8C6FF) else Color(0xFF6542A6)

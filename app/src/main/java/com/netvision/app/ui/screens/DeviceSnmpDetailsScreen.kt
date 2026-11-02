@@ -81,9 +81,11 @@ fun DeviceSnmpDetailsScreen(
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(device.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                         Text("IP: ${device.ipAddress}", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            Text(if (isArabic) "المحطات المتصلة" else "Connected stations", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                            Text(info?.connectedClientsCount?.toString() ?: "—", color = TealAccent, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                        if (!isMimosa) {
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                Text(if (isArabic) "المحطات المتصلة" else "Connected stations", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                Text(info?.connectedClientsCount?.toString() ?: "—", color = TealAccent, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                            }
                         }
                     }
                 }
@@ -92,44 +94,7 @@ fun DeviceSnmpDetailsScreen(
                     info?.sysDescr?.contains("Mimosa", ignoreCase = true) == true ||
                     info?.model?.contains("Mimosa", ignoreCase = true) == true ||
                     info?.mimosaLinkUptimeTicks != null
-                if (isMimosa) {
-                    item {
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(16.dp),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                        ) {
-                            Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                Text(if (isArabic) "معلومات Mimosa C5c" else "Mimosa C5c telemetry",
-                                    style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    MetricTile(
-                                        if (isArabic) "مدة تشغيل السكتر" else "Link uptime",
-                                        info?.mimosaLinkUptimeTicks?.let { formatMimosaTicks(it) } ?: "—",
-                                        Color(0xFFEEE8FF), Color(0xFF6941A5), Modifier.weight(1f)
-                                    )
-                                    val tx = listOfNotNull(info?.mimosaPhyTxStream1Mbps, info?.mimosaPhyTxStream2Mbps).takeIf { it.isNotEmpty() }?.sum()
-                                    val rx = listOfNotNull(info?.mimosaPhyRxStream1Mbps, info?.mimosaPhyRxStream2Mbps).takeIf { it.isNotEmpty() }?.sum()
-                                    MetricTile("PHY TX", tx?.let { "$it Mbps" } ?: "—",
-                                        Color(0xFFDDF6FA), Color(0xFF0E7490), Modifier.weight(1f))
-                                    MetricTile("PHY RX", rx?.let { "$it Mbps" } ?: "—",
-                                        Color(0xFFE5F0FF), Color(0xFF2563EB), Modifier.weight(1f))
-                                }
-                                Text(if (isArabic) "قوة الإشارة لكل سلسلة" else "Per-chain receive signal",
-                                    fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    MetricTile(if (isArabic) "السلسلة 1" else "Chain 1",
-                                        info?.mimosaSignalChain1Dbm?.let { "$it dBm" } ?: "—",
-                                        Color(0xFFE5F0FF), Color(0xFF2563EB), Modifier.weight(1f))
-                                    MetricTile(if (isArabic) "السلسلة 2" else "Chain 2",
-                                        info?.mimosaSignalChain2Dbm?.let { "$it dBm" } ?: "—",
-                                        Color(0xFFE5F0FF), Color(0xFF2563EB), Modifier.weight(1f))
-                                }
-                            }
-                        }
-                    }
-                }
-
+                if (!isMimosa) {
                 if (mikrotikStations.isNotEmpty()) {
                     items(mikrotikStations, key = { it.macAddress }) { station ->
                         MikrotikStationCard(station, isArabic)
@@ -160,6 +125,7 @@ fun DeviceSnmpDetailsScreen(
                             )
                         }
                     }
+                }
                 }
             }
         }

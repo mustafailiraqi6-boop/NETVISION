@@ -55,7 +55,8 @@ data class SnmpDeviceInfo(
     val mimosaPhyRxStream1Mbps: Int? = null,
     val mimosaPhyRxStream2Mbps: Int? = null,
     val mimosaTrafficTxKbps: Long? = null,
-    val mimosaTrafficRxKbps: Long? = null
+    val mimosaTrafficRxKbps: Long? = null,
+    val mimosaEthernetSpeedMbps: Long? = null
 )
 
 data class UbiquitiStationInfo(
@@ -349,6 +350,9 @@ object SnmpV2Client {
                 val mimosaPhyRx2 = if (isMimosa) mimosaInt("1.3.6.1.4.1.43356.2.1.2.6.2.1.5.2", "mimosaPhyRx2") else null
                 val mimosaTrafficTx = if (isMimosa) mimosaLong("1.3.6.1.4.1.43356.2.1.2.7.1.0", "mimosaTrafficTx") else null
                 val mimosaTrafficRx = if (isMimosa) mimosaLong("1.3.6.1.4.1.43356.2.1.2.7.2.0", "mimosaTrafficRx") else null
+                // IF-MIB ifSpeed for Mimosa C5c Ethernet interface (ifIndex 3 verified).
+                val mimosaEthernetSpeedBps = if (isMimosa) mimosaLong("1.3.6.1.2.1.2.2.1.5.3", "mimosaEthernetSpeed") else null
+                val mimosaEthernetSpeedMbps = mimosaEthernetSpeedBps?.takeIf { it > 0 }?.div(1_000_000L)
 
                 val totalLatency = System.currentTimeMillis() - totalStart
                 val descr = descrRes.stringValue
@@ -402,7 +406,8 @@ object SnmpV2Client {
                         mimosaPhyRxStream1Mbps = mimosaPhyRx1,
                         mimosaPhyRxStream2Mbps = mimosaPhyRx2,
                         mimosaTrafficTxKbps = mimosaTrafficTx,
-                        mimosaTrafficRxKbps = mimosaTrafficRx
+                        mimosaTrafficRxKbps = mimosaTrafficRx,
+                        mimosaEthernetSpeedMbps = mimosaEthernetSpeedMbps
                     )
                 )
             } else {
