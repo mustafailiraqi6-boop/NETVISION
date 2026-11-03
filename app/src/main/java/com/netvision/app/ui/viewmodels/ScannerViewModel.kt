@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -150,6 +151,9 @@ class ScannerViewModel(
             var totalScannedAll = 0
             val allHosts = rangesToScan.flatMap { CidrUtils.getUsableHostIps(it.cidr) }
             val grandTotal = allHosts.size.coerceAtLeast(1)
+            // Skip every address already present in the permanent device database.
+            val excludedIps = repository.getAllDevices().first()
+                .mapTo(mutableSetOf()) { it.ipAddress }
 
             _uiState.value = _uiState.value.copy(totalHostsCount = grandTotal)
 
@@ -158,7 +162,7 @@ class ScannerViewModel(
 
                 _uiState.value = _uiState.value.copy(activeSubnet = range.cidr)
 
-                scanner.scanRemoteSubnet(range.cidr).collect { status ->
+                scanner.scanRemoteSubnet(range.cidr, excludedIps).collect { status ->
                     totalScannedAll++
                     val progressRatio = (totalScannedAll.toFloat() / grandTotal).coerceIn(0f, 1f)
 
@@ -178,6 +182,8 @@ class ScannerViewModel(
                         discoveredDevices = currentList
                     )
                 }
+                // Avoid scanning overlapping ranges a second time in the same session.
+                excludedIps.addAll(CidrUtils.getUsableHostIps(range.cidr))
             }
 
             _uiState.value = _uiState.value.copy(
