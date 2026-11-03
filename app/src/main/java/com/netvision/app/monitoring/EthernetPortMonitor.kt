@@ -16,6 +16,7 @@ data class EthernetPortSnapshot(
     val adminStatus: Int?,
     val operStatus: Int?,
     val speedBps: Long?,
+    val speedMbps: Long? = null,
     val rxOctets: Long?,
     val txOctets: Long?,
     val rxMbps: Double? = null,
@@ -36,10 +37,12 @@ data class EthernetMonitoringSnapshot(
 }
 
 object EthernetPortMonitor {
-    private const val IF_NAME = "1.3.6.1.2.1.31.1.1.1.1"
+    // ifDescr is exposed by both RouterOS and the tested AirOS SNMP v1 device.
+    private const val IF_NAME = "1.3.6.1.2.1.2.2.1.2"
     private const val IF_TYPE = "1.3.6.1.2.1.2.2.1.3"
     private const val ETHERNET_CSMACD = 6L
     private const val IF_SPEED = "1.3.6.1.2.1.2.2.1.5"
+    private const val IF_HIGH_SPEED = "1.3.6.1.2.1.31.1.1.1.15"
     private const val IF_ADMIN = "1.3.6.1.2.1.2.2.1.7"
     private const val IF_OPER = "1.3.6.1.2.1.2.2.1.8"
     private const val IF_HC_IN = "1.3.6.1.2.1.31.1.1.1.6"
@@ -95,6 +98,7 @@ object EthernetPortMonitor {
                     async { get(ip, community, port, "$IF_ADMIN.$index", "ifAdminStatus.$index", versionToUse, timeoutMs).longValue?.toInt() },
                     async { get(ip, community, port, "$IF_OPER.$index", "ifOperStatus.$index", versionToUse, timeoutMs).longValue?.toInt() },
                     async { get(ip, community, port, "$IF_SPEED.$index", "ifSpeed.$index", versionToUse, timeoutMs).longValue },
+                    async { get(ip, community, port, "$IF_HIGH_SPEED.$index", "ifHighSpeed.$index", versionToUse, timeoutMs).longValue },
                     async { get(ip, community, port, "$IF_HC_IN.$index", "ifHCInOctets.$index", versionToUse, timeoutMs).longValue },
                     async { get(ip, community, port, "$IF_HC_OUT.$index", "ifHCOutOctets.$index", versionToUse, timeoutMs).longValue },
                     async { get(ip, community, port, "$MIKROTIK_LINK_DOWNS.$index", "linkDowns.$index", versionToUse, timeoutMs).longValue }
@@ -103,8 +107,11 @@ object EthernetPortMonitor {
             rows += EthernetPortSnapshot(
                 index, name,
                 values[0] as Int?, values[1] as Int?, values[2] as Long?,
-                values[3] as Long?, values[4] as Long?,
-                linkDowns = values[5] as Long?
+                speedMbps = ((values[2] as Long?)?.takeIf { it > 0L && it < 4_294_967_295L }?.div(1_000_000L)
+                    ?: (values[3] as Long?)?.takeIf { it > 0L }),
+                rxOctets = values[4] as Long?,
+                txOctets = values[5] as Long?,
+                linkDowns = values[6] as Long?
             )
         }
         EthernetMonitoringSnapshot(rows.sortedBy { it.index })
