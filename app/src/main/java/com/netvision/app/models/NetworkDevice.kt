@@ -1,6 +1,7 @@
 package com.netvision.app.models
 
 enum class DeviceType(val labelEn: String, val labelAr: String) {
+    LINK("Link", "لنك"),
     ROUTER("Router", "راوتر"),
     SECTOR_AP("Sector / Access Point", "سكتر / نقطة وصول"),
     SWITCH("Switch", "سويتش"),
