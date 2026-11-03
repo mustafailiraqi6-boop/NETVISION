@@ -398,7 +398,7 @@ fun DevicesScreen(
             }
         } else {
             // Devices List
-            items(uiState.devices, key = { it.id }) { device ->
+            items(uiState.devices.sortedBy { if (it.deviceType == DeviceType.LINK) 0 else if (it.deviceType == DeviceType.SECTOR_AP) 1 else 2 }, key = { it.id }) { device ->
                 val towerObj = uiState.folders.find { it.id == device.folderId }
                 val towerName = if (device.folderId == DeviceFolderEntity.DEFAULT_FOLDER_ID || towerObj?.id == DeviceFolderEntity.DEFAULT_FOLDER_ID) {
                     if (isArabic) "أجهزة غير تابعة لبرج" else "Unassigned Devices"
@@ -503,7 +503,7 @@ fun DevicesScreen(
                         fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface)
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        listOf(DeviceType.ROUTER, DeviceType.SECTOR_AP, DeviceType.SWITCH, DeviceType.CLIENT_DEVICE, DeviceType.OTHER)
+                        listOf(DeviceType.LINK, DeviceType.ROUTER, DeviceType.SECTOR_AP, DeviceType.SWITCH, DeviceType.CLIENT_DEVICE, DeviceType.OTHER)
                             .chunked(2).forEach { rowTypes ->
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                     rowTypes.forEachIndexed { index, type ->
