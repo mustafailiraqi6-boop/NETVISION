@@ -1,5 +1,6 @@
 package com.netvision.app.database
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import com.netvision.app.models.DeviceStatus
@@ -29,7 +30,7 @@ data class DeviceEntity(
     val pingLatencyMs: Int,
     val snmpVersion: String? = null,
     val folderId: String = "uncategorized",
-    val lastPingTimestamp: Long = 0L
+    @ColumnInfo(defaultValue = "0") val lastPingTimestamp: Long = 0L
 ) {
     fun toDomainModel(): NetworkDevice {
         return NetworkDevice(
