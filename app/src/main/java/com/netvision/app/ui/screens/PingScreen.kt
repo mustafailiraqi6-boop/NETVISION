@@ -199,6 +199,5 @@ private fun loadManual(prefs: android.content.SharedPreferences): List<ManualPin
     }
 
 private fun saveManual(prefs: android.content.SharedPreferences, devices: List<ManualPingDevice>) {
-    prefs.edit().putString("manual_devices", devices.joinToString("
-") { "${it.id}|${it.name.replace("|", "")}|${it.ip}|${it.group.replace("|", "")}" }).apply()
+    prefs.edit().putString("manual_devices", devices.joinToString("\n") { "${it.id}|${it.name.replace("|", "")}|${it.ip}|${it.group.replace("|", "")}" }).apply()
 }
