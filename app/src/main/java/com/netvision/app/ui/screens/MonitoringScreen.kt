@@ -265,7 +265,8 @@ fun MonitoringScreen(
                                 modifier = Modifier.weight(1f).heightIn(min = 82.dp)
                                     .clickable {
                                         folder?.let {
-                                            viewModel.selectFolder(it.id)
+                                            if (uiState.selectedFolderId == it.id) viewModel.refreshFolderNow(it.id)
+                                            else viewModel.selectFolder(it.id)
                                         }
                                     }
                                     .border(
