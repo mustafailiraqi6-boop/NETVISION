@@ -86,7 +86,10 @@ class DashboardViewModel(
             probeResults[device.id]?.isOnline
                 ?: (device.status == DeviceStatus.ONLINE)
         }
-        val offline = total - online
+        val offline = devices.count { device ->
+            probeResults[device.id]?.let { !it.isOnline }
+                ?: (device.status == DeviceStatus.OFFLINE)
+        }
         val ubnt = devices.count { it.manufacturer == Manufacturer.UBIQUITI }
         val mtk = devices.count { it.manufacturer == Manufacturer.MIKROTIK }
 
@@ -142,7 +145,7 @@ class DashboardViewModel(
             if (device.id !in currentResults) {
                 currentResults[device.id] = DashboardProbeResult(
                     isOnline = device.status == DeviceStatus.ONLINE,
-                    latencyMs = device.metrics.pingLatencyMs.coerceAtLeast(0L)
+                    latencyMs = device.metrics.pingLatencyMs.toLong().coerceAtLeast(0L)
                 )
             }
         }
