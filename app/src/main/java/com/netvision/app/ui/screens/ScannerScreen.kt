@@ -451,7 +451,7 @@ fun ScannerScreen(
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        listOf(DeviceType.ROUTER, DeviceType.SECTOR_AP, DeviceType.SWITCH, DeviceType.CLIENT_DEVICE, DeviceType.OTHER)
+                        listOf(DeviceType.LINK, DeviceType.ROUTER, DeviceType.SECTOR_AP, DeviceType.SWITCH, DeviceType.CLIENT_DEVICE, DeviceType.OTHER)
                             .chunked(2).forEach { rowTypes ->
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                     rowTypes.forEachIndexed { index, type ->
