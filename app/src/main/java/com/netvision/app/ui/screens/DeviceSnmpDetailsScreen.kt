@@ -185,12 +185,12 @@ private fun UbiquitiStationCard(station: UbiquitiStationInfo, isArabic: Boolean)
                 MetricTile(if (isArabic) "المسافة" else "Distance", station.distance?.let { "$it m" } ?: "—", Color(0xFFFFF2D9), Color(0xFFB7791F), Modifier.weight(1f))
             }
             Row(
-                Modifier.fillMaxWidth().background(if (MaterialTheme.colorScheme.background.luminance() < 0.5f) Color(0xFF34264F) else Color(0xFFEEE8FF), RoundedCornerShape(10.dp)).padding(11.dp),
+                Modifier.fillMaxWidth().background(if (MaterialTheme.colorScheme.background.luminance() < 0.5f) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(10.dp)).padding(11.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(if (isArabic) "مدة الاتصال" else "Connection time", color = if (MaterialTheme.colorScheme.background.luminance() < 0.5f) Color(0xFFD8C6FF) else Color(0xFF6542A6), fontSize = 12.sp)
-                Text(station.connectionTime ?: "—", color = if (MaterialTheme.colorScheme.background.luminance() < 0.5f) Color(0xFFD8C6FF) else Color(0xFF6542A6), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                Text(if (isArabic) "مدة الاتصال" else "Connection time", color = if (MaterialTheme.colorScheme.background.luminance() < 0.5f) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onPrimaryContainer, fontSize = 12.sp)
+                Text(station.connectionTime ?: "—", color = if (MaterialTheme.colorScheme.background.luminance() < 0.5f) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onPrimaryContainer, fontWeight = FontWeight.Bold, fontSize = 12.sp)
             }
         }
     }
@@ -225,9 +225,9 @@ private fun MikrotikStationCard(station: MikrotikStationInfo, isArabic: Boolean)
                 MetricTile("TX", rate(station.txRateMbps), Color(0xFFDDF6FA), Color(0xFF0E7490), Modifier.weight(1f))
                 MetricTile("RX", rate(station.rxRateMbps), Color(0xFFE5F0FF), Color(0xFF2563EB), Modifier.weight(1f))
             }
-            Row(Modifier.fillMaxWidth().background(if (MaterialTheme.colorScheme.background.luminance() < 0.5f) Color(0xFF34264F) else Color(0xFFEEE8FF), RoundedCornerShape(10.dp)).padding(11.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(if (isArabic) "مدة الاتصال" else "Connection time", color = if (MaterialTheme.colorScheme.background.luminance() < 0.5f) Color(0xFFD8C6FF) else Color(0xFF6542A6), fontSize = 12.sp)
-                Text(station.connectionTime ?: "—", color = if (MaterialTheme.colorScheme.background.luminance() < 0.5f) Color(0xFFD8C6FF) else Color(0xFF6542A6), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+            Row(Modifier.fillMaxWidth().background(if (MaterialTheme.colorScheme.background.luminance() < 0.5f) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(10.dp)).padding(11.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(if (isArabic) "مدة الاتصال" else "Connection time", color = if (MaterialTheme.colorScheme.background.luminance() < 0.5f) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onPrimaryContainer, fontSize = 12.sp)
+                Text(station.connectionTime ?: "—", color = if (MaterialTheme.colorScheme.background.luminance() < 0.5f) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onPrimaryContainer, fontWeight = FontWeight.Bold, fontSize = 12.sp)
             }
         }
     }
