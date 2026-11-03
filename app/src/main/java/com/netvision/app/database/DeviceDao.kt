@@ -16,6 +16,9 @@ interface DeviceDao {
     @Query("SELECT * FROM devices WHERE id = :deviceId")
     suspend fun getDeviceById(deviceId: String): DeviceEntity?
 
+    @Query("SELECT * FROM devices WHERE ipAddress = :ipAddress LIMIT 1")
+    suspend fun getDeviceByIpAddress(ipAddress: String): DeviceEntity?
+
     @Query("SELECT * FROM devices WHERE manufacturer = :manufacturer")
     fun getDevicesByManufacturer(manufacturer: String): Flow<List<DeviceEntity>>
 
