@@ -646,7 +646,13 @@ fun DeviceMonitoringCard(
             }
 
             if ((isUbiquitiSector || isMikroTikSector) && snmpInfo?.isSuccess == true) {
-                val values = if (isMikroTikSector && !isUbiquitiSector) {
+                val connectedEthernetPorts = ethernetSnapshot?.ports
+                    ?.filter { it.operStatus == 1 && (it.speedMbps ?: 0L) > 0L }
+                    .orEmpty()
+                val ethernetSummary = connectedEthernetPorts.joinToString(" · ") { port ->
+                    "${port.name}: ${port.speedMbps} Mbps"
+                }
+                val values = (if (isMikroTikSector && !isUbiquitiSector) {
                     listOf(
                         Triple(if (isArabic) "الأجهزة" else "Clients", snmpInfo.connectedClientsCount?.toString() ?: "—", 0),
                         Triple("CCQ", snmpInfo.mikrotikCcqPercent?.let { "${it}%" } ?: "—", 1),
@@ -660,7 +666,9 @@ fun DeviceMonitoringCard(
                         Triple("airMAX Quality", snmpInfo.ubntAirMaxQualityPercent?.let { "${it}%" } ?: "—", 3),
                         Triple("airMAX Capacity", snmpInfo.ubntAirMaxCapacityPercent?.let { "${it}%" } ?: "—", 4)
                     )
-                }
+                } + if (ethernetSummary.isNotBlank()) {
+                    listOf(Triple(if (isArabic) "سرعة Ethernet" else "Ethernet speed", ethernetSummary, 0))
+                } else emptyList())
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
                         if (isArabic) "معلومات السكتر" else "Sector information",
