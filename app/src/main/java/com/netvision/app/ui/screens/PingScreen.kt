@@ -83,7 +83,7 @@ fun PingScreen(isArabic: Boolean, viewModel: MonitoringViewModel) {
     val prefs = remember { context.getSharedPreferences("netvision_ping", Context.MODE_PRIVATE) }
     var manual by remember { mutableStateOf(loadManual(prefs)) }
     var favorites by remember { mutableStateOf(prefs.getStringSet("favorite_groups", emptySet())?.toSet() ?: emptySet()) }
-    var showAdd by remember { mutableStateOf(false) }
+    var showAdd by remember { mutableStateOf(false) }\n    var editingId by remember { mutableStateOf<String?>(null) }
     var name by remember { mutableStateOf("") }
     var ip by remember { mutableStateOf("") }
     var group by remember { mutableStateOf("") }
@@ -101,7 +101,7 @@ fun PingScreen(isArabic: Boolean, viewModel: MonitoringViewModel) {
     if (showAdd) {
         AlertDialog(
             onDismissRequest = { showAdd = false },
-            title = { Text(if (isArabic) "إضافة جهاز إلى Ping" else "Add Ping device") },
+            title = { Text(if (editingId == null) { if (isArabic) "إضافة جهاز إلى Ping" else "Add Ping device" } else { if (isArabic) "تعديل الجهاز" else "Edit device" }) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     OutlinedTextField(name, { name = it }, label = { Text(if (isArabic) "اسم الجهاز" else "Device name") }, singleLine = true)
@@ -115,15 +115,15 @@ fun PingScreen(isArabic: Boolean, viewModel: MonitoringViewModel) {
                 val valid = cleanIp.split(".").size == 4 && cleanIp.split(".").all { it.toIntOrNull()?.let { value -> value in 0..255 } == true }
                 when {
                     name.isBlank() || group.isBlank() || !valid -> error = if (isArabic) "تأكد من الاسم والمجموعة وعنوان IP" else "Enter a valid name, group and IPv4 address"
-                    targets.any { it.ip.equals(cleanIp, true) } -> error = if (isArabic) "عنوان IP موجود مسبقاً" else "This IP already exists"
+                    targets.any { it.id != editingId && it.ip.equals(cleanIp, true) } -> error = if (isArabic) "عنوان IP موجود مسبقاً" else "This IP already exists"
                     else -> {
                         manual = manual + ManualPingDevice(UUID.randomUUID().toString(), name.trim(), cleanIp, group.trim())
                         saveManual(prefs, manual)
                         name = ""; ip = ""; group = ""; error = ""; showAdd = false
                     }
                 }
-            }) { Text(if (isArabic) "إضافة" else "Add") } },
-            dismissButton = { TextButton(onClick = { showAdd = false }) { Text(if (isArabic) "إلغاء" else "Cancel") } }
+            }) { Text(if (editingId == null) { if (isArabic) "إضافة" else "Add" } else { if (isArabic) "حفظ" else "Save" }) } },
+            dismissButton = { TextButton(onClick = { showAdd = false; editingId = null; error = "" }) { Text(if (isArabic) "إلغاء" else "Cancel") } }
         )
     }
 
@@ -138,7 +138,7 @@ fun PingScreen(isArabic: Boolean, viewModel: MonitoringViewModel) {
                     Text(if (isArabic) "اختبار Ping المباشر" else "Live Ping", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                     Text(if (isArabic) "فحص مستمر للأجهزة وزمن الاستجابة" else "Continuous ICMP reachability and latency", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
                 }
-                FilledTonalButton(onClick = { showAdd = true }) { Icon(Icons.Default.Add, null); Spacer(Modifier.width(4.dp)); Text(if (isArabic) "إضافة" else "Add") }
+                FilledTonalButton(onClick = { editingId = null; name = ""; ip = ""; group = ""; showAdd = true }) { Icon(Icons.Default.Add, null); Spacer(Modifier.width(4.dp)); Text(if (isArabic) "إضافة" else "Add") }
             }
         }
         item {
