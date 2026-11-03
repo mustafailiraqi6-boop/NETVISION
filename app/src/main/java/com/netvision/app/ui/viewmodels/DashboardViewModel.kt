@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 
@@ -138,23 +139,21 @@ class DashboardViewModel(
             return
         }
 
-        // Show the saved state immediately, then replace each result as the
-        // quick Port 80 check completes.
-        val currentResults = dashboardProbeResults.value.toMutableMap()
-        devices.forEach { device ->
-            if (device.id !in currentResults) {
-                currentResults[device.id] = DashboardProbeResult(
-                    isOnline = device.status == DeviceStatus.ONLINE,
-                    latencyMs = device.metrics.pingLatencyMs.toLong().coerceAtLeast(0L)
-                )
-            }
+        // Never carry cached ONLINE states into the dashboard. Until the VPN
+        // confirms reachability, every device is considered offline here.
+        dashboardProbeResults.value = devices.associate { device ->
+            device.id to DashboardProbeResult(isOnline = false, latencyMs = 0L)
         }
-        val validIds = devices.mapTo(mutableSetOf()) { it.id }
-        dashboardProbeResults.value = currentResults.filterKeys { it in validIds }
         _isRefreshing.value = true
 
         probeJob = viewModelScope.launch {
             try {
+                val vpnConnected = withContext(Dispatchers.IO) {
+                    reachabilityService.isVpnConnected()
+                }
+                // Without an active Android VPN, keep all dashboard devices offline.
+                if (!vpnConnected) return@launch
+
                 coroutineScope {
                     devices.map { device ->
                         async(Dispatchers.IO) {
@@ -169,14 +168,13 @@ class DashboardViewModel(
                                     null
                                 }
 
-                                if (result != null) {
-                                    val updated = dashboardProbeResults.value.toMutableMap()
-                                    updated[device.id] = DashboardProbeResult(
-                                        isOnline = result.isReachable,
-                                        latencyMs = result.latencyMs.coerceAtLeast(0L)
-                                    )
-                                    dashboardProbeResults.value = updated
-                                }
+                                // A failed probe (including VPN loss mid-scan) is OFFLINE.
+                                val updated = dashboardProbeResults.value.toMutableMap()
+                                updated[device.id] = DashboardProbeResult(
+                                    isOnline = result?.isReachable == true,
+                                    latencyMs = result?.latencyMs?.coerceAtLeast(0L) ?: 0L
+                                )
+                                dashboardProbeResults.value = updated
                             }
                         }
                     }.awaitAll()
