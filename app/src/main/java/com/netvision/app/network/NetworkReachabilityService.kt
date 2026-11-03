@@ -38,49 +38,41 @@ class NetworkReachabilityService(private val context: Context) {
     suspend fun checkHostReachability(
         targetIp: String,
         portsToProbe: List<Int> = commonPorts,
-        timeoutMs: Int = 500
+        timeoutMs: Int = 2000
     ): ReachabilityResult = withContext(Dispatchers.IO) {
-        val vpnNetwork: Network? = connectivityManager.allNetworks.firstOrNull { network ->
-            connectivityManager.getNetworkCapabilities(network)
-                ?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true
+        if (!isVpnConnected()) {
+            return@withContext ReachabilityResult(targetIp, false, 0, 0, "VPN is not connected")
         }
 
-        if (vpnNetwork == null) {
-            return@withContext ReachabilityResult(
-                targetIp = targetIp,
-                isReachable = false,
-                portTested = 0,
-                latencyMs = 0,
-                failureReason = "VPN is not connected"
-            )
-        }
-
-        for (port in portsToProbe) {
-            val startTime = System.currentTimeMillis()
-            try {
-                Socket().use { socket ->
-                    vpnNetwork.bindSocket(socket)
-                    socket.connect(InetSocketAddress(targetIp, port), timeoutMs)
-                    val latency = System.currentTimeMillis() - startTime
-                    return@withContext ReachabilityResult(
-                        targetIp = targetIp,
-                        isReachable = true,
-                        portTested = port,
-                        latencyMs = latency
-                    )
-                }
-            } catch (_: Exception) {
-                // Try the next TCP port, always on the same VPN network.
+        val startedAt = System.currentTimeMillis()
+        var process: Process? = null
+        try {
+            // Use the same ICMP echo mechanism as the Ping screen. TCP port
+            // availability must not decide whether a network device is online.
+            process = ProcessBuilder("ping", "-c", "1", "-W",
+                (timeoutMs / 1000).coerceAtLeast(1).toString(), targetIp)
+                .redirectErrorStream(true).start()
+            val completed = process.waitFor((timeoutMs + 1500L), java.util.concurrent.TimeUnit.MILLISECONDS)
+            if (!completed) {
+                process.destroyForcibly()
+                return@withContext ReachabilityResult(targetIp, false, 0, System.currentTimeMillis() - startedAt, "ICMP timeout")
             }
+            val output = process.inputStream.bufferedReader().use { it.readText() }
+            val time = Regex("time[=<]([0-9.]+)\\s*ms", RegexOption.IGNORE_CASE)
+                .find(output)?.groupValues?.getOrNull(1)?.toDoubleOrNull()
+            val success = process.exitValue() == 0 || output.contains("bytes from", true) || time != null
+            ReachabilityResult(
+                targetIp = targetIp,
+                isReachable = success,
+                portTested = 0,
+                latencyMs = time?.toLong() ?: (System.currentTimeMillis() - startedAt),
+                failureReason = if (success) null else "No ICMP echo reply"
+            )
+        } catch (e: Exception) {
+            ReachabilityResult(targetIp, false, 0, System.currentTimeMillis() - startedAt, e.localizedMessage ?: "ICMP check failed")
+        } finally {
+            process?.destroy()
         }
-
-        ReachabilityResult(
-            targetIp = targetIp,
-            isReachable = false,
-            portTested = 0,
-            latencyMs = 0,
-            failureReason = "No TCP response through VPN on ports $portsToProbe"
-        )
     }
 
     suspend fun testReachability(
