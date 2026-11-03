@@ -105,7 +105,9 @@ fun MonitoringScreen(
                     dev.ipAddress.contains(uiState.searchQuery)
             matchesCategory && matchesFolder && matchesQuery
         }.sortedWith { first, second ->
-            compareIpv4Addresses(first.ipAddress, second.ipAddress)
+            val typeRank = { device: NetworkDevice -> when (device.deviceType) { DeviceType.LINK -> 0; DeviceType.SECTOR_AP -> 1; else -> 2 } }
+            val rankCompare = typeRank(first).compareTo(typeRank(second))
+            if (rankCompare != 0) rankCompare else compareIpv4Addresses(first.ipAddress, second.ipAddress)
         }
     }
 
@@ -257,7 +259,7 @@ fun MonitoringScreen(
                     )
                 }
 
-                val towerOptions: List<DeviceFolder?> = listOf(null) + savedFolders
+                val towerOptions: List<DeviceFolder?> = savedFolders
                 towerOptions.chunked(2).forEach { rowOptions ->
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -285,7 +287,7 @@ fun MonitoringScreen(
                             Card(
                                 modifier = Modifier.weight(1f).heightIn(min = 82.dp)
                                     .clickable {
-                                        if (isAll) viewModel.selectFolder(null) else folder?.let { viewModel.selectFolder(it.id) }
+                                        folder?.let { viewModel.selectFolder(it.id); viewModel.refreshFolderIfStale(it.id) }
                                     }
                                     .border(
                                         width = if (selected) 1.4.dp else 1.dp,
@@ -313,10 +315,11 @@ fun MonitoringScreen(
                                             tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                                             modifier = Modifier.size(20.dp)
                                         )
-                                        if (selected) {
-                                            Icon(Icons.Default.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
-                                        } else {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
                                             Text(count.toString(), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
+                                            IconButton(onClick = { folder?.let { viewModel.refreshFolderNow(it.id) } }, modifier = Modifier.size(28.dp)) {
+                                                Icon(Icons.Default.Refresh, contentDescription = if (isArabic) "تحديث المجموعة" else "Refresh group", modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+                                            }
                                         }
                                     }
                                     Text(
@@ -328,8 +331,7 @@ fun MonitoringScreen(
                                         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                                     )
                                     Text(
-                                        if (isAll) (if (isArabic) "كل الأجهزة" else "All devices")
-                                        else if (isUnassigned) (if (isArabic) "بدون برج" else "No tower")
+                                        if (isUnassigned) (if (isArabic) "بدون برج" else "No tower")
                                         else if (isArabic) "$count جهاز" else "$count devices",
                                         color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f) else MaterialTheme.colorScheme.onSurfaceVariant,
                                         fontSize = 10.sp,
