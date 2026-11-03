@@ -111,10 +111,10 @@ fun NetVisionApp(
     val isArabic = language == AppLanguage.ARABIC
     val isDarkTheme = themeMode == AppThemeMode.DARK
 
-    val navBackground = if (isDarkTheme) Color(0xFF21466D) else Color(0xFFFFFFFF)
-    val inactiveContent = if (isDarkTheme) Color(0xFFF1F5F9) else Color(0xFF64748B)
-    val selectedBackground = Color(0xFFEEE4FF)
-    val selectedContent = Color(0xFF6542A6)
+    val navBackground = MaterialTheme.colorScheme.surface
+    val inactiveContent = MaterialTheme.colorScheme.onSurfaceVariant
+    val selectedBackground = MaterialTheme.colorScheme.primaryContainer
+    val selectedContent = MaterialTheme.colorScheme.onPrimaryContainer
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
