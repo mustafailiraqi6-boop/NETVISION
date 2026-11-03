@@ -41,7 +41,6 @@ fun DashboardScreen(
     monitoringViewModel: MonitoringViewModel
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val monitoringState by monitoringViewModel.uiState.collectAsState()
     val context = LocalContext.current
     var showVpnWarning by remember { mutableStateOf(false) }
 
@@ -191,11 +190,11 @@ fun DashboardScreen(
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             IconButton(
-                                onClick = { monitoringViewModel.refreshNow() },
-                                enabled = !monitoringState.isPollingNow,
+                                onClick = { viewModel.refreshDashboardStatuses() },
+                                enabled = !uiState.isRefreshing,
                                 modifier = Modifier.size(34.dp)
                             ) {
-                                if (monitoringState.isPollingNow) {
+                                if (uiState.isRefreshing) {
                                     CircularProgressIndicator(
                                         modifier = Modifier.size(19.dp),
                                         strokeWidth = 2.dp,
