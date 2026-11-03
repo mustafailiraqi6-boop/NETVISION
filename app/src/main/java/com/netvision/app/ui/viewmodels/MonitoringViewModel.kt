@@ -172,44 +172,7 @@ class MonitoringViewModel(
                 currentDevices.map { device ->
                     async(Dispatchers.IO) {
                         pollSemaphore.withPermit {
-                            val portsToProbe = if (device.manufacturer == com.netvision.app.models.Manufacturer.MIKROTIK) {
-                                listOf(80, 8291)
-                            } else {
-                                listOf(80)
-                            }
-                            val reachability = reachabilityService.checkHostReachability(
-                                targetIp = device.ipAddress,
-                                portsToProbe = portsToProbe,
-                                timeoutMs = 500
-                            )
-                            val isOnline = reachability.isReachable
-                            val latencyMs = reachability.latencyMs.toInt().coerceAtLeast(0)
-
-                            // A single missed TCP probe must not flap a device offline.
-                            // Any successful probe clears the counter immediately.
-                            val effectiveIsOnline = if (isOnline) {
-                                consecutiveFailures.remove(device.id)
-                                true
-                            } else {
-                                val failures = consecutiveFailures
-                                    .computeIfAbsent(device.id) { AtomicInteger(0) }
-                                    .incrementAndGet()
-                                failures < offlineFailureThreshold && device.status != DeviceStatus.OFFLINE
-                            }
-
-                            // Persist only confirmed state transitions: failures 1-2 keep
-                            // the previous ONLINE state; the third consecutive failure
-                            // is the first one allowed to mark the device OFFLINE.
-                            if (isOnline || !effectiveIsOnline) {
-                                repository.updateDeviceStatus(
-                                    deviceId = device.id,
-                                    isOnline = effectiveIsOnline,
-                                    latencyMs = latencyMs,
-                                    uptime = null,
-                                    snmpVersion = device.snmpVersion
-                                )
-                            }
-
+                            // Reachability is handled by the shared ICMP monitor; this pass only refreshes SNMP telemetry.
                             // SNMP must never determine reachability. It runs after
                             // status persistence and cannot delay the visible status.
                             try {
@@ -252,10 +215,8 @@ class MonitoringViewModel(
                                             ?.trim()
                                             ?.takeIf { it.isNotBlank() && !it.equals(device.ipAddress, ignoreCase = true) }
                                             ?.let { repository.updateDeviceSnmpName(device.id, it) }
-                                        repository.updateDeviceStatus(
+                                        repository.updateDeviceTelemetry(
                                             deviceId = device.id,
-                                            isOnline = effectiveIsOnline,
-                                            latencyMs = latencyMs,
                                             uptime = info.uptimeFormatted,
                                             snmpVersion = info.snmpVersion
                                         )
