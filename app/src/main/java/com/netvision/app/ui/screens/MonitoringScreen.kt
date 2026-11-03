@@ -96,7 +96,7 @@ fun MonitoringScreen(
             val isSwitch = dev.deviceType == DeviceType.SWITCH || dev.name.contains("switch", ignoreCase = true) || dev.model.contains("CRS", ignoreCase = true) || dev.model.contains("switch", ignoreCase = true)
             val matchesCategory = if (selectedCategory) isSwitch else !isSwitch
             val matchesFolder = when (uiState.selectedFolderId) {
-                null -> true
+                null -> false
                 DeviceFolderEntity.DEFAULT_FOLDER_ID -> dev.folderId.isBlank() || dev.folderId == DeviceFolderEntity.DEFAULT_FOLDER_ID
                 else -> dev.folderId == uiState.selectedFolderId
             }
@@ -120,7 +120,8 @@ fun MonitoringScreen(
     // Dynamic stats based on saved devices
     val totalDevicesCount = savedDevices.size
     val connectedCount = savedDevices.count { it.status == DeviceStatus.ONLINE }
-    val disconnectedCount = savedDevices.count { it.status == DeviceStatus.OFFLINE }
+    val disconnectedCount = savedDevices.count { it.lastPingTimestamp > 0L && it.status == DeviceStatus.OFFLINE }
+    val uncheckedCount = savedDevices.count { it.lastPingTimestamp == 0L }
 
     LazyColumn(
         modifier = modifier
@@ -177,38 +178,22 @@ fun MonitoringScreen(
         }
 
         // -------------------------------------------------------------
-        // Statistics Cards (إجمالي الأجهزة، الأجهزة المتصلة، الأجهزة المنفصلة)
+        // -------------------------------------------------------------
+        // Statistics Cards (all values are based on confirmed ICMP checks)
         // -------------------------------------------------------------
         item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                MonitoringStatCard(
-                    modifier = Modifier.weight(1f),
-                    title = if (isArabic) "إجمالي الأجهزة" else "Total Devices",
-                    count = totalDevicesCount.toString(),
-                    accentColor = CyanAccent,
-                    icon = Icons.Default.Devices
-                )
-                MonitoringStatCard(
-                    modifier = Modifier.weight(1f),
-                    title = if (isArabic) "الأجهزة المتصلة" else "Connected",
-                    count = connectedCount.toString(),
-                    accentColor = StatusGreen,
-                    icon = Icons.Default.CheckCircle
-                )
-                MonitoringStatCard(
-                    modifier = Modifier.weight(1f),
-                    title = if (isArabic) "الأجهزة المنفصلة" else "Disconnected",
-                    count = disconnectedCount.toString(),
-                    accentColor = StatusRed,
-                    icon = Icons.Default.ErrorOutline
-                )
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    MonitoringStatCard(Modifier.weight(1f), if (isArabic) "إجمالي الأجهزة" else "Total Devices", totalDevicesCount.toString(), CyanAccent, Icons.Default.Devices)
+                    MonitoringStatCard(Modifier.weight(1f), if (isArabic) "الأجهزة المتصلة" else "Connected", connectedCount.toString(), StatusGreen, Icons.Default.CheckCircle)
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    MonitoringStatCard(Modifier.weight(1f), if (isArabic) "الأجهزة المنفصلة" else "Offline", disconnectedCount.toString(), StatusRed, Icons.Default.ErrorOutline)
+                    MonitoringStatCard(Modifier.weight(1f), if (isArabic) "غير مفحوصة" else "Unchecked", uncheckedCount.toString(), StatusAmber, Icons.Default.HelpOutline)
+                }
             }
         }
 
-        // -------------------------------------------------------------
         // Tower Selector - compact selectable cards
         // -------------------------------------------------------------
         item {
