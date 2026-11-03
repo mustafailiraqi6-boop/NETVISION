@@ -22,9 +22,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -54,6 +51,7 @@ import com.netvision.app.ui.screens.DashboardScreen
 import com.netvision.app.ui.screens.DeviceSnmpDetailsScreen
 import com.netvision.app.ui.screens.DevicesScreen
 import com.netvision.app.ui.screens.MonitoringScreen
+import com.netvision.app.ui.screens.PingScreen
 import com.netvision.app.ui.screens.ScannerScreen
 import com.netvision.app.ui.screens.SettingsScreen
 import com.netvision.app.ui.viewmodels.MonitoringViewModel
@@ -67,8 +65,6 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onStop() {
-        // Android calls onStop when the activity leaves the foreground,
-        // including Back navigation and removing the app from Recents.
         val backupFolder = BackupManager.getBackupFolder(this)
         if (backupFolder != null) {
             CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
@@ -86,8 +82,7 @@ class MainActivity : ComponentActivity() {
             val savedSettings by settingsViewModel.settings.collectAsState()
             val language = savedSettings.language
             val themeMode = savedSettings.themeMode
-            val isRtl = language == AppLanguage.ARABIC
-            val layoutDirection = if (isRtl) LayoutDirection.Rtl else LayoutDirection.Ltr
+            val layoutDirection = if (language == AppLanguage.ARABIC) LayoutDirection.Rtl else LayoutDirection.Ltr
             CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) {
                 NetVisionTheme(darkTheme = themeMode == AppThemeMode.DARK) {
                     NetVisionApp(
@@ -125,113 +120,57 @@ fun NetVisionApp(
         modifier = Modifier.fillMaxSize(),
         bottomBar = {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .navigationBarsPadding()
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
-                    .clip(RoundedCornerShape(28.dp))
-                    .background(navBackground)
-                    .padding(horizontal = 4.dp, vertical = 8.dp),
+                modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp)
+                    .clip(RoundedCornerShape(28.dp)).background(navBackground).padding(horizontal = 4.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(2.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 bottomNavItems.forEach { screen ->
                     val selected = currentRoute == screen.route
                     val title = if (isArabic) screen.titleAr else screen.titleEn
-
                     Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(24.dp))
+                        modifier = Modifier.weight(1f).clip(RoundedCornerShape(24.dp))
                             .background(if (selected) selectedBackground else Color.Transparent)
                             .clickable {
-                                if (currentRoute != screen.route) {
-                                    navController.navigate(screen.route) {
-                                        popUpTo(Screen.Dashboard.route) { saveState = true }
-                                        launchSingleTop = true
-                                        restoreState = true
-                                    }
+                                if (currentRoute != screen.route) navController.navigate(screen.route) {
+                                    popUpTo(Screen.Dashboard.route) { saveState = true }
+                                    launchSingleTop = true
+                                    restoreState = true
                                 }
-                            }
-                            .padding(horizontal = 2.dp, vertical = 8.dp),
+                            }.padding(horizontal = 2.dp, vertical = 8.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) {
-                            Icon(
-                                imageVector = screen.icon,
-                                contentDescription = title,
-                                tint = if (selected) selectedContent else inactiveContent
-                            )
-                            Text(
-                                text = title,
-                                color = if (selected) selectedContent else inactiveContent,
-                                fontSize = 11.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                textAlign = TextAlign.Center
-                            )
+                        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                            Icon(screen.icon, contentDescription = title, tint = if (selected) selectedContent else inactiveContent)
+                            Text(title, color = if (selected) selectedContent else inactiveContent, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
                         }
                     }
                 }
             }
         }
     ) { innerPadding ->
-        NavHost(
-            navController = navController,
-            startDestination = Screen.Dashboard.route,
-            modifier = Modifier.padding(innerPadding)
-        ) {
+        NavHost(navController = navController, startDestination = Screen.Dashboard.route, modifier = Modifier.padding(innerPadding)) {
             composable(Screen.Dashboard.route) {
-                DashboardScreen(
-                    isArabic = isArabic,
-                    monitoringViewModel = monitoringViewModel,
-                    onNavigateToDevices = { status ->
-                        if (status == null) {
-                            navController.navigate(Screen.Devices.route)
-                        } else {
-                            navController.navigate("devices-filter/${status.name}")
-                        }
-                    }
-                )
+                DashboardScreen(isArabic = isArabic, monitoringViewModel = monitoringViewModel, onNavigateToDevices = { status ->
+                    if (status == null) navController.navigate(Screen.Devices.route) else navController.navigate("devices-filter/${status.name}")
+                })
             }
-            composable(Screen.Devices.route) {
-                DevicesScreen(isArabic = isArabic)
-            }
+            composable(Screen.Devices.route) { DevicesScreen(isArabic = isArabic) }
             composable("devices-filter/{status}") { backStackEntry ->
-                val status = backStackEntry.arguments?.getString("status")
-                    ?.let { runCatching { DeviceStatus.valueOf(it) }.getOrNull() }
+                val status = backStackEntry.arguments?.getString("status")?.let { runCatching { DeviceStatus.valueOf(it) }.getOrNull() }
                 DevicesScreen(isArabic = isArabic, initialStatus = status)
             }
-            composable(Screen.Scanner.route) {
-                ScannerScreen(isArabic = isArabic)
-            }
+            composable(Screen.Scanner.route) { ScannerScreen(isArabic = isArabic) }
             composable(Screen.Monitoring.route) {
-                MonitoringScreen(
-                    isArabic = isArabic,
-                    onViewDeviceDetails = { deviceId -> navController.navigate("device-details/$deviceId") },
-                    viewModel = monitoringViewModel
-                )
+                MonitoringScreen(isArabic = isArabic, onViewDeviceDetails = { deviceId -> navController.navigate("device-details/$deviceId") }, viewModel = monitoringViewModel)
             }
+            composable(Screen.Ping.route) { PingScreen(isArabic = isArabic, viewModel = monitoringViewModel) }
             composable("device-details/{deviceId}") { backStackEntry ->
                 val deviceId = backStackEntry.arguments?.getString("deviceId").orEmpty()
-                DeviceSnmpDetailsScreen(
-                    deviceId = deviceId,
-                    isArabic = isArabic,
-                    onBack = { navController.popBackStack() },
-                    viewModel = monitoringViewModel
-                )
+                DeviceSnmpDetailsScreen(deviceId = deviceId, isArabic = isArabic, onBack = { navController.popBackStack() }, viewModel = monitoringViewModel)
             }
             composable(Screen.Settings.route) {
-                SettingsScreen(
-                    language = language,
-                    onLanguageChange = onLanguageChange,
-                    themeMode = themeMode,
-                    onThemeModeChange = onThemeModeChange
-                )
+                SettingsScreen(language = language, onLanguageChange = onLanguageChange, themeMode = themeMode, onThemeModeChange = onThemeModeChange)
             }
         }
     }
