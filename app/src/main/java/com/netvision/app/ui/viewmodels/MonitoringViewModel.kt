@@ -3,6 +3,7 @@ package com.netvision.app.ui.viewmodels
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.netvision.app.NetVisionApplication
+import com.netvision.app.database.DeviceFolderEntity
 import com.netvision.app.models.DeviceFolder
 import com.netvision.app.models.DeviceStatus
 import com.netvision.app.models.NetworkDevice
@@ -41,9 +42,10 @@ data class MonitoringUiState(
     val selectedDeviceId: String? = null,
     val selectedFolderId: String? = null,
     val searchQuery: String = "",
-    val isAutoPolling: Boolean = true,
+    val isAutoPolling: Boolean = false,
     val refreshIntervalSec: Int = 10,
     val lastRefreshedTime: Long = 0L,
+    val lastRefreshedByFolder: Map<String, Long> = emptyMap(),
     val isPollingNow: Boolean = false,
     val snmpStatusByDevice: Map<String, SnmpDeviceInfo> = emptyMap(),
     val diagnosticLogs: List<SnmpDiagnosticRecord> = emptyList(),
@@ -89,14 +91,7 @@ class MonitoringViewModel(
     private val consecutiveFailures = ConcurrentHashMap<String, AtomicInteger>()
     private val offlineFailureThreshold = 3
 
-    init {
-        startPeriodicPolling()
-        viewModelScope.launch {
-            NetVisionApplication.foregroundEvents.collect {
-                refreshNow()
-            }
-        }
-    }
+    init { }
 
     fun selectDevice(deviceId: String) {
         _uiState.value = _uiState.value.copy(selectedDeviceId = deviceId)
@@ -104,6 +99,15 @@ class MonitoringViewModel(
 
     fun selectFolder(folderId: String?) {
         _uiState.value = _uiState.value.copy(selectedFolderId = folderId)
+    }
+
+    fun refreshFolderIfStale(folderId: String) {
+        val last = _uiState.value.lastRefreshedByFolder[folderId] ?: 0L
+        if (System.currentTimeMillis() - last >= 60_000L) refreshFolderNow(folderId)
+    }
+
+    fun refreshFolderNow(folderId: String) {
+        viewModelScope.launch { pollAllDevices(folderId) }
     }
 
     fun setSearchQuery(query: String) {
@@ -144,11 +148,13 @@ class MonitoringViewModel(
         }
     }
 
-    private suspend fun pollAllDevices() = withContext(Dispatchers.IO) {
+    private suspend fun pollAllDevices(folderId: String? = null) = withContext(Dispatchers.IO) {
         // Wait for Room to emit the saved devices instead of missing the first
         // polling cycle while StateFlow still contains its initial empty list.
-        val currentDevices = savedDevices.value.ifEmpty {
-            savedDevices.first { it.isNotEmpty() }
+        val allDevices = savedDevices.value
+        val currentDevices = if (folderId == null) allDevices else allDevices.filter { device ->
+            if (folderId == DeviceFolderEntity.DEFAULT_FOLDER_ID) device.folderId.isBlank() || device.folderId == folderId
+            else device.folderId == folderId
         }
         if (currentDevices.isEmpty()) return@withContext
 
@@ -304,8 +310,13 @@ class MonitoringViewModel(
                 }.awaitAll()
             }
 
+            val refreshedAt = System.currentTimeMillis()
+            val updatedTimes = _uiState.value.lastRefreshedByFolder.toMutableMap()
+            val refreshedFolderIds = if (folderId == null) allDevices.map { it.folderId.ifBlank { DeviceFolderEntity.DEFAULT_FOLDER_ID } }.toSet() else setOf(folderId)
+            refreshedFolderIds.forEach { updatedTimes[it] = refreshedAt }
             _uiState.value = _uiState.value.copy(
-                lastRefreshedTime = System.currentTimeMillis(),
+                lastRefreshedTime = refreshedAt,
+                lastRefreshedByFolder = updatedTimes,
                 diagnosticLogs = SnmpV2Client.getDiagnosticHistory().reversed()
             )
         } finally {
