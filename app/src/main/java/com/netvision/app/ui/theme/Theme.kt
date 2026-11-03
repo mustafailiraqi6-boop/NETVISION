@@ -17,6 +17,31 @@ val NetGreenLight = Color(0xFF16834B)
 val NetRed = Color(0xFFB92F32)
 val NetAmber = Color(0xFFE6A23C)
 
+// Compatibility palette names used by older screens, now mapped to the unified identity.
+val NavyDark = Color(0xFF000000)
+val NavySurface = Color(0xFF080808)
+val NavyCard = Color(0xFF242424)
+val NavyBorder = Color(0xFF303030)
+val CyanAccent = NetGreen
+val ElectricBlue = Color(0xFF319B68)
+val ElectricBlueContainer = Color(0xFF164D34)
+val StatusGreen = NetGreen
+val StatusAmber = NetAmber
+val StatusRed = NetRed
+val TextPrimaryDark = Color(0xFFF5F5F5)
+val TextSecondaryDark = Color(0xFFAAAAAA)
+val TextMutedDark = Color(0xFF777777)
+val SlateLightBg = Color(0xFFF3F4F6)
+val SlateLightSurface = Color.White
+val SlateLightCard = Color(0xFFE8E8E8)
+val SlateLightBorder = Color(0xFFD1D5DB)
+val TextPrimaryLight = Color(0xFF171717)
+val TextSecondaryLight = Color(0xFF666666)
+val PurplePrimary = NetGreen
+val PurpleDeep = Color(0xFF104A2C)
+val PurpleContainer = Color(0xFFD9F2E3)
+val TealAccent = NetGreen
+
 private val DarkColorScheme = darkColorScheme(
     primary = NetGreen,
     onPrimary = Color.White,
