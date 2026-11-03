@@ -156,27 +156,6 @@ fun MonitoringScreen(
                     }
 
                     Spacer(modifier = Modifier.width(8.dp))
-
-                    FilledTonalButton(
-                        onClick = { viewModel.refreshNow() },
-                        enabled = !uiState.isPollingNow && savedDevices.isNotEmpty(),
-                        shape = RoundedCornerShape(10.dp),
-                        colors = ButtonDefaults.filledTonalButtonColors(
-                            containerColor = CyanAccent.copy(alpha = 0.15f),
-                            contentColor = CyanAccent
-                        )
-                    ) {
-                        if (uiState.isPollingNow) {
-                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = CyanAccent)
-                        } else {
-                            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
-                        }
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = if (isArabic) "تحديث الآن" else "Refresh",
-                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
-                        )
-                    }
                 }
             }
         }
@@ -287,7 +266,10 @@ fun MonitoringScreen(
                             Card(
                                 modifier = Modifier.weight(1f).heightIn(min = 82.dp)
                                     .clickable {
-                                        folder?.let { viewModel.selectFolder(it.id); viewModel.refreshFolderIfStale(it.id) }
+                                        folder?.let {
+                                            viewModel.selectFolder(it.id)
+                                            viewModel.refreshFolderNow(it.id)
+                                        }
                                     }
                                     .border(
                                         width = if (selected) 1.4.dp else 1.dp,
