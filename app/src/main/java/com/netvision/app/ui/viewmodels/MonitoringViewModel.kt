@@ -34,6 +34,8 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 
 data class MonitoringUiState(
     val selectedDeviceId: String? = null,
@@ -83,6 +85,9 @@ class MonitoringViewModel(
     private val pollSemaphore = Semaphore(10)
     private val snmpMapMutex = Mutex()
     private val previousPortCounters = mutableMapOf<String, Pair<Long, Long>>()
+    // Require three consecutive failed reachability checks before declaring an online device offline.
+    private val consecutiveFailures = ConcurrentHashMap<String, AtomicInteger>()
+    private val offlineFailureThreshold = 3
 
     init {
         startPeriodicPolling()
@@ -174,13 +179,30 @@ class MonitoringViewModel(
                             val isOnline = reachability.isReachable
                             val latencyMs = reachability.latencyMs.toInt().coerceAtLeast(0)
 
-                            repository.updateDeviceStatus(
-                                deviceId = device.id,
-                                isOnline = isOnline,
-                                latencyMs = latencyMs,
-                                uptime = null,
-                                snmpVersion = device.snmpVersion
-                            )
+                            // A single missed TCP probe must not flap a device offline.
+                            // Any successful probe clears the counter immediately.
+                            val effectiveIsOnline = if (isOnline) {
+                                consecutiveFailures.remove(device.id)
+                                true
+                            } else {
+                                val failures = consecutiveFailures
+                                    .computeIfAbsent(device.id) { AtomicInteger(0) }
+                                    .incrementAndGet()
+                                failures < offlineFailureThreshold && device.status != DeviceStatus.OFFLINE
+                            }
+
+                            // Persist only confirmed state transitions: failures 1-2 keep
+                            // the previous ONLINE state; the third consecutive failure
+                            // is the first one allowed to mark the device OFFLINE.
+                            if (isOnline || !effectiveIsOnline) {
+                                repository.updateDeviceStatus(
+                                    deviceId = device.id,
+                                    isOnline = effectiveIsOnline,
+                                    latencyMs = latencyMs,
+                                    uptime = null,
+                                    snmpVersion = device.snmpVersion
+                                )
+                            }
 
                             // SNMP must never determine reachability. It runs after
                             // status persistence and cannot delay the visible status.
@@ -226,7 +248,7 @@ class MonitoringViewModel(
                                             ?.let { repository.updateDeviceSnmpName(device.id, it) }
                                         repository.updateDeviceStatus(
                                             deviceId = device.id,
-                                            isOnline = isOnline,
+                                            isOnline = effectiveIsOnline,
                                             latencyMs = latencyMs,
                                             uptime = info.uptimeFormatted,
                                             snmpVersion = info.snmpVersion
