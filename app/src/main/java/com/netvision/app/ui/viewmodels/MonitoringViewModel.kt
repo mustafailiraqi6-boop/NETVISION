@@ -161,8 +161,14 @@ class MonitoringViewModel(
                 currentDevices.map { device ->
                     async(Dispatchers.IO) {
                         pollSemaphore.withPermit {
+                            val portsToProbe = if (device.manufacturer == com.netvision.app.models.Manufacturer.MIKROTIK) {
+                                listOf(80, 8291)
+                            } else {
+                                listOf(80)
+                            }
                             val reachability = reachabilityService.checkHostReachability(
                                 targetIp = device.ipAddress,
+                                portsToProbe = portsToProbe,
                                 timeoutMs = 500
                             )
                             val isOnline = reachability.isReachable
