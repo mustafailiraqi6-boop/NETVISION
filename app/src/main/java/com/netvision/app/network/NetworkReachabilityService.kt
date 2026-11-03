@@ -24,6 +24,12 @@ class NetworkReachabilityService(private val context: Context) {
 
     private val commonPorts = listOf(80, 443, 8291, 8728, 22, 8080, 8443)
 
+    /** Returns true only when Android currently exposes an active VPN transport. */
+    fun isVpnConnected(): Boolean = connectivityManager.allNetworks.any { network ->
+        connectivityManager.getNetworkCapabilities(network)
+            ?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true
+    }
+
     /**
      * Device reachability is valid only through an active Android VPN network.
      * Every TCP probe is explicitly bound to that VPN; cellular/Wi-Fi fallback
