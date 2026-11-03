@@ -35,7 +35,8 @@ private data class PingResult(val online: Boolean = false, val latency: String =
 
 private class ContinuousPingManager {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val jobs = mutableMapOf<String, Job>()\n    private val processes = mutableMapOf<String, Process>()
+    private val jobs = mutableMapOf<String, Job>()
+    private val processes = mutableMapOf<String, Process>()
     private val _results = MutableStateFlow<Map<String, PingResult>>(emptyMap())
     val results = _results.asStateFlow()
 
@@ -44,7 +45,8 @@ private class ContinuousPingManager {
         jobs[target.id] = scope.launch {
             try {
                 val process = ProcessBuilder("ping", "-i", "1", "-W", "2", target.ip).redirectErrorStream(true).start()
-                processes[target.id] = process\n                val reader = process.inputStream.bufferedReader()
+                processes[target.id] = process
+                val reader = process.inputStream.bufferedReader()
                 while (isActive) {
                     val line = withContext(Dispatchers.IO) { reader.readLine() } ?: break
                     val time = Regex("time[=<]([0-9.]+)\\s*ms", RegexOption.IGNORE_CASE).find(line)?.groupValues?.getOrNull(1)
@@ -83,7 +85,8 @@ fun PingScreen(isArabic: Boolean, viewModel: MonitoringViewModel) {
     val prefs = remember { context.getSharedPreferences("netvision_ping", Context.MODE_PRIVATE) }
     var manual by remember { mutableStateOf(loadManual(prefs)) }
     var favorites by remember { mutableStateOf(prefs.getStringSet("favorite_groups", emptySet())?.toSet() ?: emptySet()) }
-    var showAdd by remember { mutableStateOf(false) }\n    var editingId by remember { mutableStateOf<String?>(null) }
+    var showAdd by remember { mutableStateOf(false) }
+    var editingId by remember { mutableStateOf<String?>(null) }
     var name by remember { mutableStateOf("") }
     var ip by remember { mutableStateOf("") }
     var group by remember { mutableStateOf("") }
@@ -196,5 +199,6 @@ private fun loadManual(prefs: android.content.SharedPreferences): List<ManualPin
     }
 
 private fun saveManual(prefs: android.content.SharedPreferences, devices: List<ManualPingDevice>) {
-    prefs.edit().putString("manual_devices", devices.joinToString("\n") { "${it.id}|${it.name.replace("|", "")}|${it.ip}|${it.group.replace("|", "")}" }).apply()
+    prefs.edit().putString("manual_devices", devices.joinToString("
+") { "${it.id}|${it.name.replace("|", "")}|${it.ip}|${it.group.replace("|", "")}" }).apply()
 }
