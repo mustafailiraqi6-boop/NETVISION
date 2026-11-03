@@ -59,7 +59,7 @@ class RemoteNetworkScanner(
         // Test route accessibility on the first IP
         val firstIp = hostIps.first()
         val gatewayCheck = reachabilityService.testReachability(firstIp, port = 80, timeoutMs = 600)
-        val isAccessible = gatewayCheck.isReachable || reachabilityService.testReachability(firstIp, port = 443, timeoutMs = 600).isReachable
+        val isAccessible = gatewayCheck.isReachable
 
         var scanned = 0
 
