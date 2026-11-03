@@ -118,7 +118,7 @@ fun MonitoringScreen(
 
     // Dynamic stats based on saved devices
     val totalDevicesCount = savedDevices.size
-    val connectedCount = savedDevices.count { it.status == DeviceStatus.ONLINE }
+    val connectedCount = savedDevices.count { it.lastPingTimestamp > 0L && it.status == DeviceStatus.ONLINE }
     val disconnectedCount = savedDevices.count { it.lastPingTimestamp > 0L && it.status == DeviceStatus.OFFLINE }
     val uncheckedCount = savedDevices.count { it.lastPingTimestamp == 0L }
 
@@ -183,12 +183,12 @@ fun MonitoringScreen(
         item {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    MonitoringStatCard(Modifier.weight(1f), if (isArabic) "إجمالي الأجهزة" else "Total Devices", totalDevicesCount.toString(), CyanAccent, Icons.Default.Devices)
-                    MonitoringStatCard(Modifier.weight(1f), if (isArabic) "الأجهزة المتصلة" else "Connected", connectedCount.toString(), StatusGreen, Icons.Default.CheckCircle)
+                    MonitoringStatCard(title = if (isArabic) "إجمالي الأجهزة" else "Total Devices", count = totalDevicesCount.toString(), accentColor = CyanAccent, icon = Icons.Default.Devices, modifier = Modifier.weight(1f))
+                    MonitoringStatCard(title = if (isArabic) "الأجهزة المتصلة" else "Connected", count = connectedCount.toString(), accentColor = StatusGreen, icon = Icons.Default.CheckCircle, modifier = Modifier.weight(1f))
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    MonitoringStatCard(Modifier.weight(1f), if (isArabic) "الأجهزة المنفصلة" else "Offline", disconnectedCount.toString(), StatusRed, Icons.Default.ErrorOutline)
-                    MonitoringStatCard(Modifier.weight(1f), if (isArabic) "غير مفحوصة" else "Unchecked", uncheckedCount.toString(), StatusAmber, Icons.Default.HelpOutline)
+                    MonitoringStatCard(title = if (isArabic) "الأجهزة المنفصلة" else "Offline", count = disconnectedCount.toString(), accentColor = StatusRed, icon = Icons.Default.ErrorOutline, modifier = Modifier.weight(1f))
+                    MonitoringStatCard(title = if (isArabic) "غير مفحوصة" else "Unchecked", count = uncheckedCount.toString(), accentColor = StatusAmber, icon = Icons.Default.HelpOutline, modifier = Modifier.weight(1f))
                 }
             }
         }
