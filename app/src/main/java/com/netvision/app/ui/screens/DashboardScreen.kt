@@ -251,36 +251,17 @@ fun DashboardScreen(
             }
         }
 
-        // Stat KPI Grid: Total, Online, Offline
+        // Stat KPI Grid: confirmed online/offline and unchecked devices
         item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                StatCard(
-                    modifier = Modifier.weight(1f),
-                    title = if (isArabic) "إجمالي الأجهزة" else "Total Devices",
-                    count = uiState.totalDevices.toString(),
-                    accentColor = CyanAccent,
-                    icon = Icons.Default.Devices,
-                    onClick = { onNavigateToDevices(null) }
-                )
-                StatCard(
-                    modifier = Modifier.weight(1f),
-                    title = if (isArabic) "أجهزة متصلة" else "Online",
-                    count = uiState.onlineDevices.toString(),
-                    accentColor = StatusGreen,
-                    icon = Icons.Default.CheckCircle,
-                    onClick = { onNavigateToDevices(DeviceStatus.ONLINE) }
-                )
-                StatCard(
-                    modifier = Modifier.weight(1f),
-                    title = if (isArabic) "أجهزة غير متصلة" else "Offline",
-                    count = uiState.offlineDevices.toString(),
-                    accentColor = StatusRed,
-                    icon = Icons.Default.ErrorOutline,
-                    onClick = { onNavigateToDevices(DeviceStatus.OFFLINE) }
-                )
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    StatCard(title = if (isArabic) "إجمالي الأجهزة" else "Total Devices", count = uiState.totalDevices.toString(), accentColor = CyanAccent, icon = Icons.Default.Devices, onClick = { onNavigateToDevices(null) }, modifier = Modifier.weight(1f))
+                    StatCard(title = if (isArabic) "أجهزة متصلة" else "Online", count = uiState.onlineDevices.toString(), accentColor = StatusGreen, icon = Icons.Default.CheckCircle, onClick = { onNavigateToDevices(DeviceStatus.ONLINE) }, modifier = Modifier.weight(1f))
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    StatCard(title = if (isArabic) "أجهزة غير متصلة" else "Offline", count = uiState.offlineDevices.toString(), accentColor = StatusRed, icon = Icons.Default.ErrorOutline, onClick = { onNavigateToDevices(DeviceStatus.OFFLINE) }, modifier = Modifier.weight(1f))
+                    StatCard(title = if (isArabic) "غير مفحوصة" else "Unchecked", count = uiState.uncheckedDevices.toString(), accentColor = StatusAmber, icon = Icons.Default.HelpOutline, onClick = { onNavigateToDevices(null) }, modifier = Modifier.weight(1f))
+                }
             }
         }
 
