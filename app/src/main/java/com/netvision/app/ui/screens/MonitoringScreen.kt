@@ -159,6 +159,18 @@ fun MonitoringScreen(
             }
         }
 
+        if (uiState.isNetworkUnavailable) {
+            item {
+                Surface(color = StatusAmber.copy(alpha = 0.12f), shape = RoundedCornerShape(10.dp)) {
+                    Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.CloudOff, contentDescription = null, tint = StatusAmber)
+                        Spacer(Modifier.width(8.dp))
+                        Text(if (isArabic) "تعذر الوصول إلى الشبكة — تحقق من اتصال VPN" else "Network unavailable — check the VPN connection", color = StatusAmber, fontSize = 12.sp)
+                    }
+                }
+            }
+        }
+
         item {
             Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface, RoundedCornerShape(13.dp)).padding(4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 listOf(if (isArabic) "السكترات والأجهزة" else "Sectors & devices", if (isArabic) "السويجات" else "Switches").forEachIndexed { index, label ->
