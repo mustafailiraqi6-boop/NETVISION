@@ -36,7 +36,7 @@ class RemoteNetworkScanner(
     // Common ports tested for network equipment (HTTP Port 80 checked FIRST for WebFig / Web UI)
     private val probePorts = listOf(80, 443, 8291, 8728, 22, 8080, 8443)
 
-    fun scanRemoteSubnet(subnetCidr: String): Flow<RemoteScanStatus> = flow {
+    fun scanRemoteSubnet(subnetCidr: String, excludedIps: Set<String> = emptySet()): Flow<RemoteScanStatus> = flow {
         val hostIps = CidrUtils.getUsableHostIps(subnetCidr, maxHosts = 512)
         val totalHosts = hostIps.size
 
@@ -66,7 +66,8 @@ class RemoteNetworkScanner(
         for (targetIp in hostIps) {
             scanned++
 
-            val foundDevice = probeHost(targetIp)
+            // IPs already registered in the permanent device list are not scanned again.
+            val foundDevice = if (targetIp in excludedIps) null else probeHost(targetIp)
 
             val percent = ((scanned.toFloat() / totalHosts) * 100).toInt().coerceIn(0, 100)
             val isLast = scanned == totalHosts
@@ -91,37 +92,25 @@ class RemoteNetworkScanner(
      * Guaranteed to return a NetworkDevice ONLY if the device is genuinely reachable.
      */
     suspend fun probeHost(targetIp: String): NetworkDevice? = withContext(Dispatchers.IO) {
-        var isOnline = false
-        var activePort = 0
-        var latencyMs: Long = 0
-
-        // 1. Probe TCP ports with short timeout (port 80 checked FIRST for MikroTik WebFig and web UI)
-        for (port in probePorts) {
-            val startTime = System.currentTimeMillis()
-            try {
-                Socket().use { socket ->
-                    socket.connect(InetSocketAddress(targetIp, port), 350)
-                    isOnline = true
-                    activePort = port
-                    latencyMs = System.currentTimeMillis() - startTime
-                }
-            } catch (e: Exception) {}
-
-            if (isOnline) break
+        // Connectivity is tested only through the active VPN:
+        // port 80 for all devices, then Winbox 8291 as the MikroTik fallback.
+        val port80 = reachabilityService.checkHostReachability(
+            targetIp = targetIp,
+            portsToProbe = listOf(80),
+            timeoutMs = 350
+        )
+        val reachability = if (port80.isReachable) {
+            port80
+        } else {
+            reachabilityService.checkHostReachability(
+                targetIp = targetIp,
+                portsToProbe = listOf(8291),
+                timeoutMs = 350
+            )
         }
-
-        // 2. If TCP didn't respond, try ICMP echo ping
-        if (!isOnline) {
-            val startTime = System.currentTimeMillis()
-            try {
-                val addr = InetAddress.getByName(targetIp)
-                if (addr.isReachable(400)) {
-                    isOnline = true
-                    activePort = 0
-                    latencyMs = System.currentTimeMillis() - startTime
-                }
-            } catch (e: Exception) {}
-        }
+        val isOnline = reachability.isReachable
+        val activePort = reachability.portTested
+        val latencyMs = reachability.latencyMs
 
         // 3. If still not responding, try SNMP v2c
         var snmpSysDescr: String? = null
@@ -144,7 +133,7 @@ class RemoteNetworkScanner(
             ).getOrNull()?.takeIf { it.isSuccess }
         }
         if (snmpInfo != null) {
-            isOnline = true
+            // SNMP enriches the discovered device; it never makes an unreachable IP online.
             snmpSysDescr = snmpInfo.sysDescr
             snmpSysName = snmpInfo.sysName
             snmpUptime = snmpInfo.uptimeFormatted
