@@ -6,6 +6,7 @@ import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.Radar
 import androidx.compose.material.icons.filled.QueryStats
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.WifiTethering
 import androidx.compose.ui.graphics.vector.ImageVector
 
 sealed class Screen(
@@ -18,6 +19,7 @@ sealed class Screen(
     object Devices : Screen("devices", "Devices", "الأجهزة", Icons.Default.Devices)
     object Scanner : Screen("scanner", "Scanner", "الفاحص", Icons.Default.Radar)
     object Monitoring : Screen("monitoring", "Monitoring", "المراقبة", Icons.Default.QueryStats)
+    object Ping : Screen("ping", "Ping", "Ping", Icons.Default.WifiTethering)
     object Settings : Screen("settings", "Settings", "الإعدادات", Icons.Default.Settings)
 }
 
@@ -26,5 +28,6 @@ val bottomNavItems = listOf(
     Screen.Devices,
     Screen.Scanner,
     Screen.Monitoring,
+    Screen.Ping,
     Screen.Settings
 )
