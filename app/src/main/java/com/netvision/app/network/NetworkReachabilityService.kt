@@ -31,9 +31,8 @@ class NetworkReachabilityService(private val context: Context) {
     }
 
     /**
-     * Device reachability is valid only through an active Android VPN network.
-     * Every TCP probe is explicitly bound to that VPN; cellular/Wi-Fi fallback
-     * is intentionally forbidden to avoid false ONLINE results off-VPN.
+     * Device reachability is checked with ICMP only while Android reports an
+     * active VPN transport, avoiding TCP-port false negatives.
      */
     suspend fun checkHostReachability(
         targetIp: String,
@@ -65,7 +64,7 @@ class NetworkReachabilityService(private val context: Context) {
                 targetIp = targetIp,
                 isReachable = success,
                 portTested = 0,
-                latencyMs = time?.toLong() ?: (System.currentTimeMillis() - startedAt),
+                latencyMs = time?.toLong()?.coerceAtLeast(1L) ?: (System.currentTimeMillis() - startedAt),
                 failureReason = if (success) null else "No ICMP echo reply"
             )
         } catch (e: Exception) {
