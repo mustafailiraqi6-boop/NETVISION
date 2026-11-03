@@ -35,7 +35,7 @@ private data class PingResult(val online: Boolean = false, val latency: String =
 
 private class ContinuousPingManager {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val jobs = mutableMapOf<String, Job>()
+    private val jobs = mutableMapOf<String, Job>()\n    private val processes = mutableMapOf<String, Process>()
     private val _results = MutableStateFlow<Map<String, PingResult>>(emptyMap())
     val results = _results.asStateFlow()
 
@@ -44,7 +44,7 @@ private class ContinuousPingManager {
         jobs[target.id] = scope.launch {
             try {
                 val process = ProcessBuilder("ping", "-i", "1", "-W", "2", target.ip).redirectErrorStream(true).start()
-                val reader = process.inputStream.bufferedReader()
+                processes[target.id] = process\n                val reader = process.inputStream.bufferedReader()
                 while (isActive) {
                     val line = withContext(Dispatchers.IO) { reader.readLine() } ?: break
                     val time = Regex("time[=<]([0-9.]+)\\s*ms", RegexOption.IGNORE_CASE).find(line)?.groupValues?.getOrNull(1)
@@ -112,7 +112,7 @@ fun PingScreen(isArabic: Boolean, viewModel: MonitoringViewModel) {
             },
             confirmButton = { TextButton(onClick = {
                 val cleanIp = ip.trim()
-                val valid = cleanIp.split(".").size == 4 && cleanIp.split(".").all { it.toIntOrNull() in 0..255 }
+                val valid = cleanIp.split(".").size == 4 && cleanIp.split(".").all { it.toIntOrNull()?.let { value -> value in 0..255 } == true }
                 when {
                     name.isBlank() || group.isBlank() || !valid -> error = if (isArabic) "تأكد من الاسم والمجموعة وعنوان IP" else "Enter a valid name, group and IPv4 address"
                     targets.any { it.ip.equals(cleanIp, true) } -> error = if (isArabic) "عنوان IP موجود مسبقاً" else "This IP already exists"
