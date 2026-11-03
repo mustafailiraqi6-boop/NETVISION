@@ -32,7 +32,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import java.util.UUID
 
 private data class PingTarget(val id: String, val name: String, val ip: String, val groupId: String, val groupName: String, val managed: Boolean)
-private data class PingResult(val online: Boolean = false, val latency: String = "—")
+private data class PingResult(val online: Boolean = false, val latency: String = "—", val checked: Boolean = false)
 
 private class ContinuousPingManager {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -40,9 +40,13 @@ private class ContinuousPingManager {
     private val processes = mutableMapOf<String, Process>()
     private val _results = MutableStateFlow<Map<String, PingResult>>(emptyMap())
     val results = _results.asStateFlow()
+    private val _running = MutableStateFlow<Set<String>>(emptySet())
+    val running = _running.asStateFlow()
 
     fun start(target: PingTarget) {
         if (jobs[target.id]?.isActive == true) return
+        _running.value = _running.value + target.id
+        _results.value = _results.value + (target.id to PingResult())
         jobs[target.id] = scope.launch {
             try {
                 val process = ProcessBuilder("ping", "-i", "1", "-W", "2", target.ip).redirectErrorStream(true).start()
@@ -53,20 +57,22 @@ private class ContinuousPingManager {
                     val time = Regex("time[=<]([0-9.]+)\\s*ms", RegexOption.IGNORE_CASE).find(line)?.groupValues?.getOrNull(1)
                     val success = line.contains("bytes from", true) || time != null
                     if (success) {
-                        _results.value = _results.value + (target.id to PingResult(true, time?.let { "$it ms" } ?: "<1 ms"))
+                        _results.value = _results.value + (target.id to PingResult(true, time?.let { "$it ms" } ?: "<1 ms", true))
                     } else if (line.contains("unreachable", true) || line.contains("timeout", true) || line.contains("100% packet loss", true)) {
-                        _results.value = _results.value + (target.id to PingResult(false, "—"))
+                        _results.value = _results.value + (target.id to PingResult(false, "—", true))
                     }
                 }
                 process.destroy()
             } catch (_: Exception) {
-                _results.value = _results.value + (target.id to PingResult(false, "غير مدعوم"))
+                _results.value = _results.value + (target.id to PingResult(false, "غير مدعوم", true))
             }
         }
     }
 
     fun stop(id: String) {
         jobs.remove(id)?.cancel()
+        processes.remove(id)?.destroy()
+        _running.value = _running.value - id
         _results.value = _results.value + (id to PingResult())
     }
     fun stopAll() { jobs.keys.toList().forEach(::stop) }
@@ -91,6 +97,8 @@ fun PingScreen(isArabic: Boolean, viewModel: MonitoringViewModel) {
     val folders by viewModel.savedFolders.collectAsState()
     val manager = remember { ContinuousPingManager() }
     val results by manager.results.collectAsState()
+    val running by manager.running.collectAsState()
+    var collapsedGroups by remember { mutableStateOf(setOf<String>()) }
     val prefs = remember { context.getSharedPreferences("netvision_ping", Context.MODE_PRIVATE) }
     var manual by remember { mutableStateOf(loadManual(prefs)) }
     var favorites by remember { mutableStateOf(prefs.getStringSet("favorite_groups", emptySet())?.toSet() ?: emptySet()) }
@@ -106,7 +114,9 @@ fun PingScreen(isArabic: Boolean, viewModel: MonitoringViewModel) {
         devices.map { d -> PingTarget("monitor-${d.id}", d.name, d.ipAddress, d.folderId, folderNames[d.folderId] ?: "أجهزة غير تابعة لبرج", true) } +
             manual.map { PingTarget(it.id, it.name, it.ip, "custom:${it.group}", it.group, false) }
     }
-    val grouped = targets.groupBy { it.groupId }.toList().sortedWith(compareByDescending<Pair<String, List<PingTarget>>> { it.first in favorites }.thenBy { it.second.firstOrNull()?.groupName ?: "" })
+    val offlineTargets = targets.filter { target -> running.contains(target.id) && (results[target.id]?.let { it.checked && !it.online && it.latency != "غير مدعوم" } == true) }
+    val offlineIds = offlineTargets.map { it.id }.toSet()
+    val grouped = targets.filterNot { it.id in offlineIds }.groupBy { it.groupId }.toList().sortedWith(compareByDescending<Pair<String, List<PingTarget>>> { it.first in favorites }.thenBy { it.second.firstOrNull()?.groupName ?: "" })
 
     DisposableEffect(Unit) { onDispose { manager.stopAll() } }
 
@@ -158,8 +168,39 @@ fun PingScreen(isArabic: Boolean, viewModel: MonitoringViewModel) {
                 Button(onClick = { targets.forEach(manager::start) }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = pingGreen, contentColor = pingText)) { Icon(Icons.Default.PlayArrow, null); Text(if (isArabic) "تشغيل الكل" else "Start all") }
                 Button(onClick = { manager.stopAll() }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = pingRed, contentColor = pingText)) { Icon(Icons.Default.Stop, null); Text(if (isArabic) "إيقاف الكل" else "Stop all") }
             }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(onClick = { collapsedGroups = emptySet() }, modifier = Modifier.weight(1f)) { Text(if (isArabic) "توسيع الكل" else "Expand all") }
+                OutlinedButton(onClick = { collapsedGroups = (grouped.map { it.first } + if (offlineTargets.isNotEmpty()) listOf("__offline__") else emptyList()).toSet() }, modifier = Modifier.weight(1f)) { Text(if (isArabic) "طي الكل" else "Collapse all") }
+            }
         }
         if (targets.isEmpty()) item { Text(if (isArabic) "لا توجد أجهزة بعد. أضف جهازاً أو أضف أجهزة من قسم المراقبة." else "No devices yet. Add one or save devices in Monitoring.", color = pingMuted) }
+        if (offlineTargets.isNotEmpty()) item(key = "__offline__") {
+            Card(shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, pingRed.copy(alpha = 0.55f)), colors = CardDefaults.cardColors(containerColor = pingPanel)) {
+                Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(if (isArabic) "الأجهزة غير المتصلة" else "Offline devices", modifier = Modifier.weight(1f), color = pingRed, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        Text(offlineTargets.size.toString(), color = pingMuted, fontSize = 12.sp)
+                        TextButton(onClick = { collapsedGroups = if ("__offline__" in collapsedGroups) collapsedGroups - "__offline__" else collapsedGroups + "__offline__" }) { Text(if ("__offline__" in collapsedGroups) (if (isArabic) "توسيع" else "Expand") else (if (isArabic) "طي" else "Collapse")) }
+                    }
+                    if ("__offline__" !in collapsedGroups) offlineTargets.forEach { target ->
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().background(pingTile, RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 10.dp)) {
+                            Box(Modifier.size(10.dp).background(pingRed, CircleShape))
+                            Spacer(Modifier.width(10.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(target.name, fontWeight = FontWeight.Medium, fontSize = 14.sp, color = pingText)
+                                Text("${target.ip} • ${target.groupName}", color = pingMuted, fontSize = 11.sp)
+                            }
+                            Text(if (isArabic) "غير متصل" else "Offline", color = pingRed, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                            if (!target.managed) TextButton(onClick = {
+                                manager.stop(target.id)
+                                manual = manual.filterNot { it.id == target.id }
+                                saveManual(prefs, manual)
+                            }) { Text(if (isArabic) "حذف" else "Delete", color = pingRed, fontSize = 11.sp) }
+                        }
+                    }
+                }
+            }
+        }
         items(grouped, key = { it.first }) { (groupId, groupTargets) ->
             val groupName = groupTargets.first().groupName
             Card(shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, Color(0xFF202020)), colors = CardDefaults.cardColors(containerColor = pingPanel)) {
@@ -171,21 +212,23 @@ fun PingScreen(isArabic: Boolean, viewModel: MonitoringViewModel) {
                         }) { Icon(if (groupId in favorites) Icons.Default.Favorite else Icons.Default.FavoriteBorder, null, tint = if (groupId in favorites) pingYellow else pingMuted) }
                         Text(groupName, modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold, fontSize = 16.sp, color = pingText)
                         Text("${groupTargets.size}", color = pingMuted, fontSize = 12.sp)
+                        TextButton(onClick = { collapsedGroups = if (groupId in collapsedGroups) collapsedGroups - groupId else collapsedGroups + groupId }) { Text(if (groupId in collapsedGroups) (if (isArabic) "توسيع" else "Expand") else (if (isArabic) "طي" else "Collapse")) }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                         Button(onClick = { groupTargets.forEach(manager::start) }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = pingGreen, contentColor = pingText)) { Icon(Icons.Default.PlayArrow, null); Text(if (isArabic) "تشغيل" else "Start") }
                         Button(onClick = { groupTargets.forEach { manager.stop(it.id) } }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = pingRed, contentColor = pingText)) { Icon(Icons.Default.Stop, null); Text(if (isArabic) "إيقاف" else "Stop") }
                     }
-                    groupTargets.forEach { target ->
+                    if (groupId !in collapsedGroups) groupTargets.forEach { target ->
                         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().background(pingTile, RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 12.dp)) {
                             val result = results[target.id] ?: PingResult()
-                            Box(Modifier.size(10.dp).background(if (result.online) pingGreen else pingRed, CircleShape))
+                            val isOffline = running.contains(target.id) && result.checked && !result.online && result.latency != "غير مدعوم"
+                            Box(Modifier.size(10.dp).background(if (result.online) pingGreen else if (isOffline) pingRed else pingMuted, CircleShape))
                             Spacer(Modifier.width(10.dp))
                             Column(Modifier.weight(1f)) {
                                 Text(target.name, fontWeight = FontWeight.Medium, fontSize = 14.sp, color = pingText)
                                 Text(target.ip, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
                             }
-                            Text(result.latency, color = if (result.online) pingGreen else pingMuted, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                            Text(if (isOffline) (if (isArabic) "غير متصل" else "Offline") else result.latency, color = if (result.online) pingGreen else if (isOffline) pingRed else pingMuted, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                             if (!target.managed) {
                                 TextButton(onClick = {
                                     manager.stop(target.id)
