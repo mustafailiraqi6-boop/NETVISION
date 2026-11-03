@@ -57,7 +57,8 @@ data class NetworkDevice(
     val lastSeenTimestamp: Long = System.currentTimeMillis(),
     val metrics: NetworkMetrics = NetworkMetrics(),
     val snmpVersion: String? = null,
-    val folderId: String = "uncategorized"
+    val folderId: String = "uncategorized",
+    val lastPingTimestamp: Long = 0L
 )
 
 data class NetworkRange(
