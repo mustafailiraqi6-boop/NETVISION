@@ -31,15 +31,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.util.UUID
 
-private val PingBlack = Color(0xFF000000)
-private val PingPanel = Color(0xFF080808)
-private val PingTile = Color(0xFF242424)
-private val PingGreen = Color(0xFF16834B)
-private val PingRed = Color(0xFFB92F32)
-private val PingYellow = Color(0xFFE6A23C)
-private val PingWhite = Color(0xFFF5F5F5)
-private val PingMuted = Color(0xFFAAAAAA)
-
 private data class PingTarget(val id: String, val name: String, val ip: String, val groupId: String, val groupName: String, val managed: Boolean)
 private data class PingResult(val online: Boolean = false, val latency: String = "—")
 
@@ -88,6 +79,14 @@ private data class ManualPingDevice(val id: String, val name: String, val ip: St
 @Composable
 fun PingScreen(isArabic: Boolean, viewModel: MonitoringViewModel) {
     val context = LocalContext.current
+    val pingBackground = MaterialTheme.colorScheme.background
+    val pingPanel = MaterialTheme.colorScheme.surface
+    val pingTile = MaterialTheme.colorScheme.surfaceVariant
+    val pingGreen = MaterialTheme.colorScheme.primary
+    val pingRed = MaterialTheme.colorScheme.error
+    val pingYellow = MaterialTheme.colorScheme.tertiary
+    val pingText = MaterialTheme.colorScheme.onSurface
+    val pingMuted = MaterialTheme.colorScheme.onSurfaceVariant
     val devices by viewModel.savedDevices.collectAsState()
     val folders by viewModel.savedFolders.collectAsState()
     val manager = remember { ContinuousPingManager() }
@@ -141,52 +140,52 @@ fun PingScreen(isArabic: Boolean, viewModel: MonitoringViewModel) {
     }
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize().background(PingBlack).padding(horizontal = 16.dp),
+        modifier = Modifier.fillMaxSize().background(pingBackground).padding(horizontal = 16.dp),
         contentPadding = PaddingValues(top = 16.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.weight(1f)) {
-                    Text(if (isArabic) "اختبار Ping المباشر" else "Live Ping", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = PingWhite)
-                    Text(if (isArabic) "فحص مستمر للأجهزة وزمن الاستجابة" else "Continuous ICMP reachability and latency", color = PingMuted, fontSize = 12.sp)
+                    Text(if (isArabic) "اختبار Ping المباشر" else "Live Ping", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = pingText)
+                    Text(if (isArabic) "فحص مستمر للأجهزة وزمن الاستجابة" else "Continuous ICMP reachability and latency", color = pingMuted, fontSize = 12.sp)
                 }
-                FilledTonalButton(onClick = { editingId = null; name = ""; ip = ""; group = ""; showAdd = true }) { Icon(Icons.Default.Add, null); Spacer(Modifier.width(4.dp)); Text(if (isArabic) "إضافة" else "Add") }
+                Button(onClick = { editingId = null; name = ""; ip = ""; group = ""; showAdd = true }, colors = ButtonDefaults.buttonColors(containerColor = pingGreen, contentColor = pingText)) { Icon(Icons.Default.Add, null); Spacer(Modifier.width(4.dp)); Text(if (isArabic) "إضافة" else "Add") }
             }
         }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                Button(onClick = { targets.forEach(manager::start) }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = PingGreen, contentColor = PingWhite)) { Icon(Icons.Default.PlayArrow, null); Text(if (isArabic) "تشغيل الكل" else "Start all") }
-                Button(onClick = { manager.stopAll() }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = PingRed, contentColor = PingWhite)) { Icon(Icons.Default.Stop, null); Text(if (isArabic) "إيقاف الكل" else "Stop all") }
+                Button(onClick = { targets.forEach(manager::start) }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = pingGreen, contentColor = pingText)) { Icon(Icons.Default.PlayArrow, null); Text(if (isArabic) "تشغيل الكل" else "Start all") }
+                Button(onClick = { manager.stopAll() }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = pingRed, contentColor = pingText)) { Icon(Icons.Default.Stop, null); Text(if (isArabic) "إيقاف الكل" else "Stop all") }
             }
         }
-        if (targets.isEmpty()) item { Text(if (isArabic) "لا توجد أجهزة بعد. أضف جهازاً أو أضف أجهزة من قسم المراقبة." else "No devices yet. Add one or save devices in Monitoring.", color = PingMuted) }
+        if (targets.isEmpty()) item { Text(if (isArabic) "لا توجد أجهزة بعد. أضف جهازاً أو أضف أجهزة من قسم المراقبة." else "No devices yet. Add one or save devices in Monitoring.", color = pingMuted) }
         items(grouped, key = { it.first }) { (groupId, groupTargets) ->
             val groupName = groupTargets.first().groupName
-            Card(shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, Color(0xFF202020)), colors = CardDefaults.cardColors(containerColor = PingPanel)) {
+            Card(shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, Color(0xFF202020)), colors = CardDefaults.cardColors(containerColor = pingPanel)) {
                 Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = {
                             favorites = if (groupId in favorites) favorites - groupId else favorites + groupId
                             prefs.edit().putStringSet("favorite_groups", favorites).apply()
-                        }) { Icon(if (groupId in favorites) Icons.Default.Favorite else Icons.Default.FavoriteBorder, null, tint = if (groupId in favorites) PingYellow else PingMuted) }
-                        Text(groupName, modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold, fontSize = 16.sp, color = PingWhite)
-                        Text("${groupTargets.size}", color = PingMuted, fontSize = 12.sp)
+                        }) { Icon(if (groupId in favorites) Icons.Default.Favorite else Icons.Default.FavoriteBorder, null, tint = if (groupId in favorites) pingYellow else pingMuted) }
+                        Text(groupName, modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold, fontSize = 16.sp, color = pingText)
+                        Text("${groupTargets.size}", color = pingMuted, fontSize = 12.sp)
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                        Button(onClick = { groupTargets.forEach(manager::start) }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = PingGreen, contentColor = PingWhite)) { Icon(Icons.Default.PlayArrow, null); Text(if (isArabic) "تشغيل" else "Start") }
-                        Button(onClick = { groupTargets.forEach { manager.stop(it.id) } }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = PingRed, contentColor = PingWhite)) { Icon(Icons.Default.Stop, null); Text(if (isArabic) "إيقاف" else "Stop") }
+                        Button(onClick = { groupTargets.forEach(manager::start) }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = pingGreen, contentColor = pingText)) { Icon(Icons.Default.PlayArrow, null); Text(if (isArabic) "تشغيل" else "Start") }
+                        Button(onClick = { groupTargets.forEach { manager.stop(it.id) } }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = pingRed, contentColor = pingText)) { Icon(Icons.Default.Stop, null); Text(if (isArabic) "إيقاف" else "Stop") }
                     }
                     groupTargets.forEach { target ->
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().background(PingTile, RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 12.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().background(pingTile, RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 12.dp)) {
                             val result = results[target.id] ?: PingResult()
-                            Box(Modifier.size(10.dp).background(if (result.online) PingGreen else PingRed, CircleShape))
+                            Box(Modifier.size(10.dp).background(if (result.online) pingGreen else pingRed, CircleShape))
                             Spacer(Modifier.width(10.dp))
                             Column(Modifier.weight(1f)) {
-                                Text(target.name, fontWeight = FontWeight.Medium, fontSize = 14.sp, color = PingWhite)
+                                Text(target.name, fontWeight = FontWeight.Medium, fontSize = 14.sp, color = pingText)
                                 Text(target.ip, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
                             }
-                            Text(result.latency, color = if (result.online) PingGreen else PingMuted, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                            Text(result.latency, color = if (result.online) pingGreen else pingMuted, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                             if (!target.managed) {
                                 TextButton(onClick = {
                                     manager.stop(target.id)
