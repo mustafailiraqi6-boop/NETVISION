@@ -196,7 +196,10 @@ class MonitoringViewModel(
             if (folderId == DeviceFolderEntity.DEFAULT_FOLDER_ID) device.folderId.isBlank() || device.folderId == folderId
             else device.folderId == folderId
         }
-        if (currentDevices.isEmpty()) return@withContext
+        if (currentDevices.isEmpty()) {
+            if (_uiState.value.selectedFolderId == folderId) _uiState.value = _uiState.value.copy(isPollingNow = false)
+            return@withContext
+        }
 
         try {
             val settings = settingsRepository.getSettings()
