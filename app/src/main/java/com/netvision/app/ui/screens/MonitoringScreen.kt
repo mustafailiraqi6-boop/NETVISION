@@ -114,7 +114,6 @@ fun MonitoringScreen(
     // Currently selected active device for SNMP details card
     val activeDevice = savedDevices.find { it.id == uiState.selectedDeviceId }
         ?: filteredDevices.firstOrNull()
-        ?: savedDevices.firstOrNull()
 
 
     // Dynamic stats based on saved devices
@@ -386,12 +385,10 @@ fun MonitoringScreen(
                         )
                         Spacer(modifier = Modifier.height(10.dp))
                         Text(
-                            text = if (savedDevices.isEmpty()) {
-                                if (isArabic) "لا توجد أجهزة مضافة للمراقبة حالياً."
-                                else "No devices added for monitoring."
-                            } else {
-                                if (isArabic) "لا توجد أجهزة مطابقة للبحث أو للبرج المSelected."
-                                else "No devices match search query or selected tower."
+                            text = when {
+                                savedDevices.isEmpty() -> if (isArabic) "لا توجد أجهزة مضافة للمراقبة حالياً." else "No devices added for monitoring."
+                                uiState.selectedFolderId == null -> if (isArabic) "اختر برجاً لعرض أجهزته وبدء تحديثه." else "Select a tower to view its devices and refresh it."
+                                else -> if (isArabic) "لا توجد أجهزة مطابقة للبحث ضمن هذا البرج." else "No devices match the search in this tower."
                             },
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSurface
