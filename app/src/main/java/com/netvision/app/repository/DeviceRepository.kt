@@ -169,6 +169,7 @@ class DeviceRepository(
             status = newStatus.name,
             lastSeenTimestamp = if (isOnline) System.currentTimeMillis() else entity.lastSeenTimestamp,
             pingLatencyMs = if (isOnline) latencyMs else 0,
+            lastPingTimestamp = System.currentTimeMillis(),
             uptimeFormatted = uptime ?: entity.uptimeFormatted,
             snmpVersion = snmpVersion ?: entity.snmpVersion
         )
@@ -194,6 +195,14 @@ class DeviceRepository(
                 )
             }
         }
+    }
+
+    suspend fun updateDeviceTelemetry(deviceId: String, uptime: String?, snmpVersion: String?) {
+        val entity = deviceDao?.getDeviceById(deviceId) ?: return
+        deviceDao.insertOrUpdate(entity.copy(
+            uptimeFormatted = uptime ?: entity.uptimeFormatted,
+            snmpVersion = snmpVersion ?: entity.snmpVersion
+        ))
     }
 
     // -------------------------------------------------------------
