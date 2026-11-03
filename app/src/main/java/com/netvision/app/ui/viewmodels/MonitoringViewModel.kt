@@ -47,6 +47,7 @@ data class MonitoringUiState(
     val lastRefreshedTime: Long = 0L,
     val lastRefreshedByFolder: Map<String, Long> = emptyMap(),
     val isPollingNow: Boolean = false,
+    val isNetworkUnavailable: Boolean = false,
     val snmpStatusByDevice: Map<String, SnmpDeviceInfo> = emptyMap(),
     val diagnosticLogs: List<SnmpDiagnosticRecord> = emptyList(),
     val ethernetPortsByDevice: Map<String, EthernetMonitoringSnapshot> = emptyMap()
@@ -80,10 +81,13 @@ class MonitoringViewModel(
             initialValue = emptyList()
         )
 
-    private val _uiState = MutableStateFlow(MonitoringUiState())
+    private val monitoringPreferences = NetVisionApplication.instance.getSharedPreferences("netvision_monitoring", 0)
+    private val _uiState = MutableStateFlow(MonitoringUiState(selectedFolderId = monitoringPreferences.getString("last_selected_folder_id", null)))
     val uiState: StateFlow<MonitoringUiState> = _uiState.asStateFlow()
 
     private var pollingJob: Job? = null
+    private var groupRefreshJob: Job? = null
+    private var centralPingJob: Job? = null
     private val pollSemaphore = Semaphore(10)
     private val snmpMapMutex = Mutex()
     private val previousPortCounters = mutableMapOf<String, Pair<Long, Long>>()
@@ -91,7 +95,9 @@ class MonitoringViewModel(
     private val consecutiveFailures = ConcurrentHashMap<String, AtomicInteger>()
     private val offlineFailureThreshold = 3
 
-    init { }
+    init {
+        startCentralPingMonitoring()
+    }
 
     fun selectDevice(deviceId: String) {
         _uiState.value = _uiState.value.copy(selectedDeviceId = deviceId)
@@ -99,6 +105,7 @@ class MonitoringViewModel(
 
     fun selectFolder(folderId: String?) {
         _uiState.value = _uiState.value.copy(selectedFolderId = folderId)
+        monitoringPreferences.edit().putString("last_selected_folder_id", folderId).apply()
     }
 
     fun refreshFolderIfStale(folderId: String) {
@@ -107,7 +114,9 @@ class MonitoringViewModel(
     }
 
     fun refreshFolderNow(folderId: String) {
-        viewModelScope.launch { pollAllDevices(folderId) }
+        groupRefreshJob?.cancel()
+        _uiState.value = _uiState.value.copy(selectedFolderId = folderId, isPollingNow = true)
+        groupRefreshJob = viewModelScope.launch { pollAllDevices(folderId) }
     }
 
     fun setSearchQuery(query: String) {
@@ -131,9 +140,7 @@ class MonitoringViewModel(
     }
 
     fun refreshNow() {
-        viewModelScope.launch {
-            pollAllDevices()
-        }
+        _uiState.value.selectedFolderId?.let(::refreshFolderNow)
     }
 
     private fun startPeriodicPolling() {
@@ -148,6 +155,39 @@ class MonitoringViewModel(
         }
     }
 
+    /** One app-wide ICMP monitor shared by every screen. */
+    private fun startCentralPingMonitoring() {
+        if (centralPingJob?.isActive == true) return
+        centralPingJob = viewModelScope.launch {
+            delay(1500L)
+            while (isActive) {
+                val vpnAvailable = reachabilityService.isVpnConnected()
+                _uiState.value = _uiState.value.copy(isNetworkUnavailable = !vpnAvailable)
+                if (vpnAvailable) {
+                    val devices = repository.getAllDevices().first()
+                    coroutineScope {
+                        devices.map { device ->
+                            async(Dispatchers.IO) {
+                                pollSemaphore.withPermit {
+                                    val result = reachabilityService.checkHostReachability(device.ipAddress, timeoutMs = 2000)
+                                    if (result.failureReason == "VPN is not connected") return@withPermit
+                                    if (result.isReachable) {
+                                        consecutiveFailures.remove(device.id)
+                                        repository.updateDeviceStatus(device.id, true, result.latencyMs.toInt().coerceAtLeast(0))
+                                    } else {
+                                        val failures = consecutiveFailures.computeIfAbsent(device.id) { AtomicInteger(0) }.incrementAndGet()
+                                        if (failures >= offlineFailureThreshold) repository.updateDeviceStatus(device.id, false, 0)
+                                    }
+                                }
+                            }
+                        }.awaitAll()
+                    }
+                }
+                delay(10_000L)
+            }
+        }
+    }
+
     private suspend fun pollAllDevices(folderId: String? = null) = withContext(Dispatchers.IO) {
         // Wait for Room to emit the saved devices instead of missing the first
         // polling cycle while StateFlow still contains its initial empty list.
@@ -158,16 +198,10 @@ class MonitoringViewModel(
         }
         if (currentDevices.isEmpty()) return@withContext
 
-        if (_uiState.value.isPollingNow) return@withContext
-        _uiState.value = _uiState.value.copy(isPollingNow = true)
-
         try {
             val settings = settingsRepository.getSettings()
             val snmpPort = settings.snmpPort
 
-            // Reachability checks run concurrently (bounded to 10 devices).
-            // Each device's online/offline state is persisted immediately after
-            // its reachability result; SNMP is deliberately independent.
             coroutineScope {
                 currentDevices.map { device ->
                     async(Dispatchers.IO) {
@@ -281,12 +315,14 @@ class MonitoringViewModel(
                 diagnosticLogs = SnmpV2Client.getDiagnosticHistory().reversed()
             )
         } finally {
-            _uiState.value = _uiState.value.copy(isPollingNow = false)
+            if (_uiState.value.selectedFolderId == folderId) _uiState.value = _uiState.value.copy(isPollingNow = false)
         }
     }
 
     override fun onCleared() {
         super.onCleared()
         pollingJob?.cancel()
+        groupRefreshJob?.cancel()
+        centralPingJob?.cancel()
     }
 }
