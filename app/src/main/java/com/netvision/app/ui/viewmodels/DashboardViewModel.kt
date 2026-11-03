@@ -7,12 +7,29 @@ import com.netvision.app.models.DeviceStatus
 import com.netvision.app.models.Manufacturer
 import com.netvision.app.models.NetworkDevice
 import com.netvision.app.models.RecentDeviceActivity
+import com.netvision.app.network.NetworkReachabilityService
 import com.netvision.app.repository.DeviceRepository
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
+
+private data class DashboardProbeResult(
+    val isOnline: Boolean,
+    val latencyMs: Long
+)
 
 data class DashboardUiState(
     val totalDevices: Int = 0,
@@ -23,7 +40,8 @@ data class DashboardUiState(
     val avgLatencyMs: Double = 0.0,
     val healthPercentage: Int = 100,
     val recentActivity: List<RecentDeviceActivity> = emptyList(),
-    val isLoading: Boolean = false
+    val isLoading: Boolean = false,
+    val isRefreshing: Boolean = false
 )
 
 class DashboardViewModel(
@@ -34,28 +52,55 @@ class DashboardViewModel(
     }
 ) : ViewModel() {
 
+    // Dashboard-only results: never write these quick checks into the shared
+    // device status in Room, so Monitoring keeps its existing multi-port logic.
+    private val dashboardProbeResults =
+        MutableStateFlow<Map<String, DashboardProbeResult>>(emptyMap())
+    private val _isRefreshing = MutableStateFlow(false)
+    private val probeSemaphore = Semaphore(10)
+    private var probeJob: Job? = null
+    private val reachabilityService by lazy {
+        NetworkReachabilityService(NetVisionApplication.instance)
+    }
+
+    init {
+        viewModelScope.launch {
+            repository.getAllDevices()
+                .distinctUntilChanged { old, new ->
+                    old.map { it.id to it.ipAddress } == new.map { it.id to it.ipAddress }
+                }
+                .collect { devices ->
+                    startDashboardProbe(devices)
+                }
+        }
+    }
+
     val uiState: StateFlow<DashboardUiState> = combine(
         repository.getAllDevices(),
-        repository.recentActivities
-    ) { devices, activities ->
+        repository.recentActivities,
+        dashboardProbeResults,
+        _isRefreshing
+    ) { devices, activities, probeResults, isRefreshing ->
         val total = devices.size
-        val online = devices.count { it.status == DeviceStatus.ONLINE }
-        val offline = devices.count { it.status == DeviceStatus.OFFLINE }
+        val online = devices.count { device ->
+            probeResults[device.id]?.isOnline
+                ?: (device.status == DeviceStatus.ONLINE)
+        }
+        val offline = total - online
         val ubnt = devices.count { it.manufacturer == Manufacturer.UBIQUITI }
         val mtk = devices.count { it.manufacturer == Manufacturer.MIKROTIK }
 
-        val onlineDevicesWithLatency = devices.filter { it.status == DeviceStatus.ONLINE && it.metrics.pingLatencyMs > 0 }
-        val avgLatency = if (onlineDevicesWithLatency.isNotEmpty()) {
-            onlineDevicesWithLatency.map { it.metrics.pingLatencyMs }.average()
-        } else {
-            0.0
+        val onlineLatencies = devices.mapNotNull { device ->
+            val result = probeResults[device.id]
+            when {
+                result != null && result.isOnline && result.latencyMs > 0 -> result.latencyMs.toDouble()
+                result == null && device.status == DeviceStatus.ONLINE &&
+                    device.metrics.pingLatencyMs > 0 -> device.metrics.pingLatencyMs.toDouble()
+                else -> null
+            }
         }
-
-        val health = if (total > 0) {
-            ((online.toDouble() / total) * 100).toInt()
-        } else {
-            100
-        }
+        val avgLatency = onlineLatencies.average().takeIf { onlineLatencies.isNotEmpty() } ?: 0.0
+        val health = if (total > 0) ((online.toDouble() / total) * 100).toInt() else 100
 
         DashboardUiState(
             totalDevices = total,
@@ -66,11 +111,81 @@ class DashboardViewModel(
             avgLatencyMs = avgLatency,
             healthPercentage = health,
             recentActivity = activities,
-            isLoading = false
+            isLoading = false,
+            isRefreshing = isRefreshing
         )
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
         initialValue = DashboardUiState(isLoading = true)
     )
+
+    fun refreshDashboardStatuses() {
+        viewModelScope.launch {
+            val devices = repository.getAllDevices().first()
+            startDashboardProbe(devices)
+        }
+    }
+
+    private fun startDashboardProbe(devices: List<NetworkDevice>) {
+        probeJob?.cancel()
+        if (devices.isEmpty()) {
+            dashboardProbeResults.value = emptyMap()
+            _isRefreshing.value = false
+            return
+        }
+
+        // Show the saved state immediately, then replace each result as the
+        // quick Port 80 check completes.
+        val currentResults = dashboardProbeResults.value.toMutableMap()
+        devices.forEach { device ->
+            if (device.id !in currentResults) {
+                currentResults[device.id] = DashboardProbeResult(
+                    isOnline = device.status == DeviceStatus.ONLINE,
+                    latencyMs = device.metrics.pingLatencyMs.coerceAtLeast(0L)
+                )
+            }
+        }
+        val validIds = devices.mapTo(mutableSetOf()) { it.id }
+        dashboardProbeResults.value = currentResults.filterKeys { it in validIds }
+        _isRefreshing.value = true
+
+        probeJob = viewModelScope.launch {
+            try {
+                coroutineScope {
+                    devices.map { device ->
+                        async(Dispatchers.IO) {
+                            probeSemaphore.withPermit {
+                                val result = try {
+                                    reachabilityService.checkHostReachability(
+                                        targetIp = device.ipAddress,
+                                        portsToProbe = listOf(80),
+                                        timeoutMs = 400
+                                    )
+                                } catch (_: Exception) {
+                                    null
+                                }
+
+                                if (result != null) {
+                                    val updated = dashboardProbeResults.value.toMutableMap()
+                                    updated[device.id] = DashboardProbeResult(
+                                        isOnline = result.isReachable,
+                                        latencyMs = result.latencyMs.coerceAtLeast(0L)
+                                    )
+                                    dashboardProbeResults.value = updated
+                                }
+                            }
+                        }
+                    }.awaitAll()
+                }
+            } finally {
+                _isRefreshing.value = false
+            }
+        }
+    }
+
+    override fun onCleared() {
+        probeJob?.cancel()
+        super.onCleared()
+    }
 }
