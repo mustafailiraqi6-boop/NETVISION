@@ -258,13 +258,18 @@ class MonitoringViewModel(
                                             snmpVersion = info.snmpVersion
                                         )
 
-                                        // Read physical Ethernet/SFP interfaces for MikroTik devices.
-                                        // The collector uses SnmpV2Client, which binds each UDP socket to VPN.
+                                        // Read physical Ethernet/SFP interfaces for MikroTik and Ubiquiti.
+                                        // The collector follows the negotiated SNMP version (v1 or v2c)
+                                        // and binds each UDP request to the active VPN network.
                                         if (
                                             device.manufacturer == com.netvision.app.models.Manufacturer.MIKROTIK ||
                                             manufacturer == com.netvision.app.models.Manufacturer.MIKROTIK ||
+                                            device.manufacturer == com.netvision.app.models.Manufacturer.UBIQUITI ||
+                                            manufacturer == com.netvision.app.models.Manufacturer.UBIQUITI ||
                                             info.model?.contains("MikroTik", ignoreCase = true) == true ||
                                             info.sysDescr?.contains("MikroTik", ignoreCase = true) == true ||
+                                            info.model?.contains("Ubiquiti", ignoreCase = true) == true ||
+                                            info.sysDescr?.let { it.contains("AirOS", true) || it.contains("UBNT", true) || it.contains("Ubiquiti", true) } == true ||
                                             device.model.contains("CRS", ignoreCase = true) ||
                                             device.model.contains("RouterBOARD", ignoreCase = true)
                                         ) {
