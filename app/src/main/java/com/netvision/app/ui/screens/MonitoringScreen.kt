@@ -73,6 +73,9 @@ fun MonitoringScreen(
     val savedDevices by viewModel.savedDevices.collectAsState()
     val savedFolders by viewModel.savedFolders.collectAsState()
     val uiState by viewModel.uiState.collectAsState()
+    LaunchedEffect(uiState.selectedFolderId) {
+        uiState.selectedFolderId?.let { viewModel.refreshFolderNow(it) }
+    }
     var selectedCategory by remember { mutableStateOf(false) } // false: sectors/devices, true: switches
     var selectedSwitchId by remember { mutableStateOf<String?>(null) }
 
@@ -263,7 +266,6 @@ fun MonitoringScreen(
                                     .clickable {
                                         folder?.let {
                                             viewModel.selectFolder(it.id)
-                                            viewModel.refreshFolderNow(it.id)
                                         }
                                     }
                                     .border(
