@@ -47,6 +47,8 @@ class DeviceRepository(
     }
 
     suspend fun saveDevice(device: NetworkDevice) {
+        // An IP can exist only once in the permanent monitoring list.
+        if (deviceDao?.getDeviceByIpAddress(device.ipAddress.trim()) != null) return
         val folderId = if (device.folderId.isBlank()) DeviceFolderEntity.DEFAULT_FOLDER_ID else device.folderId
         deviceDao?.insertOrUpdate(DeviceEntity.fromDomainModel(device.copy(folderId = folderId)))
         logActivity(
@@ -75,6 +77,7 @@ class DeviceRepository(
         val entity = deviceDao?.getDeviceById(deviceId) ?: return
         val currentName = entity.name.trim()
         val isGeneratedName = currentName.startsWith("Host (", ignoreCase = true) ||
+            currentName.startsWith("Device (", ignoreCase = true) ||
             currentName.startsWith("MikroTik (", ignoreCase = true) ||
             currentName.startsWith("Ubiquiti (", ignoreCase = true) ||
             currentName.startsWith("Mimosa (", ignoreCase = true) ||
