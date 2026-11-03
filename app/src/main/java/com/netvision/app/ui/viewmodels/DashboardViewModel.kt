@@ -43,7 +43,7 @@ class DashboardViewModel(
         repository.recentActivities
     ) { devices, activities ->
         val total = devices.size
-        val online = devices.count { it.status == DeviceStatus.ONLINE }
+        val online = devices.count { it.lastPingTimestamp > 0L && it.status == DeviceStatus.ONLINE }
         val offline = devices.count { it.lastPingTimestamp > 0L && it.status == DeviceStatus.OFFLINE }
         val unchecked = devices.count { it.lastPingTimestamp == 0L }
         val latencies = devices.filter { it.status == DeviceStatus.ONLINE }
