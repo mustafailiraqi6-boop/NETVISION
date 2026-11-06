@@ -31,6 +31,7 @@ import com.netvision.app.models.Manufacturer
 import com.netvision.app.models.NetworkDevice
 import com.netvision.app.models.NetworkRange
 import com.netvision.app.ui.theme.*
+import com.netvision.app.ui.components.MikroTikApiSettingsSection
 import com.netvision.app.ui.viewmodels.ScannerViewModel
 
 
@@ -388,6 +389,10 @@ fun ScannerScreen(
         var selectedFolderId by remember(target.id) { mutableStateOf(DeviceFolderEntity.DEFAULT_FOLDER_ID) }
         var selectedManufacturer by remember(target.id) { mutableStateOf(target.manufacturer) }
         var selectedDeviceType by remember(target.id) { mutableStateOf(target.deviceType) }
+        var apiEnabled by remember(target.id) { mutableStateOf(target.apiEnabled) }
+        var apiPort by remember(target.id) { mutableStateOf(target.apiPort.toString()) }
+        var apiUsername by remember(target.id) { mutableStateOf(target.apiUsername) }
+        var apiPassword by remember(target.id) { mutableStateOf(target.apiPassword) }
 
         AlertDialog(
             onDismissRequest = { deviceToAdd = null },
@@ -442,6 +447,15 @@ fun ScannerScreen(
                                     }
                                 }
                             }
+                    }
+
+                    if (selectedManufacturer == Manufacturer.MIKROTIK) {
+                        MikroTikApiSettingsSection(
+                            isArabic, apiEnabled, { apiEnabled = it },
+                            apiPort, { apiPort = it.filter(Char::isDigit).take(5) },
+                            apiUsername, { apiUsername = it },
+                            apiPassword, { apiPassword = it }
+                        )
                     }
 
                     Text(
@@ -514,9 +528,17 @@ fun ScannerScreen(
                         viewModel.addDeviceToMonitoring(
                             target.copy(
                                 manufacturer = selectedManufacturer,
-                                deviceType = selectedDeviceType
+                                deviceType = selectedDeviceType,
+                                apiEnabled = apiEnabled && selectedManufacturer == Manufacturer.MIKROTIK,
+                                apiPort = apiPort.toIntOrNull() ?: 8728,
+                                apiUsername = apiUsername,
+                                apiPassword = apiPassword
                             ),
-                            selectedFolderId
+                            selectedFolderId,
+                            apiEnabled,
+                            apiPort.toIntOrNull() ?: 8728,
+                            apiUsername,
+                            apiPassword
                         )
                         deviceToAdd = null
                     },
