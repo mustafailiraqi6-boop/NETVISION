@@ -659,9 +659,9 @@ fun DevicesScreen(
                                 manufacturer = selectedVendor,
                                 deviceType = selectedType,
                                 folderId = selectedFolder,
-                                apiPort = if (selectedVendor == Manufacturer.MIKROTIK) apiPortInput.toIntOrNull()?.takeIf { it in 1..65535 } ?: globalApiPort else null,
-                                apiUsername = apiUsernameInput,
-                                apiPassword = apiPasswordInput
+                                apiPort = if (selectedVendor == Manufacturer.MIKROTIK) (if (editApiCredentials) apiPortInput.toIntOrNull()?.takeIf { it in 1..65535 } ?: globalApiPort else existing.apiPort ?: globalApiPort) else null,
+                                apiUsername = if (selectedVendor == Manufacturer.MIKROTIK && editApiCredentials) apiUsernameInput else "",
+                                apiPassword = if (selectedVendor == Manufacturer.MIKROTIK && editApiCredentials) apiPasswordInput else ""
                             )
                         } else {
                             viewModel.addDevice(
@@ -670,9 +670,9 @@ fun DevicesScreen(
                                 manufacturer = selectedVendor,
                                 deviceType = selectedType,
                                 folderId = selectedFolder,
-                                apiPort = if (selectedVendor == Manufacturer.MIKROTIK) apiPortInput.toIntOrNull()?.takeIf { it in 1..65535 } ?: globalApiPort else null,
-                                apiUsername = apiUsernameInput,
-                                apiPassword = apiPasswordInput
+                                apiPort = if (selectedVendor == Manufacturer.MIKROTIK) (if (editApiCredentials) apiPortInput.toIntOrNull()?.takeIf { it in 1..65535 } ?: globalApiPort else globalApiPort) else null,
+                                apiUsername = if (selectedVendor == Manufacturer.MIKROTIK && editApiCredentials) apiUsernameInput else "",
+                                apiPassword = if (selectedVendor == Manufacturer.MIKROTIK && editApiCredentials) apiPasswordInput else ""
                             )
                         }
                         showAddDeviceDialog = false
