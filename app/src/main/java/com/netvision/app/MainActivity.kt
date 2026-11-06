@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Icon
@@ -215,7 +216,8 @@ fun NetVisionApp(
                                 Icon(
                                     screen.icon,
                                     contentDescription = title,
-                                    tint = if (selected) selectedContent else inactiveContent
+                                    tint = if (selected) activeAccent else inactiveContent,
+                                    modifier = Modifier.size(23.dp)
                                 )
                                 Text(
                                     title,
