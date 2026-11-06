@@ -60,7 +60,8 @@ class DefaultMikroTikDeviceService : MikroTikDeviceService {
 
     override suspend fun fetchSystemResources(
         ipAddress: String,
-        credentials: Pair<String, String>?
+        credentials: Pair<String, String>?,
+        apiPort: Int
     ): Result<NetworkDevice> = withContext(Dispatchers.IO) {
         val configuredCommunity = try {
             NetVisionApplication.instance.settingsRepository.getSettings().snmpCommunity
