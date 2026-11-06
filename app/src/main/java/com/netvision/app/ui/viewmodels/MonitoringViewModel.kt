@@ -230,7 +230,7 @@ class MonitoringViewModel(
                                         baseInfo?.sysDescr?.contains("MikroTik", ignoreCase = true) == true ||
                                         baseInfo?.model?.contains("MikroTik", ignoreCase = true) == true
                                 if (isMikroTikDevice) {
-                                    val credentials = deviceCredentialStore.get(device.id)
+                                    val credentials = deviceCredentialStore.get(device.id) ?: deviceCredentialStore.getDefault()
                                     if (credentials != null) {
                                         val apiPort = device.apiPort ?: settings.defaultMikroTikApiPort
                                         val apiStations = routerOsApiClient.readWirelessRegistrationTable(
