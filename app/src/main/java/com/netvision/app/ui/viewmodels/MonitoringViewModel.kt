@@ -53,6 +53,17 @@ data class MonitoringUiState(
     val ethernetPortsByDevice: Map<String, EthernetMonitoringSnapshot> = emptyMap()
 )
 
+private fun parseRouterRateMbps(value: String): Double? {
+    val text = value.trim().lowercase()
+    val number = Regex("[0-9]+(?:\\.[0-9]+)?").find(text)?.value?.toDoubleOrNull() ?: return null
+    return when {
+        text.contains("gbps") -> number * 1000.0
+        text.contains("kbps") -> number / 1000.0
+        text.contains("bps") && !text.contains("mbps") -> number / 1_000_000.0
+        else -> number
+    }
+}
+
 class MonitoringViewModel(
     private val repository: DeviceRepository = try {
         NetVisionApplication.instance.deviceRepository
@@ -237,6 +248,36 @@ class MonitoringViewModel(
                                                 if (total > 0L) (((total - free).coerceAtLeast(0L) * 100) / total).toInt() else null
                                             }
                                         )
+                                    }
+                                    val stationResult = com.netvision.app.network.RouterOsApiClient().fetchWirelessRegistrationTable(
+                                        host = device.ipAddress, port = device.apiPort, username = apiUsername, password = apiPassword
+                                    )
+                                    stationResult.getOrNull()?.let { rows ->
+                                        val apiStations = rows.mapNotNull { row ->
+                                            val mac = row["mac-address"]?.uppercase()?.takeIf { it.matches(Regex("^(?:[0-9A-F]{2}:){5}[0-9A-F]{2}$")) } ?: return@mapNotNull null
+                                            val current = _uiState.value.snmpStatusByDevice[device.id]
+                                            val snmpStation = current?.connectedMikrotikStations?.firstOrNull { it.macAddress.equals(mac, true) }
+                                            val ccq = row["tx-ccq"]?.removeSuffix("%")?.toDoubleOrNull()?.toInt()
+                                                ?: row["rx-ccq"]?.removeSuffix("%")?.toDoubleOrNull()?.toInt()
+                                            val distance = row["distance"]?.filter { it.isDigit() || it == '.' }?.toDoubleOrNull()
+                                            (snmpStation ?: com.netvision.app.monitoring.MikrotikStationInfo(macAddress = mac)).copy(
+                                                deviceName = row["radio-name"]?.takeIf { it.isNotBlank() } ?: snmpStation?.deviceName,
+                                                signalDbm = row["signal-strength"]?.substringBefore('@')?.toIntOrNull() ?: snmpStation?.signalDbm,
+                                                txRateMbps = row["tx-rate"]?.let { parseRouterRateMbps(it) } ?: snmpStation?.txRateMbps,
+                                                rxRateMbps = row["rx-rate"]?.let { parseRouterRateMbps(it) } ?: snmpStation?.rxRateMbps,
+                                                connectionTime = row["uptime"] ?: snmpStation?.connectionTime,
+                                                ccqPercent = ccq ?: snmpStation?.ccqPercent,
+                                                distanceMeters = distance ?: snmpStation?.distanceMeters
+                                            )
+                                        }
+                                        val current = _uiState.value.snmpStatusByDevice[device.id]
+                                        if (current != null && apiStations.isNotEmpty()) {
+                                            snmpMapMutex.withLock {
+                                                val updated = _uiState.value.snmpStatusByDevice.toMutableMap()
+                                                updated[device.id] = current.copy(connectedMikrotikStations = apiStations)
+                                                _uiState.value = _uiState.value.copy(snmpStatusByDevice = updated)
+                                            }
+                                        }
                                     }
                                 } catch (_: Exception) {
                                     // API failures must not alter device reachability or SNMP monitoring.
