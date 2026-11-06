@@ -152,21 +152,24 @@ fun NetVisionApp(
                     val sectionWidth = (w - insetPx * 2f - gapPx * (bottomNavItems.size - 1)) / bottomNavItems.size
                     val centerX = insetPx + animatedIndicatorIndex * (sectionWidth + gapPx) + sectionWidth / 2f
                     // The arch spans the full selected tab, from its left edge to its right edge.
-                    val halfCurve = sectionWidth * 0.50f
-                    val rise = h * 0.66f
+                    // Match the reference: a broad raised curve spanning almost the entire selected tab.
+                    val halfCurve = sectionWidth * 0.49f
+                    val leftEdge = centerX - halfCurve
+                    val rightEdge = centerX + halfCurve
+                    val rise = h * 0.48f
                     val baseY = h - 2.dp.toPx()
                     val path = androidx.compose.ui.graphics.Path().apply {
                         moveTo(0f, baseY)
-                        lineTo(centerX - halfCurve, baseY)
+                        lineTo(leftEdge, baseY)
                         cubicTo(
-                            centerX - halfCurve * 0.35f, baseY,
-                            centerX - halfCurve * 0.62f, rise,
+                            leftEdge + sectionWidth * 0.22f, baseY,
+                            centerX - sectionWidth * 0.34f, rise,
                             centerX, rise
                         )
                         cubicTo(
-                            centerX + halfCurve * 0.62f, rise,
-                            centerX + halfCurve * 0.35f, baseY,
-                            centerX + halfCurve, baseY
+                            centerX + sectionWidth * 0.34f, rise,
+                            rightEdge - sectionWidth * 0.22f, baseY,
+                            rightEdge, baseY
                         )
                         lineTo(w, baseY)
                     }
