@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -32,6 +33,13 @@ fun MikroTikApiSettingsSection(
             Checkbox(checked = enabled, onCheckedChange = onEnabledChange)
         }
         if (enabled) {
+            OutlinedTextField(
+                value = port,
+                onValueChange = onPortChange,
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text(if (isArabic) "منفذ API" else "API Port") },
+                singleLine = true
+            )
             Text(
                 if (isArabic) "بيانات الدخول تُؤخذ تلقائياً من إعدادات MikroTik API العامة. المنفذ الافتراضي 8728."
                 else "Credentials are taken automatically from the global MikroTik API settings. Default port is 8728.",
