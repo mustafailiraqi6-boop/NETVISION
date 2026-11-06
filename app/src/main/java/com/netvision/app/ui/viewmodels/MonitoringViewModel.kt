@@ -246,6 +246,7 @@ class MonitoringViewModel(
                                     }
                                 }
                                 if (info != null) {
+                                    val info = info
                                     snmpMapMutex.withLock {
                                         val updated = _uiState.value.snmpStatusByDevice.toMutableMap()
                                         updated[device.id] = info
