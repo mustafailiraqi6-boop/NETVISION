@@ -42,4 +42,10 @@ class SettingsViewModel(
         val current = repository.getSettings()
         repository.updateSettings(current.copy(snmpPort = portInt))
     }
+
+    fun updateDefaultMikroTikApiPort(portStr: String) {
+        val portInt = portStr.toIntOrNull()?.takeIf { it in 1..65535 } ?: return
+        val current = repository.getSettings()
+        repository.updateSettings(current.copy(defaultMikroTikApiPort = portInt))
+    }
 }
