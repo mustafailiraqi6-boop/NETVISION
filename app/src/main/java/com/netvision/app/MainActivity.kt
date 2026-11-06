@@ -118,7 +118,7 @@ fun NetVisionApp(
 
     val navBackground = if (isDarkTheme) Color(0xFF101012) else Color(0xFFF7F7F9)
     val inactiveContent = if (isDarkTheme) Color(0xFF9B9BA3) else Color(0xFF777982)
-    val activeAccent = if (isDarkTheme) Color(0xFFFF1744) else Color(0xFFC2183A)
+    val activeAccent = if (isDarkTheme) Color(0xFF37D39A) else Color(0xFF087F59)
     val selectedContent = if (isDarkTheme) Color(0xFFF7F7F8) else Color(0xFF25232A)
     val selectedIndex = bottomNavItems.indexOfFirst { it.route == currentRoute }.coerceAtLeast(0)
     val animatedIndicatorIndex by animateFloatAsState(
