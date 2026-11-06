@@ -4,6 +4,7 @@ import android.app.Application
 import com.netvision.app.database.AppDatabase
 import com.netvision.app.repository.DeviceRepository
 import com.netvision.app.settings.SettingsRepository
+import com.netvision.app.security.DeviceCredentialStore
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 
@@ -11,6 +12,7 @@ class NetVisionApplication : Application() {
     val database by lazy { AppDatabase.getDatabase(this) }
     val deviceRepository by lazy { DeviceRepository(database.deviceDao(), database.networkRangeDao(), database.deviceFolderDao()) }
     val settingsRepository by lazy { SettingsRepository(this) }
+    val deviceCredentialStore by lazy { DeviceCredentialStore(this) }
 
     companion object {
         private val _foregroundEvents = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
