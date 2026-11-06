@@ -224,27 +224,28 @@ class MonitoringViewModel(
                                     timeoutMs = 1000
                                 )
                                 val baseInfo = snmpRes.getOrNull()
-                                if (snmpRes.isSuccess && baseInfo != null) {
-                                    var info = baseInfo
-                                    val isMikroTikDevice =
-                                        device.manufacturer == com.netvision.app.models.Manufacturer.MIKROTIK ||
-                                            baseInfo.sysDescr?.contains("MikroTik", ignoreCase = true) == true ||
-                                            baseInfo.model?.contains("MikroTik", ignoreCase = true) == true
-                                    if (isMikroTikDevice) {
-                                        val credentials = deviceCredentialStore.get(device.id)
-                                        if (credentials != null) {
-                                            val apiPort = device.apiPort ?: settings.defaultMikroTikApiPort
-                                            val apiStations = routerOsApiClient.readWirelessRegistrationTable(
-                                                ipAddress = device.ipAddress,
-                                                username = credentials.username,
-                                                password = credentials.password,
-                                                port = apiPort
-                                            ).getOrNull()
-                                            if (apiStations != null) {
-                                                info = info.copy(connectedMikrotikStations = apiStations)
-                                            }
+                                var info = baseInfo
+                                val isMikroTikDevice =
+                                    device.manufacturer == com.netvision.app.models.Manufacturer.MIKROTIK ||
+                                        baseInfo?.sysDescr?.contains("MikroTik", ignoreCase = true) == true ||
+                                        baseInfo?.model?.contains("MikroTik", ignoreCase = true) == true
+                                if (isMikroTikDevice) {
+                                    val credentials = deviceCredentialStore.get(device.id)
+                                    if (credentials != null) {
+                                        val apiPort = device.apiPort ?: settings.defaultMikroTikApiPort
+                                        val apiStations = routerOsApiClient.readWirelessRegistrationTable(
+                                            ipAddress = device.ipAddress,
+                                            username = credentials.username,
+                                            password = credentials.password,
+                                            port = apiPort
+                                        ).getOrNull()
+                                        if (apiStations != null) {
+                                            info = (info ?: SnmpDeviceInfo(isSuccess = true))
+                                                .copy(connectedMikrotikStations = apiStations)
                                         }
                                     }
+                                }
+                                if (info != null) {
                                     snmpMapMutex.withLock {
                                         val updated = _uiState.value.snmpStatusByDevice.toMutableMap()
                                         updated[device.id] = info
@@ -258,7 +259,7 @@ class MonitoringViewModel(
                                                 info.ubntAirMaxQualityPercent != null ||
                                                 info.ubntAirMaxCapacityPercent != null ->
                                                 com.netvision.app.models.Manufacturer.UBIQUITI
-                                            info.mikrotikCcqPercent != null || info.mikrotikVoltageDecivolts != null ->
+                                            device.manufacturer == com.netvision.app.models.Manufacturer.MIKROTIK || info.mikrotikCcqPercent != null || info.mikrotikVoltageDecivolts != null ->
                                                 com.netvision.app.models.Manufacturer.MIKROTIK
                                             info.sysDescr?.contains("Mimosa", ignoreCase = true) == true ||
                                                 info.model?.contains("Mimosa", ignoreCase = true) == true ||
