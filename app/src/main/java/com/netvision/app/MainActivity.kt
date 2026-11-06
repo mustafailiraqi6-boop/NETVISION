@@ -118,70 +118,108 @@ fun NetVisionApp(
 
     val navBackground = if (isDarkTheme) Color(0xFF101012) else Color(0xFFF7F7F9)
     val inactiveContent = if (isDarkTheme) Color(0xFF9B9BA3) else Color(0xFF777982)
-    val activeAccent = if (isDarkTheme) Color(0xFF37D39A) else Color(0xFF087F59)
-    val selectedContent = if (isDarkTheme) Color(0xFFF7F7F8) else Color(0xFF173D32)
+    val activeAccent = if (isDarkTheme) Color(0xFFFF1744) else Color(0xFFC2183A)
+    val selectedContent = if (isDarkTheme) Color(0xFFF7F7F8) else Color(0xFF25232A)
+    val selectedIndex = bottomNavItems.indexOfFirst { it.route == currentRoute }.coerceAtLeast(0)
+    val animatedIndicatorIndex by animateFloatAsState(
+        targetValue = selectedIndex.toFloat(),
+        animationSpec = spring(dampingRatio = 0.78f, stiffness = 260f),
+        label = "bottomNavCurvePosition"
+    )
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         bottomBar = {
-            Row(
-                modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp)
-                    .clip(RoundedCornerShape(30.dp)).background(navBackground).padding(horizontal = 5.dp, vertical = 7.dp),
-                horizontalArrangement = Arrangement.spacedBy(2.dp),
-                verticalAlignment = Alignment.CenterVertically
+            BoxWithConstraints(
+                modifier = Modifier.fillMaxWidth().navigationBarsPadding()
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .height(76.dp)
+                    .clip(RoundedCornerShape(40.dp))
+                    .background(navBackground)
             ) {
-                bottomNavItems.forEach { screen ->
-                    val selected = currentRoute == screen.route
-                    val title = if (isArabic) screen.titleAr else screen.titleEn
-                    val iconLift by animateDpAsState(
-                        targetValue = if (selected) 7.dp else 0.dp,
-                        animationSpec = spring(dampingRatio = 0.62f, stiffness = 420f),
-                        label = "navIconLift"
+                val itemWidth = maxWidth / bottomNavItems.size
+                androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+                    val w = size.width
+                    val h = size.height
+                    val centerX = (animatedIndicatorIndex + 0.5f) * (w / bottomNavItems.size)
+                    val halfCurve = (w / bottomNavItems.size) * 0.48f
+                    val rise = h * 0.66f
+                    val baseY = h - 2.dp.toPx()
+                    val path = androidx.compose.ui.graphics.Path().apply {
+                        moveTo(0f, baseY)
+                        lineTo(centerX - halfCurve, baseY)
+                        cubicTo(
+                            centerX - halfCurve * 0.35f, baseY,
+                            centerX - halfCurve * 0.62f, rise,
+                            centerX, rise
+                        )
+                        cubicTo(
+                            centerX + halfCurve * 0.62f, rise,
+                            centerX + halfCurve * 0.35f, baseY,
+                            centerX + halfCurve, baseY
+                        )
+                        lineTo(w, baseY)
+                    }
+                    drawPath(
+                        path = path,
+                        color = activeAccent.copy(alpha = 0.22f),
+                        style = androidx.compose.ui.graphics.drawscope.Stroke(width = 7.dp.toPx())
                     )
-                    val iconScale by animateFloatAsState(
-                        targetValue = if (selected) 1.12f else 1f,
-                        animationSpec = spring(dampingRatio = 0.62f, stiffness = 420f),
-                        label = "navIconScale"
+                    drawPath(
+                        path = path,
+                        color = activeAccent,
+                        style = androidx.compose.ui.graphics.drawscope.Stroke(
+                            width = 3.dp.toPx(),
+                            cap = androidx.compose.ui.graphics.StrokeCap.Round,
+                            join = androidx.compose.ui.graphics.StrokeJoin.Round
+                        )
                     )
-                    Box(
-                        modifier = Modifier.weight(1f).clip(RoundedCornerShape(22.dp))
-                            .clickable {
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxSize().padding(horizontal = 5.dp, vertical = 5.dp),
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    bottomNavItems.forEach { screen ->
+                        val selected = currentRoute == screen.route
+                        val title = if (isArabic) screen.titleAr else screen.titleEn
+                        val iconLift by animateDpAsState(
+                            targetValue = if (selected) 5.dp else 0.dp,
+                            animationSpec = spring(dampingRatio = 0.72f, stiffness = 300f),
+                            label = "navIconLift"
+                        )
+                        Box(
+                            modifier = Modifier.weight(1f).fillMaxSize().clickable {
                                 if (currentRoute != screen.route) navController.navigate(screen.route) {
                                     popUpTo(Screen.Dashboard.route) { saveState = true }
                                     launchSingleTop = true
                                     restoreState = true
                                 }
-                            }.padding(horizontal = 1.dp, vertical = 5.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
+                            },
+                            contentAlignment = Alignment.Center
                         ) {
-                            Icon(
-                                screen.icon,
-                                contentDescription = title,
-                                tint = if (selected) activeAccent else inactiveContent,
-                                modifier = Modifier.graphicsLayer {
-                                    translationY = -iconLift.toPx()
-                                    scaleX = iconScale
-                                    scaleY = iconScale
-                                }
-                            )
-                            Text(
-                                title,
-                                color = if (selected) selectedContent else inactiveContent,
-                                fontSize = 11.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                textAlign = TextAlign.Center
-                            )
-                            Box(
-                                Modifier.padding(top = 4.dp).fillMaxWidth(0.58f).height(2.dp)
-                                    .clip(RoundedCornerShape(50))
-                                    .background(if (selected) activeAccent else Color.Transparent)
-                            )
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Icon(
+                                    screen.icon,
+                                    contentDescription = title,
+                                    tint = if (selected) selectedContent else inactiveContent,
+                                    modifier = Modifier.graphicsLayer {
+                                        translationY = -iconLift.toPx()
+                                    }
+                                )
+                                Text(
+                                    title,
+                                    color = if (selected) selectedContent else inactiveContent,
+                                    fontSize = 11.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    textAlign = TextAlign.Center
+                                )
+                            }
                         }
                     }
                 }
