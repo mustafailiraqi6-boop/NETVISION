@@ -141,12 +141,18 @@ fun NetVisionApp(
                     .clip(RoundedCornerShape(40.dp))
                     .background(navBackground)
             ) {
-                val itemWidth = maxWidth / bottomNavItems.size
+                val navHorizontalInset = 5.dp
+                val navItemGap = 2.dp
+                val itemWidth = (maxWidth - navHorizontalInset * 2 - navItemGap * (bottomNavItems.size - 1)) / bottomNavItems.size
                 androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
                     val w = size.width
                     val h = size.height
-                    val centerX = (animatedIndicatorIndex + 0.5f) * (w / bottomNavItems.size)
-                    val halfCurve = (w / bottomNavItems.size) * 0.48f
+                    val insetPx = navHorizontalInset.toPx()
+                    val gapPx = navItemGap.toPx()
+                    val sectionWidth = (w - insetPx * 2f - gapPx * (bottomNavItems.size - 1)) / bottomNavItems.size
+                    val centerX = insetPx + animatedIndicatorIndex * (sectionWidth + gapPx) + sectionWidth / 2f
+                    // The arch spans the full selected tab, from its left edge to its right edge.
+                    val halfCurve = sectionWidth * 0.50f
                     val rise = h * 0.66f
                     val baseY = h - 2.dp.toPx()
                     val path = androidx.compose.ui.graphics.Path().apply {
