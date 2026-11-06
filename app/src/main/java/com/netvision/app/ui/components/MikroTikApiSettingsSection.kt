@@ -6,11 +6,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 
 @Composable
@@ -34,16 +32,9 @@ fun MikroTikApiSettingsSection(
             Checkbox(checked = enabled, onCheckedChange = onEnabledChange)
         }
         if (enabled) {
-            OutlinedTextField(port, onPortChange, Modifier.fillMaxWidth(),
-                label = { Text(if (isArabic) "منفذ API" else "API Port") }, singleLine = true)
-            OutlinedTextField(username, onUsernameChange, Modifier.fillMaxWidth(),
-                label = { Text(if (isArabic) "اسم مستخدم API" else "API Username") }, singleLine = true)
-            OutlinedTextField(password, onPasswordChange, Modifier.fillMaxWidth(),
-                label = { Text(if (isArabic) "كلمة مرور API" else "API Password") },
-                visualTransformation = PasswordVisualTransformation(), singleLine = true)
             Text(
-                if (isArabic) "المنفذ الافتراضي 8728. تُحفظ كلمة المرور مشفّرة على الجهاز."
-                else "Default port is 8728. The password is encrypted on this device.",
+                if (isArabic) "بيانات الدخول تُؤخذ تلقائياً من إعدادات MikroTik API العامة. المنفذ الافتراضي 8728."
+                else "Credentials are taken automatically from the global MikroTik API settings. Default port is 8728.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
