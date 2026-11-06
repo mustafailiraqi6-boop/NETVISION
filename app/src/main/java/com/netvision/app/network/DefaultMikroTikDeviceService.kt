@@ -99,7 +99,7 @@ class DefaultMikroTikDeviceService : MikroTikDeviceService {
         if (credentials != null) {
             val apiResult = RouterOsApiClient().fetchSystemResources(
                 host = ipAddress,
-                port = 8728,
+                port = apiPort,
                 username = credentials.first,
                 password = credentials.second
             )
