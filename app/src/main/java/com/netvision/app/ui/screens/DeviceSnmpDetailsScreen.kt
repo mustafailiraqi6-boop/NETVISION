@@ -227,7 +227,7 @@ private fun MikrotikStationCard(station: MikrotikStationInfo, isArabic: Boolean)
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 MetricTile("CCQ", station.ccqPercent?.let { "$it%" } ?: "—", Color(0xFFDCFCE7), Color(0xFF15803D), Modifier.weight(1f))
-                MetricTile(if (isArabic) "المسافة" else "Distance", station.distanceMeters?.let { String.format(Locale.US, "%.1f m", it) } ?: "—", Color(0xFFFFF2D9), Color(0xFFB7791F), Modifier.weight(1f))
+                MetricTile(if (isArabic) "المسافة" else "Distance", station.distanceLabel ?: "—", Color(0xFFFFF2D9), Color(0xFFB7791F), Modifier.weight(1f))
             }
             Row(Modifier.fillMaxWidth().background(if (MaterialTheme.colorScheme.background.luminance() < 0.5f) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(10.dp)).padding(11.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(if (isArabic) "مدة الاتصال" else "Connection time", color = if (MaterialTheme.colorScheme.background.luminance() < 0.5f) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onPrimaryContainer, fontSize = 12.sp)
