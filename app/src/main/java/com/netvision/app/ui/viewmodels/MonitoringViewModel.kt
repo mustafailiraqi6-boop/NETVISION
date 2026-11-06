@@ -102,6 +102,7 @@ class MonitoringViewModel(
     private val pollSemaphore = Semaphore(10)
     private val snmpMapMutex = Mutex()
     private val previousPortCounters = mutableMapOf<String, Pair<Long, Long>>()
+    private val apiMikrotikStationsByDevice = ConcurrentHashMap<String, List<com.netvision.app.monitoring.MikrotikStationInfo>>()
     // Require three consecutive failed reachability checks before declaring an online device offline.
     private val consecutiveFailures = ConcurrentHashMap<String, AtomicInteger>()
     private val offlineFailureThreshold = 3
@@ -270,14 +271,7 @@ class MonitoringViewModel(
                                                 distanceMeters = distance ?: snmpStation?.distanceMeters
                                             )
                                         }
-                                        val current = _uiState.value.snmpStatusByDevice[device.id]
-                                        if (current != null && apiStations.isNotEmpty()) {
-                                            snmpMapMutex.withLock {
-                                                val updated = _uiState.value.snmpStatusByDevice.toMutableMap()
-                                                updated[device.id] = current.copy(connectedMikrotikStations = apiStations)
-                                                _uiState.value = _uiState.value.copy(snmpStatusByDevice = updated)
-                                            }
-                                        }
+                                        if (apiStations.isNotEmpty()) apiMikrotikStationsByDevice[device.id] = apiStations
                                     }
                                 } catch (_: Exception) {
                                     // API failures must not alter device reachability or SNMP monitoring.
@@ -294,7 +288,11 @@ class MonitoringViewModel(
                                     preferredVersion = device.snmpVersion,
                                     timeoutMs = 1000
                                 )
-                                val info = snmpRes.getOrNull()
+                                val rawInfo = snmpRes.getOrNull()
+                                val apiStations = apiMikrotikStationsByDevice[device.id]
+                                val info = rawInfo?.let { raw ->
+                                    if (!apiStations.isNullOrEmpty()) raw.copy(connectedMikrotikStations = apiStations) else raw
+                                }
                                 if (snmpRes.isSuccess && info != null) {
                                     snmpMapMutex.withLock {
                                         val updated = _uiState.value.snmpStatusByDevice.toMutableMap()
