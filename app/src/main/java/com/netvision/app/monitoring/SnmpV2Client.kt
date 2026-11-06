@@ -82,7 +82,8 @@ data class MikrotikStationInfo(
     val txRateMbps: Double? = null,
     val rxRateMbps: Double? = null,
     val connectionTime: String? = null,
-    val ccqPercent: Int? = null,
+    val txCcqPercent: Int? = null,
+    val rxCcqPercent: Int? = null,
     val distanceLabel: String? = null
 )
 
