@@ -4,7 +4,6 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
@@ -22,6 +21,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -232,7 +232,8 @@ fun NetVisionApp(
             }
         }
     ) { innerPadding ->
-        NavHost(navController = navController, startDestination = Screen.Dashboard.route, modifier = Modifier.padding(innerPadding)) {
+        Box(Modifier.fillMaxSize()) {
+            NavHost(navController = navController, startDestination = Screen.Dashboard.route, modifier = Modifier.padding(innerPadding)) {
             composable(Screen.Dashboard.route) {
                 DashboardScreen(isArabic = isArabic, monitoringViewModel = monitoringViewModel, onNavigateToDevices = { status ->
                     if (status == null) navController.navigate(Screen.Devices.route) else navController.navigate("devices-filter/${status.name}")
@@ -254,6 +255,24 @@ fun NetVisionApp(
             }
             composable(Screen.Settings.route) {
                 SettingsScreen(language = language, onLanguageChange = onLanguageChange, themeMode = themeMode, onThemeModeChange = onThemeModeChange)
+            }
+            }
+            IconButton(
+                onClick = {
+                    if (currentRoute != Screen.Settings.route) navController.navigate(Screen.Settings.route) {
+                        launchSingleTop = true
+                    }
+                },
+                modifier = Modifier.align(Alignment.TopEnd)
+                    .padding(top = innerPadding.calculateTopPadding() + 8.dp, end = 16.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(if (isDarkTheme) Color(0xFF173D32) else Color(0xFFE0F2E9))
+            ) {
+                Icon(
+                    Screen.Settings.icon,
+                    contentDescription = if (isArabic) "الإعدادات" else "Settings",
+                    tint = activeAccent
+                )
             }
         }
     }
