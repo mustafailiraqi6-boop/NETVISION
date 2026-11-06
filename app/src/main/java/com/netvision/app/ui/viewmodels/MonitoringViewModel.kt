@@ -260,7 +260,7 @@ class MonitoringViewModel(
                                             val snmpStation = current?.connectedMikrotikStations?.firstOrNull { it.macAddress.equals(mac, true) }
                                             val ccq = row["tx-ccq"]?.removeSuffix("%")?.toDoubleOrNull()?.toInt()
                                                 ?: row["rx-ccq"]?.removeSuffix("%")?.toDoubleOrNull()?.toInt()
-                                            val distance = row["distance"]?.filter { it.isDigit() || it == '.' }?.toDoubleOrNull()
+                                            val distance = row["distance"]?.takeIf { it.isNotBlank() }
                                             (snmpStation ?: com.netvision.app.monitoring.MikrotikStationInfo(macAddress = mac)).copy(
                                                 deviceName = row["radio-name"]?.takeIf { it.isNotBlank() } ?: snmpStation?.deviceName,
                                                 signalDbm = row["signal-strength"]?.substringBefore('@')?.toIntOrNull() ?: snmpStation?.signalDbm,
@@ -268,7 +268,7 @@ class MonitoringViewModel(
                                                 rxRateMbps = row["rx-rate"]?.let { parseRouterRateMbps(it) } ?: snmpStation?.rxRateMbps,
                                                 connectionTime = row["uptime"] ?: snmpStation?.connectionTime,
                                                 ccqPercent = ccq ?: snmpStation?.ccqPercent,
-                                                distanceMeters = distance ?: snmpStation?.distanceMeters
+                                                distanceLabel = distance ?: snmpStation?.distanceLabel
                                             )
                                         }
                                         if (apiStations.isNotEmpty()) apiMikrotikStationsByDevice[device.id] = apiStations
