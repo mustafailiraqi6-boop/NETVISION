@@ -27,6 +27,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
@@ -117,6 +120,18 @@ fun NetVisionApp(
     val monitoringViewModel: MonitoringViewModel = viewModel()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route ?: Screen.Dashboard.route
+    // Keep the last main tab selected while utility/detail destinations are displayed.
+    var selectedTopLevelRoute by remember { mutableStateOf(Screen.Dashboard.route) }
+    LaunchedEffect(currentRoute) {
+        when {
+            bottomNavItems.any { it.route == currentRoute } -> selectedTopLevelRoute = currentRoute
+            currentRoute == "device-details/{deviceId}" || currentRoute.startsWith("device-details/") ->
+                selectedTopLevelRoute = Screen.Monitoring.route
+            currentRoute == "devices-filter/{status}" || currentRoute.startsWith("devices-filter/") ->
+                selectedTopLevelRoute = Screen.Devices.route
+            // Settings is an overlay destination: do not change the selected main tab.
+        }
+    }
     val isArabic = language == AppLanguage.ARABIC
     val isDarkTheme = themeMode == AppThemeMode.DARK
 
@@ -124,7 +139,7 @@ fun NetVisionApp(
     val inactiveContent = if (isDarkTheme) Color(0xFF9B9BA3) else Color(0xFF777982)
     val activeAccent = if (isDarkTheme) Color(0xFF37D39A) else Color(0xFF087F59)
     val selectedContent = if (isDarkTheme) Color(0xFFF7F7F8) else Color(0xFF25232A)
-    val selectedIndex = bottomNavItems.indexOfFirst { it.route == currentRoute }.coerceAtLeast(0)
+    val selectedIndex = bottomNavItems.indexOfFirst { it.route == selectedTopLevelRoute }.coerceAtLeast(0)
     // Canvas coordinates run left-to-right, while the Arabic navigation Row is laid out right-to-left.
     val visualSelectedIndex = if (language == AppLanguage.ARABIC) bottomNavItems.lastIndex - selectedIndex else selectedIndex
     val animatedIndicatorIndex by animateFloatAsState(
@@ -248,10 +263,16 @@ fun NetVisionApp(
                         val title = if (isArabic) screen.titleAr else screen.titleEn
                         Box(
                             modifier = Modifier.weight(1f).fillMaxSize().clickable {
-                                if (currentRoute != screen.route) navController.navigate(screen.route) {
-                                    popUpTo(Screen.Dashboard.route) { saveState = true }
-                                    launchSingleTop = true
-                                    restoreState = true
+                                selectedTopLevelRoute = screen.route
+                                if (currentRoute != screen.route) {
+                                    // If this tab already exists below a detail/settings page, return to it.
+                                    val returnedToExistingTab = navController.popBackStack(screen.route, inclusive = false)
+                                    if (!returnedToExistingTab) {
+                                        navController.navigate(screen.route) {
+                                            popUpTo(Screen.Dashboard.route) { inclusive = false }
+                                            launchSingleTop = true
+                                        }
+                                    }
                                 }
                             },
                             contentAlignment = Alignment.Center
