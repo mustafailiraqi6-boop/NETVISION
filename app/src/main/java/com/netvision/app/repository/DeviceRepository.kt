@@ -213,11 +213,19 @@ class DeviceRepository(
         }
     }
 
-    suspend fun updateDeviceTelemetry(deviceId: String, uptime: String?, snmpVersion: String?) {
+    suspend fun updateDeviceTelemetry(
+        deviceId: String,
+        uptime: String?,
+        snmpVersion: String?,
+        cpuUsagePercent: Int? = null,
+        memoryUsagePercent: Int? = null
+    ) {
         val entity = deviceDao?.getDeviceById(deviceId) ?: return
         deviceDao.insertOrUpdate(entity.copy(
             uptimeFormatted = uptime ?: entity.uptimeFormatted,
-            snmpVersion = snmpVersion ?: entity.snmpVersion
+            snmpVersion = snmpVersion ?: entity.snmpVersion,
+            cpuUsagePercent = cpuUsagePercent ?: entity.cpuUsagePercent,
+            memoryUsagePercent = memoryUsagePercent ?: entity.memoryUsagePercent
         ))
     }
 
