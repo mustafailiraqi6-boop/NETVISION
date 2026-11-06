@@ -9,7 +9,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [DeviceEntity::class, NetworkRangeEntity::class, DeviceFolderEntity::class],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -47,6 +47,15 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `devices` ADD COLUMN `apiEnabled` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE `devices` ADD COLUMN `apiPort` INTEGER NOT NULL DEFAULT 8728")
+                db.execSQL("ALTER TABLE `devices` ADD COLUMN `apiUsername` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE `devices` ADD COLUMN `apiPasswordEncrypted` TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
         fun closeDatabase() {
             synchronized(this) {
                 INSTANCE?.close()
@@ -61,7 +70,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "netvision_database"
                 )
-                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                     .fallbackToDestructiveMigration()
                     .build()
                 INSTANCE = instance

@@ -53,6 +53,17 @@ data class MonitoringUiState(
     val ethernetPortsByDevice: Map<String, EthernetMonitoringSnapshot> = emptyMap()
 )
 
+private fun parseRouterRateMbps(value: String): Double? {
+    val text = value.trim().lowercase()
+    val number = Regex("[0-9]+(?:\\.[0-9]+)?").find(text)?.value?.toDoubleOrNull() ?: return null
+    return when {
+        text.contains("gbps") -> number * 1000.0
+        text.contains("kbps") -> number / 1000.0
+        text.contains("bps") && !text.contains("mbps") -> number / 1_000_000.0
+        else -> number
+    }
+}
+
 class MonitoringViewModel(
     private val repository: DeviceRepository = try {
         NetVisionApplication.instance.deviceRepository
@@ -91,6 +102,7 @@ class MonitoringViewModel(
     private val pollSemaphore = Semaphore(10)
     private val snmpMapMutex = Mutex()
     private val previousPortCounters = mutableMapOf<String, Pair<Long, Long>>()
+    private val apiMikrotikStationsByDevice = ConcurrentHashMap<String, List<com.netvision.app.monitoring.MikrotikStationInfo>>()
     // Require three consecutive failed reachability checks before declaring an online device offline.
     private val consecutiveFailures = ConcurrentHashMap<String, AtomicInteger>()
     private val offlineFailureThreshold = 3
@@ -209,6 +221,64 @@ class MonitoringViewModel(
                 currentDevices.map { device ->
                     async(Dispatchers.IO) {
                         pollSemaphore.withPermit {
+                            // Optional RouterOS API telemetry is independent from SNMP and ICMP.
+                            // It is attempted only for explicitly enabled MikroTik devices.
+                            val apiUsername = device.apiUsername.ifBlank { settings.mikrotikApiUsername }
+                            val apiPassword = device.apiPassword.ifBlank { settings.mikrotikApiPassword }
+                            if (
+                                device.apiEnabled &&
+                                device.manufacturer == com.netvision.app.models.Manufacturer.MIKROTIK &&
+                                apiUsername.isNotBlank()
+                            ) {
+                                try {
+                                    val apiResult = com.netvision.app.network.RouterOsApiClient().fetchSystemResources(
+                                        host = device.ipAddress,
+                                        port = device.apiPort,
+                                        username = apiUsername,
+                                        password = apiPassword
+                                    )
+                                    apiResult.getOrNull()?.let { resources ->
+                                        repository.updateDeviceTelemetry(
+                                            deviceId = device.id,
+                                            uptime = resources["uptime"],
+                                            snmpVersion = null,
+                                            cpuUsagePercent = resources["cpu-load"]?.toIntOrNull(),
+                                            memoryUsagePercent = run {
+                                                val total = resources["total-memory"]?.toLongOrNull() ?: 0L
+                                                val free = resources["free-memory"]?.toLongOrNull() ?: 0L
+                                                if (total > 0L) (((total - free).coerceAtLeast(0L) * 100) / total).toInt() else null
+                                            }
+                                        )
+                                    }
+                                    val stationResult = com.netvision.app.network.RouterOsApiClient().fetchWirelessRegistrationTable(
+                                        host = device.ipAddress, port = device.apiPort, username = apiUsername, password = apiPassword
+                                    )
+                                    stationResult.getOrNull()?.let { rows ->
+                                        val apiStations = rows.mapNotNull { row ->
+                                            val mac = row["mac-address"]?.uppercase()?.takeIf { it.matches(Regex("^(?:[0-9A-F]{2}:){5}[0-9A-F]{2}$")) } ?: return@mapNotNull null
+                                            val current = _uiState.value.snmpStatusByDevice[device.id]
+                                            val snmpStation = current?.connectedMikrotikStations?.firstOrNull { it.macAddress.equals(mac, true) }
+                                            val txCcq = row["tx-ccq"]?.removeSuffix("%")?.toDoubleOrNull()?.toInt()
+                                            val rxCcq = row["rx-ccq"]?.removeSuffix("%")?.toDoubleOrNull()?.toInt()
+                                            val distance = row["distance"]?.takeIf { it.isNotBlank() }
+                                            (snmpStation ?: com.netvision.app.monitoring.MikrotikStationInfo(macAddress = mac)).copy(
+                                                deviceName = row["radio-name"]?.takeIf { it.isNotBlank() } ?: snmpStation?.deviceName,
+                                                signalDbm = row["signal-strength"]?.substringBefore('@')?.toIntOrNull() ?: snmpStation?.signalDbm,
+                                                txRateMbps = row["tx-rate"]?.let { parseRouterRateMbps(it) } ?: snmpStation?.txRateMbps,
+                                                rxRateMbps = row["rx-rate"]?.let { parseRouterRateMbps(it) } ?: snmpStation?.rxRateMbps,
+                                                connectionTime = row["uptime"] ?: snmpStation?.connectionTime,
+                                                txCcqPercent = txCcq ?: snmpStation?.txCcqPercent,
+                                                rxCcqPercent = rxCcq ?: snmpStation?.rxCcqPercent,
+                                                distanceLabel = distance ?: snmpStation?.distanceLabel
+                                            )
+                                        }
+                                        if (apiStations.isNotEmpty()) apiMikrotikStationsByDevice[device.id] = apiStations
+                                    }
+                                } catch (_: Exception) {
+                                    // API failures must not alter device reachability or SNMP monitoring.
+                                }
+                            }
+
                             // Reachability is handled by the shared ICMP monitor; this pass only refreshes SNMP telemetry.
                             // SNMP must never determine reachability. It runs after
                             // status persistence and cannot delay the visible status.
@@ -219,7 +289,11 @@ class MonitoringViewModel(
                                     preferredVersion = device.snmpVersion,
                                     timeoutMs = 1000
                                 )
-                                val info = snmpRes.getOrNull()
+                                val rawInfo = snmpRes.getOrNull()
+                                val apiStations = apiMikrotikStationsByDevice[device.id]
+                                val info = rawInfo?.let { raw ->
+                                    if (!apiStations.isNullOrEmpty()) raw.copy(connectedMikrotikStations = apiStations) else raw
+                                }
                                 if (snmpRes.isSuccess && info != null) {
                                     snmpMapMutex.withLock {
                                         val updated = _uiState.value.snmpStatusByDevice.toMutableMap()

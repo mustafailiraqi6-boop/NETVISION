@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import com.netvision.app.monitoring.SnmpDeviceInfo
 import com.netvision.app.monitoring.SnmpV2Client
+import com.netvision.app.security.ApiCredentialCipher
 
 class SettingsRepository(context: Context) {
 
@@ -64,6 +65,8 @@ class SettingsRepository(context: Context) {
             putString("snmp_version", newSettings.snmpVersion)
             putInt("snmp_port", newSettings.snmpPort)
             putInt("refresh_interval_sec", newSettings.monitoringRefreshIntervalSec)
+            putString("mikrotik_api_username", newSettings.mikrotikApiUsername.trim())
+            putString("mikrotik_api_password_encrypted", ApiCredentialCipher.encrypt(newSettings.mikrotikApiPassword).orEmpty())
             apply()
         }
         _settings.value = newSettings
@@ -87,7 +90,9 @@ class SettingsRepository(context: Context) {
             snmpCommunities = prefs.getString("snmp_communities", null)?.split("\n")?.map { it.trim() }?.filter { it.isNotEmpty() }?.distinct() ?: listOf(prefs.getString("snmp_community", "public") ?: "public"),
             snmpVersion = prefs.getString("snmp_version", "v2c") ?: "v2c",
             snmpPort = prefs.getInt("snmp_port", 161),
-            monitoringRefreshIntervalSec = prefs.getInt("refresh_interval_sec", 5)
+            monitoringRefreshIntervalSec = prefs.getInt("refresh_interval_sec", 5),
+            mikrotikApiUsername = prefs.getString("mikrotik_api_username", "") ?: "",
+            mikrotikApiPassword = ApiCredentialCipher.decrypt(prefs.getString("mikrotik_api_password_encrypted", null))
         )
     }
 }

@@ -98,7 +98,11 @@ class DeviceRepository(
         ipAddress: String,
         manufacturer: Manufacturer,
         deviceType: DeviceType,
-        folderId: String
+        folderId: String,
+        apiEnabled: Boolean = false,
+        apiPort: Int = 8728,
+        apiUsername: String = "",
+        apiPassword: String = ""
     ) {
         val entity = deviceDao?.getDeviceById(deviceId) ?: return
         val targetFolder = if (folderId.isBlank()) DeviceFolderEntity.DEFAULT_FOLDER_ID else folderId
@@ -107,7 +111,11 @@ class DeviceRepository(
             ipAddress = ipAddress.trim(),
             manufacturer = manufacturer.name,
             deviceType = deviceType.name,
-            folderId = targetFolder
+            folderId = targetFolder,
+            apiEnabled = apiEnabled && manufacturer == Manufacturer.MIKROTIK,
+            apiPort = apiPort.coerceIn(1, 65535),
+            apiUsername = apiUsername.trim(),
+            apiPasswordEncrypted = com.netvision.app.security.ApiCredentialCipher.encrypt(apiPassword) ?: entity.apiPasswordEncrypted
         )
         deviceDao.insertOrUpdate(updated)
         logActivity(
@@ -124,7 +132,11 @@ class DeviceRepository(
         ipAddress: String,
         manufacturer: Manufacturer,
         deviceType: DeviceType,
-        folderId: String
+        folderId: String,
+        apiEnabled: Boolean = false,
+        apiPort: Int = 8728,
+        apiUsername: String = "",
+        apiPassword: String = ""
     ): NetworkDevice {
         val targetFolder = if (folderId.isBlank()) DeviceFolderEntity.DEFAULT_FOLDER_ID else folderId
         val newDevice = NetworkDevice(
@@ -137,7 +149,11 @@ class DeviceRepository(
             deviceType = deviceType,
             status = DeviceStatus.OFFLINE,
             firmwareVersion = "v1.0.0",
-            folderId = targetFolder
+            folderId = targetFolder,
+            apiEnabled = apiEnabled && manufacturer == Manufacturer.MIKROTIK,
+            apiPort = apiPort.coerceIn(1, 65535),
+            apiUsername = apiUsername.trim(),
+            apiPassword = apiPassword
         )
         saveDevice(newDevice)
         return newDevice
@@ -197,11 +213,19 @@ class DeviceRepository(
         }
     }
 
-    suspend fun updateDeviceTelemetry(deviceId: String, uptime: String?, snmpVersion: String?) {
+    suspend fun updateDeviceTelemetry(
+        deviceId: String,
+        uptime: String?,
+        snmpVersion: String?,
+        cpuUsagePercent: Int? = null,
+        memoryUsagePercent: Int? = null
+    ) {
         val entity = deviceDao?.getDeviceById(deviceId) ?: return
         deviceDao.insertOrUpdate(entity.copy(
             uptimeFormatted = uptime ?: entity.uptimeFormatted,
-            snmpVersion = snmpVersion ?: entity.snmpVersion
+            snmpVersion = snmpVersion ?: entity.snmpVersion,
+            cpuUsagePercent = cpuUsagePercent ?: entity.cpuUsagePercent,
+            memoryUsagePercent = memoryUsagePercent ?: entity.memoryUsagePercent
         ))
     }
 

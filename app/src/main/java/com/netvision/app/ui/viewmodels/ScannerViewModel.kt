@@ -198,9 +198,22 @@ class ScannerViewModel(
         _uiState.value = _uiState.value.copy(isScanning = false)
     }
 
-    fun addDeviceToMonitoring(device: NetworkDevice, folderId: String = DeviceFolderEntity.DEFAULT_FOLDER_ID) {
+    fun addDeviceToMonitoring(
+        device: NetworkDevice,
+        folderId: String = DeviceFolderEntity.DEFAULT_FOLDER_ID,
+        apiEnabled: Boolean = false,
+        apiPort: Int = 8728,
+        apiUsername: String = "",
+        apiPassword: String = ""
+    ) {
         viewModelScope.launch {
-            val deviceWithFolder = device.copy(folderId = folderId)
+            val deviceWithFolder = device.copy(
+                folderId = folderId,
+                apiEnabled = apiEnabled && device.manufacturer == com.netvision.app.models.Manufacturer.MIKROTIK,
+                apiPort = apiPort.coerceIn(1, 65535),
+                apiUsername = apiUsername.trim(),
+                apiPassword = apiPassword
+            )
             repository.saveDevice(deviceWithFolder)
             val updated = _uiState.value.addedDeviceIds.toMutableSet()
             updated.add(device.id)

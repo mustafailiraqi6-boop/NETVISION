@@ -31,6 +31,7 @@ import com.netvision.app.models.DeviceType
 import com.netvision.app.models.Manufacturer
 import com.netvision.app.models.NetworkDevice
 import com.netvision.app.ui.theme.*
+import com.netvision.app.ui.components.MikroTikApiSettingsSection
 import com.netvision.app.ui.viewmodels.DevicesViewModel
 
 
@@ -431,6 +432,10 @@ fun DevicesScreen(
         var selectedFolder by remember {
             mutableStateOf(existing?.folderId ?: uiState.selectedFolderId ?: DeviceFolderEntity.DEFAULT_FOLDER_ID)
         }
+        var apiEnabled by remember { mutableStateOf(existing?.apiEnabled ?: false) }
+        var apiPort by remember { mutableStateOf((existing?.apiPort ?: 8728).toString()) }
+        var apiUsername by remember { mutableStateOf(existing?.apiUsername ?: "") }
+        var apiPassword by remember { mutableStateOf(existing?.apiPassword ?: "") }
 
         AlertDialog(
             onDismissRequest = {
@@ -495,6 +500,15 @@ fun DevicesScreen(
                                     }
                                 }
                             }
+                    }
+
+                    if (selectedVendor == Manufacturer.MIKROTIK) {
+                        MikroTikApiSettingsSection(
+                            isArabic, apiEnabled, { apiEnabled = it },
+                            apiPort, { apiPort = it.filter(Char::isDigit).take(5) },
+                            apiUsername, { apiUsername = it },
+                            apiPassword, { apiPassword = it }
+                        )
                     }
 
                     // Field 4: Device Type
@@ -564,7 +578,11 @@ fun DevicesScreen(
                                 ipAddress = ipInput.ifBlank { existing.ipAddress },
                                 manufacturer = selectedVendor,
                                 deviceType = selectedType,
-                                folderId = selectedFolder
+                                folderId = selectedFolder,
+                                apiEnabled = apiEnabled && selectedVendor == Manufacturer.MIKROTIK,
+                                apiPort = apiPort.toIntOrNull() ?: 8728,
+                                apiUsername = apiUsername,
+                                apiPassword = apiPassword
                             )
                         } else {
                             viewModel.addDevice(
@@ -572,7 +590,11 @@ fun DevicesScreen(
                                 ipAddress = ipInput,
                                 manufacturer = selectedVendor,
                                 deviceType = selectedType,
-                                folderId = selectedFolder
+                                folderId = selectedFolder,
+                                apiEnabled = apiEnabled && selectedVendor == Manufacturer.MIKROTIK,
+                                apiPort = apiPort.toIntOrNull() ?: 8728,
+                                apiUsername = apiUsername,
+                                apiPassword = apiPassword
                             )
                         }
                         showAddDeviceDialog = false

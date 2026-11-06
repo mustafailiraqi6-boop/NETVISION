@@ -8,6 +8,7 @@ import com.netvision.app.models.DeviceType
 import com.netvision.app.models.Manufacturer
 import com.netvision.app.models.NetworkDevice
 import com.netvision.app.models.NetworkMetrics
+import com.netvision.app.security.ApiCredentialCipher
 
 @Entity(tableName = "devices")
 data class DeviceEntity(
@@ -30,7 +31,11 @@ data class DeviceEntity(
     val pingLatencyMs: Int,
     val snmpVersion: String? = null,
     val folderId: String = "uncategorized",
-    @ColumnInfo(defaultValue = "0") val lastPingTimestamp: Long = 0L
+    @ColumnInfo(defaultValue = "0") val lastPingTimestamp: Long = 0L,
+    @ColumnInfo(defaultValue = "0") val apiEnabled: Boolean = false,
+    @ColumnInfo(defaultValue = "8728") val apiPort: Int = 8728,
+    @ColumnInfo(defaultValue = "") val apiUsername: String = "",
+    @ColumnInfo(defaultValue = "") val apiPasswordEncrypted: String = ""
 ) {
     fun toDomainModel(): NetworkDevice {
         return NetworkDevice(
@@ -55,7 +60,11 @@ data class DeviceEntity(
             ),
             snmpVersion = snmpVersion,
             folderId = if (folderId.isBlank()) "uncategorized" else folderId,
-            lastPingTimestamp = lastPingTimestamp
+            lastPingTimestamp = lastPingTimestamp,
+            apiEnabled = apiEnabled && manufacturer.equals(Manufacturer.MIKROTIK.name, ignoreCase = true),
+            apiPort = apiPort,
+            apiUsername = apiUsername,
+            apiPassword = ApiCredentialCipher.decrypt(apiPasswordEncrypted)
         )
     }
 
@@ -81,7 +90,11 @@ data class DeviceEntity(
                 pingLatencyMs = device.metrics.pingLatencyMs,
                 snmpVersion = device.snmpVersion,
                 folderId = if (device.folderId.isBlank()) "uncategorized" else device.folderId,
-                lastPingTimestamp = device.lastPingTimestamp
+                lastPingTimestamp = device.lastPingTimestamp,
+                apiEnabled = device.apiEnabled && device.manufacturer == Manufacturer.MIKROTIK,
+                apiPort = device.apiPort,
+                apiUsername = device.apiUsername,
+                apiPasswordEncrypted = ApiCredentialCipher.encrypt(device.apiPassword) ?: ""
             )
         }
     }
