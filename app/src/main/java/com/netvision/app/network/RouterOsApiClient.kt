@@ -166,13 +166,13 @@ class RouterOsApiClient(private val context: Context) {
         val first = input.read()
         if (first < 0) throw IllegalStateException("RouterOS API connection closed")
         return when {
-            first and 0x80 == 0 -> first
-            first and 0xC0 == 0x80 -> ((first and 0x3F) shl 8) or readRequiredByte(input)
-            first and 0xE0 == 0xC0 -> ((first and 0x1F) shl 16) or
+            (first and 0x80) == 0 -> first
+            (first and 0xC0) == 0x80 -> ((first and 0x3F) shl 8) or readRequiredByte(input)
+            (first and 0xE0) == 0xC0 -> ((first and 0x1F) shl 16) or
                 (readRequiredByte(input) shl 8) or readRequiredByte(input)
-            first and 0xF0 == 0xE0 -> ((first and 0x0F) shl 24) or
+            (first and 0xF0) == 0xE0 -> ((first and 0x0F) shl 24) or
                 (readRequiredByte(input) shl 16) or (readRequiredByte(input) shl 8) or readRequiredByte(input)
-            first and 0xF8 == 0xF0 -> (readRequiredByte(input) shl 24) or
+            (first and 0xF8) == 0xF0 -> (readRequiredByte(input) shl 24) or
                 (readRequiredByte(input) shl 16) or (readRequiredByte(input) shl 8) or readRequiredByte(input)
             else -> throw IllegalStateException("Invalid RouterOS API length prefix")
         }
@@ -192,7 +192,7 @@ class RouterOsApiClient(private val context: Context) {
         fun number(key: String): Int? = this[key]?.substringBefore('@')?.trim()?.toIntOrNull()
         fun rate(key: String): Double? {
             val raw = this[key]?.trim() ?: return null
-            val value = Regex("""^([0-9]+(?:\\.[0-9]+)?)""").find(raw)?.groupValues?.getOrNull(1)?.toDoubleOrNull()
+            val value = Regex("""^([0-9]+(?:\.[0-9]+)?)""").find(raw)?.groupValues?.getOrNull(1)?.toDoubleOrNull()
                 ?: return null
             return value
         }
