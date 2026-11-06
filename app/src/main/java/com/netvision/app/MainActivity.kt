@@ -134,6 +134,30 @@ fun NetVisionApp(
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
+        topBar = {
+            Row(
+                modifier = Modifier.fillMaxWidth().height(48.dp).padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(
+                    onClick = {
+                        if (currentRoute != Screen.Settings.route) navController.navigate(Screen.Settings.route) {
+                            launchSingleTop = true
+                        }
+                    },
+                    modifier = Modifier.size(42.dp).clip(RoundedCornerShape(14.dp))
+                        .background(if (isDarkTheme) Color(0xFF173D32) else Color(0xFFE0F2E9))
+                ) {
+                    Icon(
+                        Screen.Settings.icon,
+                        contentDescription = if (isArabic) "الإعدادات" else "Settings",
+                        tint = activeAccent,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+            }
+        },
         bottomBar = {
             BoxWithConstraints(
                 modifier = Modifier.fillMaxWidth().navigationBarsPadding()
@@ -192,7 +216,7 @@ fun NetVisionApp(
                 }
 
                 Row(
-                    modifier = Modifier.fillMaxSize().padding(horizontal = 5.dp, vertical = 5.dp),
+                    modifier = Modifier.fillMaxSize().padding(start = 5.dp, end = 5.dp, top = 10.dp, bottom = 0.dp),
                     horizontalArrangement = Arrangement.spacedBy(2.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -258,23 +282,6 @@ fun NetVisionApp(
             composable(Screen.Settings.route) {
                 SettingsScreen(language = language, onLanguageChange = onLanguageChange, themeMode = themeMode, onThemeModeChange = onThemeModeChange)
             }
-            }
-            IconButton(
-                onClick = {
-                    if (currentRoute != Screen.Settings.route) navController.navigate(Screen.Settings.route) {
-                        launchSingleTop = true
-                    }
-                },
-                modifier = Modifier.align(Alignment.TopEnd)
-                    .padding(top = innerPadding.calculateTopPadding() + 8.dp, end = 16.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(if (isDarkTheme) Color(0xFF173D32) else Color(0xFFE0F2E9))
-            ) {
-                Icon(
-                    Screen.Settings.icon,
-                    contentDescription = if (isArabic) "الإعدادات" else "Settings",
-                    tint = activeAccent
-                )
             }
         }
     }
