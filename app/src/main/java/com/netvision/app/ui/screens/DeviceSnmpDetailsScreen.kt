@@ -226,8 +226,12 @@ private fun MikrotikStationCard(station: MikrotikStationInfo, isArabic: Boolean)
                 MetricTile("RX", rate(station.rxRateMbps), Color(0xFFE5F0FF), Color(0xFF2563EB), Modifier.weight(1f))
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                MetricTile("CCQ", station.ccqPercent?.let { "$it%" } ?: "—", Color(0xFFDCFCE7), Color(0xFF15803D), Modifier.weight(1f))
-                MetricTile(if (isArabic) "المسافة" else "Distance", station.distanceLabel ?: "—", Color(0xFFFFF2D9), Color(0xFFB7791F), Modifier.weight(1f))
+                MetricTile("TX CCQ", station.txCcqPercent?.let { "$it%" } ?: "—", Color(0xFFDCFCE7), Color(0xFF15803D), Modifier.weight(1f))
+                MetricTile("RX CCQ", station.rxCcqPercent?.let { "$it%" } ?: "—", Color(0xFFE4F0FF), Color(0xFF2563EB), Modifier.weight(1f))
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                MetricTile(if (isArabic) "المسافة" else "Distance", station.distanceLabel?.let { if (it.matches(Regex("[0-9]+(?:\\.[0-9]+)?"))) "$it m" else it } ?: "—", Color(0xFFFFF2D9), Color(0xFFB7791F), Modifier.weight(1f))
+                Spacer(Modifier.weight(1f))
             }
             Row(Modifier.fillMaxWidth().background(if (MaterialTheme.colorScheme.background.luminance() < 0.5f) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(10.dp)).padding(11.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(if (isArabic) "مدة الاتصال" else "Connection time", color = if (MaterialTheme.colorScheme.background.luminance() < 0.5f) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onPrimaryContainer, fontSize = 12.sp)
