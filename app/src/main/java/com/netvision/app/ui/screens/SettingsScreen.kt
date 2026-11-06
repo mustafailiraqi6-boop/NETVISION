@@ -143,6 +143,9 @@ fun SettingsScreen(
         )
     }
 
+    var apiUsernameInput by remember(appSettings.mikrotikApiUsername) { mutableStateOf(appSettings.mikrotikApiUsername) }
+    var apiPasswordInput by remember(appSettings.mikrotikApiPassword) { mutableStateOf(appSettings.mikrotikApiPassword) }
+    var isApiPasswordVisible by remember { mutableStateOf(false) }
     var communityInput by remember { mutableStateOf("") }
     var isCommunityVisible by remember { mutableStateOf(false) }
     val communityList = appSettings.snmpCommunities
@@ -182,6 +185,58 @@ fun SettingsScreen(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+        }
+
+        // Global MikroTik API credentials
+        item {
+            SettingsGroupCard(
+                title = if (isArabic) "معلومات دخول MikroTik API" else "MikroTik API Credentials",
+                icon = Icons.Default.SettingsEthernet
+            ) {
+                Text(
+                    if (isArabic) "أدخل حساباً مخصصاً للقراءة في أجهزة MikroTik. ستُستخدم هذه البيانات تلقائياً لكل جهاز تفعّل له API."
+                    else "Enter a read-only account for MikroTik devices. These credentials are used automatically for every device where API is enabled.",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                OutlinedTextField(
+                    value = apiUsernameInput,
+                    onValueChange = { apiUsernameInput = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text(if (isArabic) "اسم المستخدم" else "Username") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(10.dp)
+                )
+                OutlinedTextField(
+                    value = apiPasswordInput,
+                    onValueChange = { apiPasswordInput = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text(if (isArabic) "كلمة المرور" else "Password") },
+                    singleLine = true,
+                    visualTransformation = if (isApiPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon = {
+                        IconButton(onClick = { isApiPasswordVisible = !isApiPasswordVisible }) {
+                            Icon(if (isApiPasswordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff, contentDescription = null, tint = CyanAccent)
+                        }
+                    },
+                    shape = RoundedCornerShape(10.dp)
+                )
+                Text(
+                    if (isArabic) "تُخزّن كلمة المرور مشفّرة باستخدام Android Keystore."
+                    else "The password is encrypted using Android Keystore.",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Button(
+                    onClick = {
+                        viewModel.updateSettings(appSettings.copy(mikrotikApiUsername = apiUsernameInput.trim(), mikrotikApiPassword = apiPasswordInput))
+                        Toast.makeText(context, if (isArabic) "تم حفظ معلومات دخول MikroTik API" else "MikroTik API credentials saved", Toast.LENGTH_SHORT).show()
+                    },
+                    enabled = apiUsernameInput.isNotBlank() && apiPasswordInput.isNotBlank(),
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = CyanAccent)
+                ) { Text(if (isArabic) "حفظ معلومات الدخول" else "Save Credentials") }
             }
         }
 
