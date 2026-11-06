@@ -209,6 +209,32 @@ class MonitoringViewModel(
                 currentDevices.map { device ->
                     async(Dispatchers.IO) {
                         pollSemaphore.withPermit {
+                            // Optional RouterOS API telemetry is independent from SNMP and ICMP.
+                            // It is attempted only for explicitly enabled MikroTik devices.
+                            if (
+                                device.apiEnabled &&
+                                device.manufacturer == com.netvision.app.models.Manufacturer.MIKROTIK &&
+                                device.apiUsername.isNotBlank()
+                            ) {
+                                try {
+                                    val apiResult = com.netvision.app.network.RouterOsApiClient().fetchSystemResources(
+                                        host = device.ipAddress,
+                                        port = device.apiPort,
+                                        username = device.apiUsername,
+                                        password = device.apiPassword
+                                    )
+                                    apiResult.getOrNull()?.let { resources ->
+                                        repository.updateDeviceTelemetry(
+                                            deviceId = device.id,
+                                            uptime = resources["uptime"],
+                                            snmpVersion = null
+                                        )
+                                    }
+                                } catch (_: Exception) {
+                                    // API failures must not alter device reachability or SNMP monitoring.
+                                }
+                            }
+
                             // Reachability is handled by the shared ICMP monitor; this pass only refreshes SNMP telemetry.
                             // SNMP must never determine reachability. It runs after
                             // status persistence and cannot delay the visible status.
