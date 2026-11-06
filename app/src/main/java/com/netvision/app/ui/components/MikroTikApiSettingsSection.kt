@@ -10,7 +10,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -26,10 +25,7 @@ fun MikroTikApiSettingsSection(
     username: String, onUsernameChange: (String) -> Unit,
     password: String, onPasswordChange: (String) -> Unit
 ) {
-    var customCredentials by remember { mutableStateOf(username.isNotBlank() || password.isNotBlank()) }
-    LaunchedEffect(username, password) {
-        if (username.isNotBlank() || password.isNotBlank()) customCredentials = true
-    }
+    var customCredentials by remember(username.isNotBlank() || password.isNotBlank()) { mutableStateOf(username.isNotBlank() || password.isNotBlank()) }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
             if (isArabic) "إعدادات MikroTik API (اختياري)" else "MikroTik API Settings (Optional)",
