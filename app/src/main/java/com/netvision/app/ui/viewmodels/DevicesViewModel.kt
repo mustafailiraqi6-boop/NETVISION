@@ -146,10 +146,14 @@ class DevicesViewModel(
         ipAddress: String,
         manufacturer: Manufacturer,
         deviceType: DeviceType,
-        folderId: String
+        folderId: String,
+        apiEnabled: Boolean = false,
+        apiPort: Int = 8728,
+        apiUsername: String = "",
+        apiPassword: String = ""
     ) {
         viewModelScope.launch {
-            repository.addManualDevice(name, ipAddress, manufacturer, deviceType, folderId)
+            repository.addManualDevice(name, ipAddress, manufacturer, deviceType, folderId, apiEnabled, apiPort, apiUsername, apiPassword)
         }
     }
 
@@ -159,10 +163,14 @@ class DevicesViewModel(
         ipAddress: String,
         manufacturer: Manufacturer,
         deviceType: DeviceType,
-        folderId: String
+        folderId: String,
+        apiEnabled: Boolean = false,
+        apiPort: Int = 8728,
+        apiUsername: String = "",
+        apiPassword: String = ""
     ) {
         viewModelScope.launch {
-            repository.updateDeviceFull(deviceId, name, ipAddress, manufacturer, deviceType, folderId)
+            repository.updateDeviceFull(deviceId, name, ipAddress, manufacturer, deviceType, folderId, apiEnabled, apiPort, apiUsername, apiPassword)
         }
     }
 
