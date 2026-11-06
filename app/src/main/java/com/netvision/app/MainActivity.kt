@@ -153,22 +153,23 @@ fun NetVisionApp(
                     val centerX = insetPx + animatedIndicatorIndex * (sectionWidth + gapPx) + sectionWidth / 2f
                     // The arch spans the full selected tab, from its left edge to its right edge.
                     // Match the reference: a broad raised curve spanning almost the entire selected tab.
-                    val halfCurve = sectionWidth * 0.49f
+                    // Make the raised pocket visibly span the whole active tab, with a little overhang like the reference.
+                    val halfCurve = sectionWidth * 0.62f
                     val leftEdge = centerX - halfCurve
                     val rightEdge = centerX + halfCurve
-                    val rise = h * 0.48f
+                    val rise = h * 0.46f
                     val baseY = h - 2.dp.toPx()
                     val path = androidx.compose.ui.graphics.Path().apply {
                         moveTo(0f, baseY)
                         lineTo(leftEdge, baseY)
                         cubicTo(
-                            leftEdge + sectionWidth * 0.22f, baseY,
-                            centerX - sectionWidth * 0.34f, rise,
+                            leftEdge + sectionWidth * 0.30f, baseY,
+                            centerX - sectionWidth * 0.42f, rise,
                             centerX, rise
                         )
                         cubicTo(
-                            centerX + sectionWidth * 0.34f, rise,
-                            rightEdge - sectionWidth * 0.22f, baseY,
+                            centerX + sectionWidth * 0.42f, rise,
+                            rightEdge - sectionWidth * 0.30f, baseY,
                             rightEdge, baseY
                         )
                         lineTo(w, baseY)
