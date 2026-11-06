@@ -227,7 +227,13 @@ class MonitoringViewModel(
                                         repository.updateDeviceTelemetry(
                                             deviceId = device.id,
                                             uptime = resources["uptime"],
-                                            snmpVersion = null
+                                            snmpVersion = null,
+                                            cpuUsagePercent = resources["cpu-load"]?.toIntOrNull(),
+                                            memoryUsagePercent = run {
+                                                val total = resources["total-memory"]?.toLongOrNull() ?: 0L
+                                                val free = resources["free-memory"]?.toLongOrNull() ?: 0L
+                                                if (total > 0L) (((total - free).coerceAtLeast(0L) * 100) / total).toInt() else null
+                                            }
                                         )
                                     }
                                 } catch (_: Exception) {
