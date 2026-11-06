@@ -20,5 +20,6 @@ interface MikroTikDeviceService {
      * Communicates with RouterOS devices via RouterOS REST API (v7.1+) or RouterOS API (port 8728).
      */
     suspend fun fetchSystemResources(ipAddress: String, credentials: Pair<String, String>?,
-        apiPort: Int = 8728): Result<NetworkDevice>
+        apiPort: Int = 8728
+    ): Result<NetworkDevice>
 }
