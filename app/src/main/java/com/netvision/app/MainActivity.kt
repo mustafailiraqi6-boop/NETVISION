@@ -198,11 +198,6 @@ fun NetVisionApp(
                     bottomNavItems.forEach { screen ->
                         val selected = currentRoute == screen.route
                         val title = if (isArabic) screen.titleAr else screen.titleEn
-                        val iconLift by animateDpAsState(
-                            targetValue = if (selected) 5.dp else 0.dp,
-                            animationSpec = spring(dampingRatio = 0.72f, stiffness = 300f),
-                            label = "navIconLift"
-                        )
                         Box(
                             modifier = Modifier.weight(1f).fillMaxSize().clickable {
                                 if (currentRoute != screen.route) navController.navigate(screen.route) {
@@ -220,10 +215,7 @@ fun NetVisionApp(
                                 Icon(
                                     screen.icon,
                                     contentDescription = title,
-                                    tint = if (selected) selectedContent else inactiveContent,
-                                    modifier = Modifier.graphicsLayer {
-                                        translationY = -iconLift.toPx()
-                                    }
+                                    tint = if (selected) selectedContent else inactiveContent
                                 )
                                 Text(
                                     title,
