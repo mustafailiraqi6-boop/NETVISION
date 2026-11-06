@@ -6,10 +6,17 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 
 @Composable
@@ -19,6 +26,10 @@ fun MikroTikApiSettingsSection(
     username: String, onUsernameChange: (String) -> Unit,
     password: String, onPasswordChange: (String) -> Unit
 ) {
+    var customCredentials by remember { mutableStateOf(username.isNotBlank() || password.isNotBlank()) }
+    LaunchedEffect(username, password) {
+        if (username.isNotBlank() || password.isNotBlank()) customCredentials = true
+    }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
             if (isArabic) "إعدادات MikroTik API (اختياري)" else "MikroTik API Settings (Optional)",
@@ -34,18 +45,34 @@ fun MikroTikApiSettingsSection(
         }
         if (enabled) {
             OutlinedTextField(
-                value = port,
-                onValueChange = onPortChange,
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text(if (isArabic) "منفذ API" else "API Port") },
-                singleLine = true
+                value = port, onValueChange = onPortChange, modifier = Modifier.fillMaxWidth(),
+                label = { Text(if (isArabic) "منفذ API" else "API Port") }, singleLine = true
             )
-            Text(
-                if (isArabic) "بيانات الدخول تُؤخذ تلقائياً من إعدادات MikroTik API العامة. المنفذ الافتراضي 8728."
-                else "Credentials are taken automatically from the global MikroTik API settings. Default port is 8728.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                OutlinedButton(onClick = {
+                    customCredentials = !customCredentials
+                    if (!customCredentials) { onUsernameChange(""); onPasswordChange("") }
+                }) {
+                    Text(if (customCredentials) { if (isArabic) "استخدام الدخول الافتراضي" else "Use default credentials" } else { if (isArabic) "تخصيص الدخول" else "Customize credentials" })
+                }
+            }
+            if (customCredentials) {
+                OutlinedTextField(
+                    value = username, onValueChange = onUsernameChange, modifier = Modifier.fillMaxWidth(),
+                    label = { Text(if (isArabic) "اسم مستخدم الجهاز" else "Device username") }, singleLine = true
+                )
+                OutlinedTextField(
+                    value = password, onValueChange = onPasswordChange, modifier = Modifier.fillMaxWidth(),
+                    label = { Text(if (isArabic) "كلمة مرور الجهاز" else "Device password") },
+                    visualTransformation = PasswordVisualTransformation(), singleLine = true
+                )
+            } else {
+                Text(
+                    if (isArabic) "سيستخدم التطبيق بيانات الدخول الافتراضية المحفوظة في الإعدادات العامة."
+                    else "The app will use the default credentials saved in general settings.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }
