@@ -53,6 +53,38 @@ class RouterOsApiClient(
         }
     }
 
+    suspend fun fetchWirelessRegistrationTable(
+        host: String, port: Int, username: String, password: String
+    ): Result<List<Map<String, String>>> = withContext(Dispatchers.IO) {
+        runCatching {
+            require(port in 1..65535) { "Invalid RouterOS API port" }
+            require(username.isNotBlank()) { "RouterOS API username is empty" }
+            Socket().use { socket ->
+                socket.connect(InetSocketAddress(host, port), connectTimeoutMs)
+                socket.soTimeout = readTimeoutMs
+                val input = BufferedInputStream(socket.getInputStream())
+                val output = BufferedOutputStream(socket.getOutputStream())
+                writeSentence(output, listOf("/login", "=name=$username", "=password=$password"))
+                val login = readReply(input)
+                if (login.any { it.firstOrNull() == "!trap" } || login.none { it.firstOrNull() == "!done" }) {
+                    error(login.firstOrNull { it.firstOrNull() == "!trap" }?.joinToString(" ") ?: "RouterOS API login failed")
+                }
+                writeSentence(output, listOf("/interface/wireless/registration-table/print"))
+                val reply = readReply(input)
+                val trap = reply.firstOrNull { it.firstOrNull() == "!trap" }
+                if (trap != null) error(trap.joinToString(" "))
+                reply.filter { it.firstOrNull() == "!re" }.map { sentence ->
+                    sentence.drop(1).mapNotNull { word ->
+                        if (!word.startsWith("=")) null else {
+                            val split = word.indexOf('=', 1)
+                            if (split < 0) null else word.substring(1, split) to word.substring(split + 1)
+                        }
+                    }.toMap()
+                }
+            }
+        }
+    }
+
     private fun writeSentence(output: BufferedOutputStream, words: List<String>) {
         words.forEach { word ->
             val bytes = word.toByteArray(Charsets.UTF_8)
