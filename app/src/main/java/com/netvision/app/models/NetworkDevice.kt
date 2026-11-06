@@ -58,7 +58,11 @@ data class NetworkDevice(
     val metrics: NetworkMetrics = NetworkMetrics(),
     val snmpVersion: String? = null,
     val folderId: String = "uncategorized",
-    val lastPingTimestamp: Long = 0L
+    val lastPingTimestamp: Long = 0L,
+    val apiEnabled: Boolean = false,
+    val apiPort: Int = 8728,
+    val apiUsername: String = "",
+    val apiPassword: String = ""
 )
 
 data class NetworkRange(
