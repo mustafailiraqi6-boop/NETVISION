@@ -223,8 +223,8 @@ class MonitoringViewModel(
                         pollSemaphore.withPermit {
                             // Optional RouterOS API telemetry is independent from SNMP and ICMP.
                             // It is attempted only for explicitly enabled MikroTik devices.
-                            val apiUsername = settings.mikrotikApiUsername.ifBlank { device.apiUsername }
-                            val apiPassword = settings.mikrotikApiPassword.ifBlank { device.apiPassword }
+                            val apiUsername = device.apiUsername.ifBlank { settings.mikrotikApiUsername }
+                            val apiPassword = device.apiPassword.ifBlank { settings.mikrotikApiPassword }
                             if (
                                 device.apiEnabled &&
                                 device.manufacturer == com.netvision.app.models.Manufacturer.MIKROTIK &&
