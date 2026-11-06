@@ -136,19 +136,40 @@ fun NetVisionApp(
         modifier = Modifier.fillMaxSize(),
         topBar = {
             Row(
-                modifier = Modifier.fillMaxWidth().height(48.dp).padding(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.End,
+                modifier = Modifier.fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 6.dp)
+                    .height(56.dp)
+                    .clip(RoundedCornerShape(28.dp))
+                    .background(navBackground)
+                    .padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(
-                    onClick = {
-                        if (currentRoute != Screen.Settings.route) navController.navigate(Screen.Settings.route) {
-                            launchSingleTop = true
+                Text(
+                    text = "NETVISION",
+                    color = activeAccent,
+                    fontSize = 20.sp,
+                    maxLines = 1
+                )
+                Row(
+                    modifier = Modifier.clip(RoundedCornerShape(16.dp))
+                        .clickable {
+                            if (currentRoute != Screen.Settings.route) navController.navigate(Screen.Settings.route) {
+                                launchSingleTop = true
+                            }
                         }
-                    },
-                    modifier = Modifier.size(42.dp).clip(RoundedCornerShape(14.dp))
-                        .background(if (isDarkTheme) Color(0xFF173D32) else Color(0xFFE0F2E9))
+                        .background(if (isDarkTheme) Color(0xFF173D32) else Color(0xFFE0F2E9)
+                        )
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
+                    Text(
+                        text = if (isArabic) "الإعدادات" else "Settings",
+                        color = activeAccent,
+                        fontSize = 13.sp,
+                        maxLines = 1
+                    )
                     Icon(
                         Screen.Settings.icon,
                         contentDescription = if (isArabic) "الإعدادات" else "Settings",
