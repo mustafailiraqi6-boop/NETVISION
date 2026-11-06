@@ -434,9 +434,14 @@ fun DevicesScreen(
             mutableStateOf(existing?.folderId ?: uiState.selectedFolderId ?: DeviceFolderEntity.DEFAULT_FOLDER_ID)
         }
         val globalApiPort = NetVisionApplication.instance.settingsRepository.getSettings().defaultMikroTikApiPort
-        var apiPortInput by remember { mutableStateOf((existing?.apiPort ?: globalApiPort).toString()) }
-        var apiUsernameInput by remember { mutableStateOf("") }
-        var apiPasswordInput by remember { mutableStateOf("") }
+        val apiCredentialStore = remember { com.netvision.app.security.DeviceCredentialStore(NetVisionApplication.instance) }
+        val globalApiCredentials = remember { apiCredentialStore.getDefault() }
+        val deviceApiCredentials = remember(existing?.id) { existing?.let { apiCredentialStore.get(it.id) } }
+        val shownApiCredentials = deviceApiCredentials ?: globalApiCredentials
+        var apiPortInput by remember(existing?.id) { mutableStateOf((existing?.apiPort ?: globalApiPort).toString()) }
+        var apiUsernameInput by remember(existing?.id) { mutableStateOf(shownApiCredentials?.username.orEmpty()) }
+        var apiPasswordInput by remember(existing?.id) { mutableStateOf(shownApiCredentials?.password.orEmpty()) }
+        var editApiCredentials by remember(existing?.id) { mutableStateOf(false) }
 
         AlertDialog(
             onDismissRequest = {
@@ -511,43 +516,79 @@ fun DevicesScreen(
                             fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary
                         )
-                        OutlinedTextField(
-                            value = apiPortInput,
-                            onValueChange = { apiPortInput = it.filter { ch -> ch.isDigit() }.take(5) },
+                        Surface(
                             modifier = Modifier.fillMaxWidth(),
-                            label = { Text(if (isArabic) "منفذ API (TCP)" else "API Port (TCP)") },
-                            singleLine = true,
-                            shape = RoundedCornerShape(10.dp)
-                        )
-                        OutlinedTextField(
-                            value = apiUsernameInput,
-                            onValueChange = { apiUsernameInput = it },
-                            modifier = Modifier.fillMaxWidth(),
-                            label = { Text(if (isArabic) "اسم مستخدم API" else "API Username") },
-                            singleLine = true,
-                            shape = RoundedCornerShape(10.dp)
-                        )
-                        OutlinedTextField(
-                            value = apiPasswordInput,
-                            onValueChange = { apiPasswordInput = it },
-                            modifier = Modifier.fillMaxWidth(),
-                            label = { Text(if (isArabic) "كلمة مرور API" else "API Password") },
-                            singleLine = true,
-                            visualTransformation = PasswordVisualTransformation(),
-                            shape = RoundedCornerShape(10.dp)
-                        )
-                        Text(
-                            if (isEditing && isArabic)
-                                "اترك حقول الحساب فارغة للاحتفاظ ببيانات الدخول المحفوظة. استخدم حساباً بصلاحية read و api فقط."
-                            else if (isEditing)
-                                "Leave credentials blank to keep the saved login. Use a read-only account with read and api permissions."
-                            else if (isArabic)
-                                "يمكنك إدخال حساب قراءة مخصص. تُحفظ بيانات الدخول مشفرة على الجهاز."
-                            else
-                                "Use a dedicated read-only account. Credentials are encrypted on this device.",
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                        ) {
+                            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                                Text(if (isArabic) "البيانات الافتراضية المستخدمة لهذا الجهاز" else "Default credentials used for this device",
+                                    style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurface)
+                                Text(
+                                    (if (isArabic) "المنفذ: " else "Port: ") + (existing?.apiPort ?: globalApiPort) +
+                                        "   •   " + (if (isArabic) "المستخدم: " else "User: ") +
+                                        (shownApiCredentials?.username ?: if (isArabic) "غير محدد" else "Not set") +
+                                        "   •   " + (if (isArabic) "الرمز: " else "Password: ") +
+                                        if (shownApiCredentials != null) "••••••••" else (if (isArabic) "غير محدد" else "Not set"),
+                                    fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    if (isArabic) "تُستخدم بيانات الإعدادات العامة تلقائياً ما لم تخصص بيانات لهذا الجهاز." else "Global settings are used unless you customize this device.",
+                                    fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        OutlinedButton(
+                            onClick = {
+                                if (!editApiCredentials) {
+                                    apiPortInput = (existing?.apiPort ?: globalApiPort).toString()
+                                    apiUsernameInput = shownApiCredentials?.username.orEmpty()
+                                    apiPasswordInput = shownApiCredentials?.password.orEmpty()
+                                }
+                                editApiCredentials = !editApiCredentials
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.Edit, contentDescription = null)
+                            Spacer(Modifier.width(6.dp))
+                            Text(if (editApiCredentials) {
+                                if (isArabic) "إخفاء التعديل واستخدام الافتراضي" else "Cancel customization"
+                            } else {
+                                if (isArabic) "تعديل بيانات API لهذا الجهاز" else "Customize API for this device"
+                            })
+                        }
+                        if (editApiCredentials) {
+                            OutlinedTextField(
+                                value = apiPortInput,
+                                onValueChange = { apiPortInput = it.filter { ch -> ch.isDigit() }.take(5) },
+                                modifier = Modifier.fillMaxWidth(),
+                                label = { Text(if (isArabic) "منفذ API (TCP)" else "API Port (TCP)") },
+                                singleLine = true,
+                                shape = RoundedCornerShape(10.dp)
+                            )
+                            OutlinedTextField(
+                                value = apiUsernameInput,
+                                onValueChange = { apiUsernameInput = it },
+                                modifier = Modifier.fillMaxWidth(),
+                                label = { Text(if (isArabic) "اسم مستخدم API" else "API Username") },
+                                singleLine = true,
+                                shape = RoundedCornerShape(10.dp)
+                            )
+                            OutlinedTextField(
+                                value = apiPasswordInput,
+                                onValueChange = { apiPasswordInput = it },
+                                modifier = Modifier.fillMaxWidth(),
+                                label = { Text(if (isArabic) "كلمة مرور API" else "API Password") },
+                                singleLine = true,
+                                visualTransformation = PasswordVisualTransformation(),
+                                shape = RoundedCornerShape(10.dp)
+                            )
+                            Text(
+                                if (isArabic) "يمكنك تعديل المنفذ أو اسم المستخدم أو كلمة المرور لهذا الجهاز فقط. تُحفظ كلمة المرور مشفرة." else "Changes apply only to this device. Password is stored encrypted.",
+                                fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
 
                     // Field 4: Device Type
