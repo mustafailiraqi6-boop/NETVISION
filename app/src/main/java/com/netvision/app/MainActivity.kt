@@ -123,8 +123,10 @@ fun NetVisionApp(
     val activeAccent = if (isDarkTheme) Color(0xFF37D39A) else Color(0xFF087F59)
     val selectedContent = if (isDarkTheme) Color(0xFFF7F7F8) else Color(0xFF25232A)
     val selectedIndex = bottomNavItems.indexOfFirst { it.route == currentRoute }.coerceAtLeast(0)
+    // Canvas coordinates run left-to-right, while the Arabic navigation Row is laid out right-to-left.
+    val visualSelectedIndex = if (language == AppLanguage.ARABIC) bottomNavItems.lastIndex - selectedIndex else selectedIndex
     val animatedIndicatorIndex by animateFloatAsState(
-        targetValue = selectedIndex.toFloat(),
+        targetValue = visualSelectedIndex.toFloat(),
         animationSpec = spring(dampingRatio = 0.78f, stiffness = 260f),
         label = "bottomNavCurvePosition"
     )
