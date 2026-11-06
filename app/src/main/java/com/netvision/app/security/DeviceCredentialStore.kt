@@ -53,6 +53,12 @@ class DeviceCredentialStore(context: Context) {
         preferences.edit().remove(keyFor(deviceId)).apply()
     }
 
+    fun saveDefault(username: String, password: String) = save(DEFAULT_CREDENTIALS_ID, username, password)
+
+    fun getDefault(): DeviceApiCredentials? = get(DEFAULT_CREDENTIALS_ID)
+
+    fun deleteDefault() = delete(DEFAULT_CREDENTIALS_ID)
+
     private fun keyFor(deviceId: String) = "mikrotik_api_$deviceId"
 
     private fun getOrCreateKey(): SecretKey {
@@ -74,6 +80,7 @@ class DeviceCredentialStore(context: Context) {
     }
 
     companion object {
+        private const val DEFAULT_CREDENTIALS_ID = "__default__"
         private const val ANDROID_KEY_STORE = "AndroidKeyStore"
         private const val KEY_ALIAS = "netvision_mikrotik_api_credentials_v1"
         private const val TRANSFORMATION = "AES/GCM/NoPadding"
