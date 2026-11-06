@@ -64,7 +64,6 @@ data class UbiquitiStationInfo(
     val deviceName: String? = null,
     val signalDbm: Int? = null,
     val noiseDbm: Int? = null,
-    val distance: Int? = null,
     val ccqPercent: Int? = null,
     val airMaxQualityPercent: Int? = null,
     val airMaxCapacityPercent: Int? = null,
@@ -536,7 +535,6 @@ object SnmpV2Client {
             var name: String? = null,
             var signal: Int? = null,
             var noise: Int? = null,
-            var distance: Int? = null,
             var ccq: Int? = null,
             var quality: Int? = null,
             var capacity: Int? = null,
@@ -590,7 +588,6 @@ object SnmpV2Client {
                                     2 -> row.name = parsed.stringValue?.takeIf { it.isNotBlank() }
                                     3 -> row.signal = parsed.intValue
                                     4 -> row.noise = parsed.intValue
-                                    5 -> row.distance = parsed.intValue
                                     6 -> row.ccq = parsed.intValue
                                     8 -> row.quality = parsed.intValue
                                     9 -> row.capacity = parsed.intValue
@@ -619,7 +616,6 @@ object SnmpV2Client {
                 deviceName = row.name,
                 signalDbm = row.signal,
                 noiseDbm = row.noise,
-                distance = row.distance,
                 ccqPercent = row.ccq,
                 airMaxQualityPercent = row.quality,
                 airMaxCapacityPercent = row.capacity,
