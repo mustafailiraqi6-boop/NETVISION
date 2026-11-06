@@ -4,6 +4,9 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -26,6 +29,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.style.TextAlign
@@ -112,38 +116,72 @@ fun NetVisionApp(
     val isArabic = language == AppLanguage.ARABIC
     val isDarkTheme = themeMode == AppThemeMode.DARK
 
-    val navBackground = MaterialTheme.colorScheme.surface
-    val inactiveContent = MaterialTheme.colorScheme.onSurfaceVariant
-    val selectedBackground = MaterialTheme.colorScheme.primaryContainer
-    val selectedContent = MaterialTheme.colorScheme.onPrimaryContainer
+    val navBackground = if (isDarkTheme) Color(0xFF101012) else Color(0xFFF7F7F9)
+    val inactiveContent = if (isDarkTheme) Color(0xFF9B9BA3) else Color(0xFF777982)
+    val activeAccent = if (isDarkTheme) Color(0xFF37D39A) else Color(0xFF087F59)
+    val selectedContent = if (isDarkTheme) Color(0xFFF7F7F8) else Color(0xFF173D32)
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         bottomBar = {
             Row(
                 modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp)
-                    .clip(RoundedCornerShape(28.dp)).background(navBackground).padding(horizontal = 4.dp, vertical = 8.dp),
+                    .clip(RoundedCornerShape(30.dp)).background(navBackground).padding(horizontal = 5.dp, vertical = 7.dp),
                 horizontalArrangement = Arrangement.spacedBy(2.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 bottomNavItems.forEach { screen ->
                     val selected = currentRoute == screen.route
                     val title = if (isArabic) screen.titleAr else screen.titleEn
+                    val iconLift by animateDpAsState(
+                        targetValue = if (selected) 7.dp else 0.dp,
+                        animationSpec = spring(dampingRatio = 0.62f, stiffness = 420f),
+                        label = "navIconLift"
+                    )
+                    val iconScale by animateFloatAsState(
+                        targetValue = if (selected) 1.12f else 1f,
+                        animationSpec = spring(dampingRatio = 0.62f, stiffness = 420f),
+                        label = "navIconScale"
+                    )
                     Box(
-                        modifier = Modifier.weight(1f).clip(RoundedCornerShape(24.dp))
-                            .background(if (selected) selectedBackground else Color.Transparent)
+                        modifier = Modifier.weight(1f).clip(RoundedCornerShape(22.dp))
                             .clickable {
                                 if (currentRoute != screen.route) navController.navigate(screen.route) {
                                     popUpTo(Screen.Dashboard.route) { saveState = true }
                                     launchSingleTop = true
                                     restoreState = true
                                 }
-                            }.padding(horizontal = 2.dp, vertical = 8.dp),
+                            }.padding(horizontal = 1.dp, vertical = 5.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                            Icon(screen.icon, contentDescription = title, tint = if (selected) selectedContent else inactiveContent)
-                            Text(title, color = if (selected) selectedContent else inactiveContent, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                screen.icon,
+                                contentDescription = title,
+                                tint = if (selected) activeAccent else inactiveContent,
+                                modifier = Modifier.graphicsLayer {
+                                    translationY = -iconLift.toPx()
+                                    scaleX = iconScale
+                                    scaleY = iconScale
+                                }
+                            )
+                            Text(
+                                title,
+                                color = if (selected) selectedContent else inactiveContent,
+                                fontSize = 11.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                textAlign = TextAlign.Center
+                            )
+                            Box(
+                                Modifier.padding(top = 4.dp).fillMaxWidth(0.58f).height(2.dp)
+                                    .clip(RoundedCornerShape(50))
+                                    .background(if (selected) activeAccent else Color.Transparent)
+                            )
                         }
                     }
                 }
