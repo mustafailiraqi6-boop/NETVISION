@@ -81,7 +81,9 @@ data class MikrotikStationInfo(
     val signalDbm: Int? = null,
     val txRateMbps: Double? = null,
     val rxRateMbps: Double? = null,
-    val connectionTime: String? = null
+    val connectionTime: String? = null,
+    val ccqPercent: Int? = null,
+    val distanceMeters: Double? = null
 )
 
 data class SnmpDiagnosticRecord(
