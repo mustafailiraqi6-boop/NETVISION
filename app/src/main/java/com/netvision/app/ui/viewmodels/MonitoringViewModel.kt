@@ -258,8 +258,8 @@ class MonitoringViewModel(
                                             val mac = row["mac-address"]?.uppercase()?.takeIf { it.matches(Regex("^(?:[0-9A-F]{2}:){5}[0-9A-F]{2}$")) } ?: return@mapNotNull null
                                             val current = _uiState.value.snmpStatusByDevice[device.id]
                                             val snmpStation = current?.connectedMikrotikStations?.firstOrNull { it.macAddress.equals(mac, true) }
-                                            val ccq = row["tx-ccq"]?.removeSuffix("%")?.toDoubleOrNull()?.toInt()
-                                                ?: row["rx-ccq"]?.removeSuffix("%")?.toDoubleOrNull()?.toInt()
+                                            val txCcq = row["tx-ccq"]?.removeSuffix("%")?.toDoubleOrNull()?.toInt()
+                                            val rxCcq = row["rx-ccq"]?.removeSuffix("%")?.toDoubleOrNull()?.toInt()
                                             val distance = row["distance"]?.takeIf { it.isNotBlank() }
                                             (snmpStation ?: com.netvision.app.monitoring.MikrotikStationInfo(macAddress = mac)).copy(
                                                 deviceName = row["radio-name"]?.takeIf { it.isNotBlank() } ?: snmpStation?.deviceName,
@@ -267,7 +267,8 @@ class MonitoringViewModel(
                                                 txRateMbps = row["tx-rate"]?.let { parseRouterRateMbps(it) } ?: snmpStation?.txRateMbps,
                                                 rxRateMbps = row["rx-rate"]?.let { parseRouterRateMbps(it) } ?: snmpStation?.rxRateMbps,
                                                 connectionTime = row["uptime"] ?: snmpStation?.connectionTime,
-                                                ccqPercent = ccq ?: snmpStation?.ccqPercent,
+                                                txCcqPercent = txCcq ?: snmpStation?.txCcqPercent,
+                                                rxCcqPercent = rxCcq ?: snmpStation?.rxCcqPercent,
                                                 distanceLabel = distance ?: snmpStation?.distanceLabel
                                             )
                                         }
