@@ -154,6 +154,7 @@ fun SettingsScreen(
         }
     }
     var snmpPortInput by remember(appSettings.snmpPort) { mutableStateOf(appSettings.snmpPort.toString()) }
+    var mikrotikApiPortInput by remember(appSettings.defaultMikroTikApiPort) { mutableStateOf(appSettings.defaultMikroTikApiPort.toString()) }
     var defaultSubnet by remember(appSettings.defaultSubnet) { mutableStateOf(appSettings.defaultSubnet) }
     var scanTimeoutMs by remember(appSettings.scanTimeoutMs) { mutableStateOf(appSettings.scanTimeoutMs.toString()) }
 
@@ -272,6 +273,38 @@ fun SettingsScreen(
                     label = { Text(if (isArabic) "منفذ UDP لبروتوكول SNMP" else "SNMP UDP Port") },
                     singleLine = true,
                     shape = RoundedCornerShape(10.dp)
+                )
+            }
+        }
+
+        // MikroTik RouterOS API default port
+        item {
+            SettingsGroupCard(
+                title = if (isArabic) "إعدادات MikroTik API" else "MikroTik API Settings",
+                icon = Icons.Default.SettingsEthernet
+            ) {
+                Text(
+                    text = if (isArabic) "المنفذ الافتراضي لأجهزة MikroTik الجديدة. يمكن تخصيص منفذ مختلف لكل جهاز عند الإضافة أو التعديل." else "Default port for MikroTik devices. You can override it per device when adding or editing.",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                OutlinedTextField(
+                    value = mikrotikApiPortInput,
+                    onValueChange = { value ->
+                        mikrotikApiPortInput = value.filter { it.isDigit() }.take(5)
+                        mikrotikApiPortInput.toIntOrNull()?.takeIf { it in 1..65535 }?.let {
+                            viewModel.updateDefaultMikroTikApiPort(it.toString())
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text(if (isArabic) "منفذ API الافتراضي (TCP)" else "Default API Port (TCP)") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(10.dp)
+                )
+                Text(
+                    text = if (isArabic) "القيمة الحالية: ${appSettings.defaultMikroTikApiPort}" else "Current default: ${appSettings.defaultMikroTikApiPort}",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.primary
                 )
             }
         }
