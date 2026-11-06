@@ -42,7 +42,7 @@ class RouterOsApiClient(private val context: Context) {
                 if (!loginReply.done) throw IllegalStateException("RouterOS API login did not complete")
 
                 val modern = runCommand(input, output, "/interface/wireless/registration-table/print")
-                val rows = if (modern.trap == null && modern.records.isNotEmpty()) {
+                val rows = if (modern.trap == null) {
                     modern.records
                 } else {
                     val wifi = runCommand(input, output, "/interface/wifi/registration-table/print")
