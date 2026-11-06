@@ -1,0 +1,52 @@
+package com.netvision.app.ui.components
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.unit.dp
+
+@Composable
+fun MikroTikApiSettingsSection(
+    isArabic: Boolean, enabled: Boolean, onEnabledChange: (Boolean) -> Unit,
+    port: String, onPortChange: (String) -> Unit,
+    username: String, onUsernameChange: (String) -> Unit,
+    password: String, onPasswordChange: (String) -> Unit
+) {
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            if (isArabic) "إعدادات MikroTik API (اختياري)" else "MikroTik API Settings (Optional)",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(
+                if (isArabic) "تفعيل اتصال API لهذا الجهاز" else "Enable API for this device",
+                modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurface
+            )
+            Checkbox(checked = enabled, onCheckedChange = onEnabledChange)
+        }
+        if (enabled) {
+            OutlinedTextField(port, onPortChange, Modifier.fillMaxWidth(),
+                label = { Text(if (isArabic) "منفذ API" else "API Port") }, singleLine = true)
+            OutlinedTextField(username, onUsernameChange, Modifier.fillMaxWidth(),
+                label = { Text(if (isArabic) "اسم مستخدم API" else "API Username") }, singleLine = true)
+            OutlinedTextField(password, onPasswordChange, Modifier.fillMaxWidth(),
+                label = { Text(if (isArabic) "كلمة مرور API" else "API Password") },
+                visualTransformation = PasswordVisualTransformation(), singleLine = true)
+            Text(
+                if (isArabic) "المنفذ الافتراضي 8728. تُحفظ كلمة المرور مشفّرة على الجهاز."
+                else "Default port is 8728. The password is encrypted on this device.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
