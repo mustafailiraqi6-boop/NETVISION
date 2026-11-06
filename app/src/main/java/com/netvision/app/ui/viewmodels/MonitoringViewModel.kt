@@ -14,6 +14,7 @@ import com.netvision.app.monitoring.EthernetPortMonitor
 import com.netvision.app.monitoring.EthernetMonitoringSnapshot
 import com.netvision.app.monitoring.EthernetPortSnapshot
 import com.netvision.app.network.NetworkReachabilityService
+import com.netvision.app.network.RouterOsApiClient
 import com.netvision.app.repository.DeviceRepository
 import com.netvision.app.settings.SettingsRepository
 import kotlinx.coroutines.Dispatchers
@@ -66,6 +67,9 @@ class MonitoringViewModel(
     },
     private val reachabilityService: NetworkReachabilityService = NetworkReachabilityService(NetVisionApplication.instance)
 ) : ViewModel() {
+
+    private val deviceCredentialStore = NetVisionApplication.instance.deviceCredentialStore
+    private val routerOsApiClient = RouterOsApiClient(NetVisionApplication.instance)
 
     val savedDevices: StateFlow<List<NetworkDevice>> = repository.getAllDevices()
         .stateIn(
@@ -219,8 +223,28 @@ class MonitoringViewModel(
                                     preferredVersion = device.snmpVersion,
                                     timeoutMs = 1000
                                 )
-                                val info = snmpRes.getOrNull()
-                                if (snmpRes.isSuccess && info != null) {
+                                val baseInfo = snmpRes.getOrNull()
+                                if (snmpRes.isSuccess && baseInfo != null) {
+                                    var info = baseInfo
+                                    val isMikroTikDevice =
+                                        device.manufacturer == com.netvision.app.models.Manufacturer.MIKROTIK ||
+                                            baseInfo.sysDescr?.contains("MikroTik", ignoreCase = true) == true ||
+                                            baseInfo.model?.contains("MikroTik", ignoreCase = true) == true
+                                    if (isMikroTikDevice) {
+                                        val credentials = deviceCredentialStore.get(device.id)
+                                        if (credentials != null) {
+                                            val apiPort = device.apiPort ?: settings.defaultMikroTikApiPort
+                                            val apiStations = routerOsApiClient.readWirelessRegistrationTable(
+                                                ipAddress = device.ipAddress,
+                                                username = credentials.username,
+                                                password = credentials.password,
+                                                port = apiPort
+                                            ).getOrNull()
+                                            if (apiStations != null) {
+                                                info = info.copy(connectedMikrotikStations = apiStations)
+                                            }
+                                        }
+                                    }
                                     snmpMapMutex.withLock {
                                         val updated = _uiState.value.snmpStatusByDevice.toMutableMap()
                                         updated[device.id] = info
