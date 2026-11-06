@@ -11,6 +11,8 @@ import com.netvision.app.models.NetworkDevice
 import com.netvision.app.repository.DeviceRepository
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 data class DevicesUiState(
     val devices: List<NetworkDevice> = emptyList(),
@@ -156,7 +158,7 @@ class DevicesViewModel(
         viewModelScope.launch {
             val saved = repository.addManualDevice(name, ipAddress, manufacturer, deviceType, folderId, apiPort)
             if (manufacturer == Manufacturer.MIKROTIK && apiUsername.isNotBlank() && apiPassword.isNotBlank()) {
-                credentialStore.save(saved.id, apiUsername.trim(), apiPassword)
+                withContext(Dispatchers.IO) { credentialStore.save(saved.id, apiUsername.trim(), apiPassword) }
             }
         }
     }
@@ -176,10 +178,10 @@ class DevicesViewModel(
             repository.updateDeviceFull(deviceId, name, ipAddress, manufacturer, deviceType, folderId, apiPort)
             if (manufacturer == Manufacturer.MIKROTIK) {
                 if (apiUsername.isNotBlank() && apiPassword.isNotBlank()) {
-                    credentialStore.save(deviceId, apiUsername.trim(), apiPassword)
+                    withContext(Dispatchers.IO) { credentialStore.save(deviceId, apiUsername.trim(), apiPassword) }
                 }
             } else {
-                credentialStore.delete(deviceId)
+                withContext(Dispatchers.IO) { credentialStore.delete(deviceId) }
             }
         }
     }
@@ -187,7 +189,7 @@ class DevicesViewModel(
     fun deleteDevice(device: NetworkDevice) {
         viewModelScope.launch {
             repository.deleteDevice(device)
-            credentialStore.delete(device.id)
+            withContext(Dispatchers.IO) { credentialStore.delete(device.id) }
         }
     }
 }
