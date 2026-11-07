@@ -7,6 +7,7 @@ import com.netvision.app.database.DeviceFolderEntity
 import com.netvision.app.models.DeviceFolder
 import com.netvision.app.models.DeviceStatus
 import com.netvision.app.models.NetworkDevice
+import com.netvision.app.models.DeviceType
 import com.netvision.app.monitoring.SnmpDeviceInfo
 import com.netvision.app.monitoring.SnmpDiagnosticRecord
 import com.netvision.app.monitoring.SnmpV2Client
@@ -224,24 +225,31 @@ class MonitoringViewModel(
                                     timeoutMs = 1000
                                 )
                                 val baseInfo = snmpRes.getOrNull()
-                                var info = baseInfo
-                                val isMikroTikDevice =
-                                    device.manufacturer == com.netvision.app.models.Manufacturer.MIKROTIK ||
-                                        baseInfo?.sysDescr?.contains("MikroTik", ignoreCase = true) == true ||
-                                        baseInfo?.model?.contains("MikroTik", ignoreCase = true) == true
-                                if (isMikroTikDevice) {
+                                val info = baseInfo
+                                // Keep the existing Switches classification rules exactly as they are.
+                                val isSwitchDevice = device.deviceType == DeviceType.SWITCH ||
+                                    device.name.contains("switch", ignoreCase = true) ||
+                                    device.model.contains("CRS", ignoreCase = true) ||
+                                    device.model.contains("switch", ignoreCase = true)
+                                val isMikroTikSwitch = isSwitchDevice &&
+                                    device.manufacturer == com.netvision.app.models.Manufacturer.MIKROTIK
+                                var apiSwitchPortsLoaded = false
+                                if (isMikroTikSwitch) {
                                     val credentials = deviceCredentialStore.get(device.id) ?: deviceCredentialStore.getDefault()
                                     if (credentials != null) {
-                                        val apiPort = device.apiPort ?: settings.defaultMikroTikApiPort
-                                        val apiStations = routerOsApiClient.readWirelessRegistrationTable(
+                                        val apiSnapshot = routerOsApiClient.readEthernetSwitchPorts(
                                             ipAddress = device.ipAddress,
                                             username = credentials.username,
                                             password = credentials.password,
-                                            port = apiPort
+                                            port = device.apiPort ?: settings.defaultMikroTikApiPort
                                         ).getOrNull()
-                                        if (apiStations != null) {
-                                            info = (info ?: SnmpDeviceInfo(isSuccess = true))
-                                                .copy(connectedMikrotikStations = apiStations)
+                                        if (apiSnapshot != null) {
+                                            snmpMapMutex.withLock {
+                                                val updated = _uiState.value.ethernetPortsByDevice.toMutableMap()
+                                                updated[device.id] = apiSnapshot
+                                                _uiState.value = _uiState.value.copy(ethernetPortsByDevice = updated)
+                                            }
+                                            apiSwitchPortsLoaded = true
                                         }
                                     }
                                 }
@@ -288,6 +296,7 @@ class MonitoringViewModel(
                                         // The collector follows the negotiated SNMP version (v1 or v2c)
                                         // and binds each UDP request to the active VPN network.
                                         if (
+                                            !(isMikroTikSwitch && apiSwitchPortsLoaded) && (
                                             device.manufacturer == com.netvision.app.models.Manufacturer.MIKROTIK ||
                                             manufacturer == com.netvision.app.models.Manufacturer.MIKROTIK ||
                                             device.manufacturer == com.netvision.app.models.Manufacturer.UBIQUITI ||
@@ -298,6 +307,7 @@ class MonitoringViewModel(
                                             info.sysDescr?.let { it.contains("AirOS", true) || it.contains("UBNT", true) || it.contains("Ubiquiti", true) } == true ||
                                             device.model.contains("CRS", ignoreCase = true) ||
                                             device.model.contains("RouterBOARD", ignoreCase = true)
+                                            )
                                         ) {
                                             try {
                                                 val snapshot = EthernetPortMonitor.read(
