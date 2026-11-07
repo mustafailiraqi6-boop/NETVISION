@@ -225,7 +225,7 @@ class MonitoringViewModel(
                                     timeoutMs = 1000
                                 )
                                 val baseInfo = snmpRes.getOrNull()
-                                val info = baseInfo
+                                var info = baseInfo
                                 // Keep the existing Switches classification rules exactly as they are.
                                 val isSwitchDevice = device.deviceType == DeviceType.SWITCH ||
                                     device.name.contains("switch", ignoreCase = true) ||
@@ -260,6 +260,43 @@ class MonitoringViewModel(
                                         }
                                     }
                                 }
+                                // MikroTik wireless sectors/links use RouterOS API for station details.
+                                // This is deliberately separate from the Switches API path above.
+                                val isMikroTikWirelessDevice =
+                                    device.manufacturer == com.netvision.app.models.Manufacturer.MIKROTIK &&
+                                        !isSwitchDevice &&
+                                        device.deviceType in setOf(DeviceType.LINK, DeviceType.SECTOR_AP, DeviceType.ACCESS_POINT)
+                                if (isMikroTikWirelessDevice) {
+                                    val credentials = deviceCredentialStore.get(device.id)
+                                        ?: deviceCredentialStore.getDefault()
+                                    if (credentials != null) {
+                                        val apiStations = routerOsApiClient.readWirelessRegistrationTable(
+                                            ipAddress = device.ipAddress,
+                                            username = credentials.username,
+                                            password = credentials.password,
+                                            port = device.apiPort ?: settings.defaultMikroTikApiPort
+                                        ).getOrNull()
+                                        if (apiStations != null) {
+                                            val currentInfo = info
+                                            info = if (currentInfo != null) {
+                                                currentInfo.copy(
+                                                    connectedMikrotikStations = apiStations,
+                                                    connectedStationsMacs = if (apiStations.isNotEmpty()) {
+                                                        apiStations.map { it.macAddress }
+                                                    } else currentInfo.connectedStationsMacs
+                                                )
+                                            } else {
+                                                SnmpDeviceInfo(
+                                                    isSuccess = false,
+                                                    errorMessage = "SNMP unavailable; station details loaded through RouterOS API",
+                                                    connectedMikrotikStations = apiStations,
+                                                    connectedStationsMacs = apiStations.map { it.macAddress }
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+
                                 if (info != null) {
                                     val info = info
                                     snmpMapMutex.withLock {
