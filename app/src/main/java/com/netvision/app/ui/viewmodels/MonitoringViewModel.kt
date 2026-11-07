@@ -7,6 +7,7 @@ import com.netvision.app.database.DeviceFolderEntity
 import com.netvision.app.models.DeviceFolder
 import com.netvision.app.models.DeviceStatus
 import com.netvision.app.models.NetworkDevice
+import com.netvision.app.models.DeviceType
 import com.netvision.app.monitoring.SnmpDeviceInfo
 import com.netvision.app.monitoring.SnmpDiagnosticRecord
 import com.netvision.app.monitoring.SnmpV2Client
@@ -14,6 +15,7 @@ import com.netvision.app.monitoring.EthernetPortMonitor
 import com.netvision.app.monitoring.EthernetMonitoringSnapshot
 import com.netvision.app.monitoring.EthernetPortSnapshot
 import com.netvision.app.network.NetworkReachabilityService
+import com.netvision.app.network.RouterOsApiClient
 import com.netvision.app.repository.DeviceRepository
 import com.netvision.app.settings.SettingsRepository
 import kotlinx.coroutines.Dispatchers
@@ -66,6 +68,9 @@ class MonitoringViewModel(
     },
     private val reachabilityService: NetworkReachabilityService = NetworkReachabilityService(NetVisionApplication.instance)
 ) : ViewModel() {
+
+    private val deviceCredentialStore = NetVisionApplication.instance.deviceCredentialStore
+    private val routerOsApiClient = RouterOsApiClient(NetVisionApplication.instance)
 
     val savedDevices: StateFlow<List<NetworkDevice>> = repository.getAllDevices()
         .stateIn(
@@ -219,8 +224,44 @@ class MonitoringViewModel(
                                     preferredVersion = device.snmpVersion,
                                     timeoutMs = 1000
                                 )
-                                val info = snmpRes.getOrNull()
-                                if (snmpRes.isSuccess && info != null) {
+                                val baseInfo = snmpRes.getOrNull()
+                                val info = baseInfo
+                                // Keep the existing Switches classification rules exactly as they are.
+                                val isSwitchDevice = device.deviceType == DeviceType.SWITCH ||
+                                    device.name.contains("switch", ignoreCase = true) ||
+                                    device.model.contains("CRS", ignoreCase = true) ||
+                                    device.model.contains("switch", ignoreCase = true)
+                                val isMikroTikSwitch = isSwitchDevice && (
+                                    device.manufacturer == com.netvision.app.models.Manufacturer.MIKROTIK ||
+                                        device.model.contains("CRS", ignoreCase = true) ||
+                                        device.model.contains("MikroTik", ignoreCase = true) ||
+                                        baseInfo?.sysDescr?.contains("MikroTik", ignoreCase = true) == true
+                                    )
+                                var apiSwitchPortsLoaded = false
+                                if (isMikroTikSwitch) {
+                                    val credentials = deviceCredentialStore.get(device.id) ?: deviceCredentialStore.getDefault()
+                                    if (credentials != null) {
+                                        val apiSnapshot = routerOsApiClient.readEthernetSwitchPorts(
+                                            ipAddress = device.ipAddress,
+                                            username = credentials.username,
+                                            password = credentials.password,
+                                            port = device.apiPort ?: settings.defaultMikroTikApiPort
+                                        ).getOrNull()
+                                        if (apiSnapshot != null) {
+                                            // API supplies cumulative byte counters in one response.
+                                            // Calculate live rates from the difference between consecutive polls.
+                                            val withRates = applyPortRates(device.id, apiSnapshot)
+                                            snmpMapMutex.withLock {
+                                                val updated = _uiState.value.ethernetPortsByDevice.toMutableMap()
+                                                updated[device.id] = withRates
+                                                _uiState.value = _uiState.value.copy(ethernetPortsByDevice = updated)
+                                            }
+                                            apiSwitchPortsLoaded = true
+                                        }
+                                    }
+                                }
+                                if (info != null) {
+                                    val info = info
                                     snmpMapMutex.withLock {
                                         val updated = _uiState.value.snmpStatusByDevice.toMutableMap()
                                         updated[device.id] = info
@@ -234,7 +275,7 @@ class MonitoringViewModel(
                                                 info.ubntAirMaxQualityPercent != null ||
                                                 info.ubntAirMaxCapacityPercent != null ->
                                                 com.netvision.app.models.Manufacturer.UBIQUITI
-                                            info.mikrotikCcqPercent != null || info.mikrotikVoltageDecivolts != null ->
+                                            device.manufacturer == com.netvision.app.models.Manufacturer.MIKROTIK || info.mikrotikCcqPercent != null || info.mikrotikVoltageDecivolts != null ->
                                                 com.netvision.app.models.Manufacturer.MIKROTIK
                                             info.sysDescr?.contains("Mimosa", ignoreCase = true) == true ||
                                                 info.model?.contains("Mimosa", ignoreCase = true) == true ||
@@ -262,6 +303,7 @@ class MonitoringViewModel(
                                         // The collector follows the negotiated SNMP version (v1 or v2c)
                                         // and binds each UDP request to the active VPN network.
                                         if (
+                                            !(isMikroTikSwitch && apiSwitchPortsLoaded) && (
                                             device.manufacturer == com.netvision.app.models.Manufacturer.MIKROTIK ||
                                             manufacturer == com.netvision.app.models.Manufacturer.MIKROTIK ||
                                             device.manufacturer == com.netvision.app.models.Manufacturer.UBIQUITI ||
@@ -272,6 +314,7 @@ class MonitoringViewModel(
                                             info.sysDescr?.let { it.contains("AirOS", true) || it.contains("UBNT", true) || it.contains("Ubiquiti", true) } == true ||
                                             device.model.contains("CRS", ignoreCase = true) ||
                                             device.model.contains("RouterBOARD", ignoreCase = true)
+                                            )
                                         ) {
                                             try {
                                                 val snapshot = EthernetPortMonitor.read(
@@ -325,6 +368,42 @@ class MonitoringViewModel(
         } finally {
             if (_uiState.value.selectedFolderId == folderId) _uiState.value = _uiState.value.copy(isPollingNow = false)
         }
+    }
+
+    /**
+     * Converts RouterOS cumulative byte counters into Mbps using the elapsed time
+     * between successful API snapshots. The first sample remains unavailable.
+     */
+    private fun applyPortRates(
+        deviceId: String,
+        snapshot: EthernetMonitoringSnapshot
+    ): EthernetMonitoringSnapshot {
+        val now = System.currentTimeMillis()
+        val updatedPorts = snapshot.ports.map { port ->
+            val rxKey = "$deviceId:${port.index}:rx"
+            val txKey = "$deviceId:${port.index}:tx"
+            val previousRx = previousPortCounters[rxKey]
+            val previousTx = previousPortCounters[txKey]
+
+            val rxElapsed = previousRx?.let { ((now - it.first).coerceAtLeast(1L)) / 1000.0 }
+            val txElapsed = previousTx?.let { ((now - it.first).coerceAtLeast(1L)) / 1000.0 }
+
+            val rxRate = if (previousRx != null && rxElapsed != null &&
+                port.rxOctets != null && port.rxOctets >= previousRx.second
+            ) {
+                (port.rxOctets - previousRx.second) * 8.0 / rxElapsed / 1_000_000.0
+            } else null
+            val txRate = if (previousTx != null && txElapsed != null &&
+                port.txOctets != null && port.txOctets >= previousTx.second
+            ) {
+                (port.txOctets - previousTx.second) * 8.0 / txElapsed / 1_000_000.0
+            } else null
+
+            port.rxOctets?.let { previousPortCounters[rxKey] = now to it }
+            port.txOctets?.let { previousPortCounters[txKey] = now to it }
+            port.copy(rxMbps = rxRate, txMbps = txRate)
+        }
+        return snapshot.copy(ports = updatedPorts)
     }
 
     override fun onCleared() {

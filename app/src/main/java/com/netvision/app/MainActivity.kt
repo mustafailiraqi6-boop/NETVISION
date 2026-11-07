@@ -4,28 +4,40 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.style.TextAlign
@@ -109,48 +121,190 @@ fun NetVisionApp(
     val monitoringViewModel: MonitoringViewModel = viewModel()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route ?: Screen.Dashboard.route
+    // Keep the last main tab selected while utility/detail destinations are displayed.
+    var selectedTopLevelRoute by remember { mutableStateOf(Screen.Dashboard.route) }
+    LaunchedEffect(currentRoute) {
+        when {
+            bottomNavItems.any { it.route == currentRoute } -> selectedTopLevelRoute = currentRoute
+            currentRoute == "device-details/{deviceId}" || currentRoute.startsWith("device-details/") ->
+                selectedTopLevelRoute = Screen.Monitoring.route
+            currentRoute == "devices-filter/{status}" || currentRoute.startsWith("devices-filter/") ->
+                selectedTopLevelRoute = Screen.Devices.route
+            // Settings is an overlay destination: do not change the selected main tab.
+        }
+    }
     val isArabic = language == AppLanguage.ARABIC
     val isDarkTheme = themeMode == AppThemeMode.DARK
 
-    val navBackground = MaterialTheme.colorScheme.surface
-    val inactiveContent = MaterialTheme.colorScheme.onSurfaceVariant
-    val selectedBackground = MaterialTheme.colorScheme.primaryContainer
-    val selectedContent = MaterialTheme.colorScheme.onPrimaryContainer
+    val navBackground = if (isDarkTheme) Color(0xFF101012) else Color(0xFFF7F7F9)
+    val inactiveContent = if (isDarkTheme) Color(0xFF9B9BA3) else Color(0xFF777982)
+    val activeAccent = if (isDarkTheme) Color(0xFF37D39A) else Color(0xFF087F59)
+    val selectedContent = if (isDarkTheme) Color(0xFFF7F7F8) else Color(0xFF25232A)
+    val selectedIndex = bottomNavItems.indexOfFirst { it.route == selectedTopLevelRoute }.coerceAtLeast(0)
+    // Canvas coordinates run left-to-right, while the Arabic navigation Row is laid out right-to-left.
+    val visualSelectedIndex = if (language == AppLanguage.ARABIC) bottomNavItems.lastIndex - selectedIndex else selectedIndex
+    val animatedIndicatorIndex by animateFloatAsState(
+        targetValue = visualSelectedIndex.toFloat(),
+        animationSpec = spring(dampingRatio = 0.78f, stiffness = 260f),
+        label = "bottomNavCurvePosition"
+    )
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
-        bottomBar = {
+        topBar = {
             Row(
-                modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp)
-                    .clip(RoundedCornerShape(28.dp)).background(navBackground).padding(horizontal = 4.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                modifier = Modifier.fillMaxWidth()
+                    .statusBarsPadding()
+                    .padding(horizontal = 16.dp, vertical = 6.dp)
+                    .height(56.dp)
+                    .clip(RoundedCornerShape(28.dp))
+                    .background(navBackground)
+                    .padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                bottomNavItems.forEach { screen ->
-                    val selected = currentRoute == screen.route
-                    val title = if (isArabic) screen.titleAr else screen.titleEn
-                    Box(
-                        modifier = Modifier.weight(1f).clip(RoundedCornerShape(24.dp))
-                            .background(if (selected) selectedBackground else Color.Transparent)
-                            .clickable {
-                                if (currentRoute != screen.route) navController.navigate(screen.route) {
-                                    popUpTo(Screen.Dashboard.route) { saveState = true }
-                                    launchSingleTop = true
-                                    restoreState = true
+                Text(
+                    text = "NETVISION",
+                    color = activeAccent,
+                    fontSize = 20.sp,
+                    maxLines = 1
+                )
+                Row(
+                    modifier = Modifier.clip(RoundedCornerShape(16.dp))
+                        .clickable {
+                            if (currentRoute != Screen.Settings.route) navController.navigate(Screen.Settings.route) {
+                                launchSingleTop = true
+                            }
+                        }
+                        .background(if (isDarkTheme) Color(0xFF173D32) else Color(0xFFE0F2E9)
+                        )
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (isArabic) "الإعدادات" else "Settings",
+                        color = activeAccent,
+                        fontSize = 13.sp,
+                        maxLines = 1
+                    )
+                    Icon(
+                        Screen.Settings.icon,
+                        contentDescription = if (isArabic) "الإعدادات" else "Settings",
+                        tint = activeAccent,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+            }
+        },
+        bottomBar = {
+            BoxWithConstraints(
+                modifier = Modifier.fillMaxWidth().navigationBarsPadding()
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .height(76.dp)
+                    .clip(RoundedCornerShape(40.dp))
+                    .background(navBackground)
+            ) {
+                val navHorizontalInset = 5.dp
+                val navItemGap = 2.dp
+                val itemWidth = (maxWidth - navHorizontalInset * 2 - navItemGap * (bottomNavItems.size - 1)) / bottomNavItems.size
+                androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+                    val w = size.width
+                    val h = size.height
+                    val insetPx = navHorizontalInset.toPx()
+                    val gapPx = navItemGap.toPx()
+                    val sectionWidth = (w - insetPx * 2f - gapPx * (bottomNavItems.size - 1)) / bottomNavItems.size
+                    val centerX = insetPx + animatedIndicatorIndex * (sectionWidth + gapPx) + sectionWidth / 2f
+                    // The arch spans the full selected tab, from its left edge to its right edge.
+                    // Match the reference: a broad raised curve spanning almost the entire selected tab.
+                    // The raised pocket is tall enough to frame both the selected icon and its label.
+                    val halfCurve = sectionWidth * 0.62f
+                    val leftEdge = centerX - halfCurve
+                    val rightEdge = centerX + halfCurve
+                    val rise = h * 0.20f
+                    val baseY = h - 2.dp.toPx()
+                    val path = androidx.compose.ui.graphics.Path().apply {
+                        moveTo(0f, baseY)
+                        lineTo(leftEdge, baseY)
+                        cubicTo(
+                            leftEdge + sectionWidth * 0.30f, baseY,
+                            centerX - sectionWidth * 0.42f, rise,
+                            centerX, rise
+                        )
+                        cubicTo(
+                            centerX + sectionWidth * 0.42f, rise,
+                            rightEdge - sectionWidth * 0.30f, baseY,
+                            rightEdge, baseY
+                        )
+                        lineTo(w, baseY)
+                    }
+                    drawPath(
+                        path = path,
+                        color = activeAccent.copy(alpha = 0.22f),
+                        style = androidx.compose.ui.graphics.drawscope.Stroke(width = 7.dp.toPx())
+                    )
+                    drawPath(
+                        path = path,
+                        color = activeAccent,
+                        style = androidx.compose.ui.graphics.drawscope.Stroke(
+                            width = 3.dp.toPx(),
+                            cap = androidx.compose.ui.graphics.StrokeCap.Round,
+                            join = androidx.compose.ui.graphics.StrokeJoin.Round
+                        )
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxSize().padding(start = 5.dp, end = 5.dp, top = 10.dp, bottom = 0.dp),
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    bottomNavItems.forEach { screen ->
+                        val selected = currentRoute == screen.route
+                        val title = if (isArabic) screen.titleAr else screen.titleEn
+                        Box(
+                            modifier = Modifier.weight(1f).fillMaxSize().clickable {
+                                selectedTopLevelRoute = screen.route
+                                if (currentRoute != screen.route) {
+                                    // If this tab already exists below a detail/settings page, return to it.
+                                    val returnedToExistingTab = navController.popBackStack(screen.route, inclusive = false)
+                                    if (!returnedToExistingTab) {
+                                        navController.navigate(screen.route) {
+                                            popUpTo(Screen.Dashboard.route) { inclusive = false }
+                                            launchSingleTop = true
+                                        }
+                                    }
                                 }
-                            }.padding(horizontal = 2.dp, vertical = 8.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                            Icon(screen.icon, contentDescription = title, tint = if (selected) selectedContent else inactiveContent)
-                            Text(title, color = if (selected) selectedContent else inactiveContent, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+                            },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Icon(
+                                    screen.icon,
+                                    contentDescription = title,
+                                    tint = if (selected) activeAccent else inactiveContent,
+                                    modifier = Modifier.size(23.dp)
+                                )
+                                Text(
+                                    title,
+                                    color = if (selected) selectedContent else inactiveContent,
+                                    fontSize = 11.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    textAlign = TextAlign.Center
+                                )
+                            }
                         }
                     }
                 }
             }
         }
     ) { innerPadding ->
-        NavHost(navController = navController, startDestination = Screen.Dashboard.route, modifier = Modifier.padding(innerPadding)) {
+        Box(Modifier.fillMaxSize()) {
+            NavHost(navController = navController, startDestination = Screen.Dashboard.route, modifier = Modifier.padding(innerPadding)) {
             composable(Screen.Dashboard.route) {
                 DashboardScreen(isArabic = isArabic, monitoringViewModel = monitoringViewModel, onNavigateToDevices = { status ->
                     if (status == null) navController.navigate(Screen.Devices.route) else navController.navigate("devices-filter/${status.name}")
@@ -172,6 +326,7 @@ fun NetVisionApp(
             }
             composable(Screen.Settings.route) {
                 SettingsScreen(language = language, onLanguageChange = onLanguageChange, themeMode = themeMode, onThemeModeChange = onThemeModeChange)
+            }
             }
         }
     }

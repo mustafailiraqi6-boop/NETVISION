@@ -11,6 +11,8 @@ import com.netvision.app.models.NetworkDevice
 import com.netvision.app.repository.DeviceRepository
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 data class DevicesUiState(
     val devices: List<NetworkDevice> = emptyList(),
@@ -30,6 +32,8 @@ class DevicesViewModel(
         DeviceRepository()
     }
 ) : ViewModel() {
+
+    private val credentialStore = NetVisionApplication.instance.deviceCredentialStore
 
     private val _searchQuery = MutableStateFlow("")
     private val _selectedManufacturer = MutableStateFlow<Manufacturer?>(null)
@@ -146,10 +150,16 @@ class DevicesViewModel(
         ipAddress: String,
         manufacturer: Manufacturer,
         deviceType: DeviceType,
-        folderId: String
+        folderId: String,
+        apiPort: Int? = null,
+        apiUsername: String = "",
+        apiPassword: String = ""
     ) {
         viewModelScope.launch {
-            repository.addManualDevice(name, ipAddress, manufacturer, deviceType, folderId)
+            val saved = repository.addManualDevice(name, ipAddress, manufacturer, deviceType, folderId, apiPort)
+            if (manufacturer == Manufacturer.MIKROTIK && apiUsername.isNotBlank() && apiPassword.isNotBlank()) {
+                withContext(Dispatchers.IO) { credentialStore.save(saved.id, apiUsername.trim(), apiPassword) }
+            }
         }
     }
 
@@ -159,16 +169,27 @@ class DevicesViewModel(
         ipAddress: String,
         manufacturer: Manufacturer,
         deviceType: DeviceType,
-        folderId: String
+        folderId: String,
+        apiPort: Int? = null,
+        apiUsername: String = "",
+        apiPassword: String = ""
     ) {
         viewModelScope.launch {
-            repository.updateDeviceFull(deviceId, name, ipAddress, manufacturer, deviceType, folderId)
+            repository.updateDeviceFull(deviceId, name, ipAddress, manufacturer, deviceType, folderId, apiPort)
+            if (manufacturer == Manufacturer.MIKROTIK) {
+                if (apiUsername.isNotBlank() && apiPassword.isNotBlank()) {
+                    withContext(Dispatchers.IO) { credentialStore.save(deviceId, apiUsername.trim(), apiPassword) }
+                }
+            } else {
+                withContext(Dispatchers.IO) { credentialStore.delete(deviceId) }
+            }
         }
     }
 
     fun deleteDevice(device: NetworkDevice) {
         viewModelScope.launch {
             repository.deleteDevice(device)
+            withContext(Dispatchers.IO) { credentialStore.delete(device.id) }
         }
     }
 }

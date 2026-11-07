@@ -98,7 +98,8 @@ class DeviceRepository(
         ipAddress: String,
         manufacturer: Manufacturer,
         deviceType: DeviceType,
-        folderId: String
+        folderId: String,
+        apiPort: Int? = null
     ) {
         val entity = deviceDao?.getDeviceById(deviceId) ?: return
         val targetFolder = if (folderId.isBlank()) DeviceFolderEntity.DEFAULT_FOLDER_ID else folderId
@@ -107,7 +108,8 @@ class DeviceRepository(
             ipAddress = ipAddress.trim(),
             manufacturer = manufacturer.name,
             deviceType = deviceType.name,
-            folderId = targetFolder
+            folderId = targetFolder,
+            apiPort = apiPort
         )
         deviceDao.insertOrUpdate(updated)
         logActivity(
@@ -124,7 +126,8 @@ class DeviceRepository(
         ipAddress: String,
         manufacturer: Manufacturer,
         deviceType: DeviceType,
-        folderId: String
+        folderId: String,
+        apiPort: Int? = null
     ): NetworkDevice {
         val targetFolder = if (folderId.isBlank()) DeviceFolderEntity.DEFAULT_FOLDER_ID else folderId
         val newDevice = NetworkDevice(
@@ -136,6 +139,7 @@ class DeviceRepository(
             model = if (manufacturer == Manufacturer.MIKROTIK) "RouterOS" else if (manufacturer == Manufacturer.UBIQUITI) "AirOS" else "Standard Device",
             deviceType = deviceType,
             status = DeviceStatus.OFFLINE,
+            apiPort = apiPort,
             firmwareVersion = "v1.0.0",
             folderId = targetFolder
         )

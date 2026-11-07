@@ -24,5 +24,6 @@ data class AppSettings(
     val snmpCommunities: List<String> = listOf("public"),
     val snmpVersion: String = "v2c",
     val snmpPort: Int = 161,
+    val defaultMikroTikApiPort: Int = 8728,
     val monitoringRefreshIntervalSec: Int = 5
 )

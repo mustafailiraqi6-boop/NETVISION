@@ -154,6 +154,11 @@ fun SettingsScreen(
         }
     }
     var snmpPortInput by remember(appSettings.snmpPort) { mutableStateOf(appSettings.snmpPort.toString()) }
+    var mikrotikApiPortInput by remember(appSettings.defaultMikroTikApiPort) { mutableStateOf(appSettings.defaultMikroTikApiPort.toString()) }
+    val apiCredentialStore = remember(context) { com.netvision.app.security.DeviceCredentialStore(context) }
+    val savedDefaultApiCredentials = remember { apiCredentialStore.getDefault() }
+    var defaultApiUsername by remember { mutableStateOf(savedDefaultApiCredentials?.username.orEmpty()) }
+    var defaultApiPassword by remember { mutableStateOf("") }
     var defaultSubnet by remember(appSettings.defaultSubnet) { mutableStateOf(appSettings.defaultSubnet) }
     var scanTimeoutMs by remember(appSettings.scanTimeoutMs) { mutableStateOf(appSettings.scanTimeoutMs.toString()) }
 
@@ -273,6 +278,74 @@ fun SettingsScreen(
                     singleLine = true,
                     shape = RoundedCornerShape(10.dp)
                 )
+            }
+        }
+
+        // MikroTik RouterOS API default port
+        item {
+            SettingsGroupCard(
+                title = if (isArabic) "إعدادات MikroTik API" else "MikroTik API Settings",
+                icon = Icons.Default.SettingsEthernet
+            ) {
+                Text(
+                    text = if (isArabic) "المنفذ الافتراضي لأجهزة MikroTik الجديدة. يمكن تخصيص منفذ مختلف لكل جهاز عند الإضافة أو التعديل." else "Default port for MikroTik devices. You can override it per device when adding or editing.",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                OutlinedTextField(
+                    value = mikrotikApiPortInput,
+                    onValueChange = { value ->
+                        mikrotikApiPortInput = value.filter { it.isDigit() }.take(5)
+                        mikrotikApiPortInput.toIntOrNull()?.takeIf { it in 1..65535 }?.let {
+                            viewModel.updateDefaultMikroTikApiPort(it.toString())
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text(if (isArabic) "منفذ API الافتراضي (TCP)" else "Default API Port (TCP)") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(10.dp)
+                )
+                Text(
+                    text = if (isArabic) "القيمة الحالية: ${appSettings.defaultMikroTikApiPort}" else "Current default: ${appSettings.defaultMikroTikApiPort}",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = defaultApiUsername,
+                    onValueChange = { defaultApiUsername = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text(if (isArabic) "اسم المستخدم الافتراضي لـ API" else "Default API Username") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(10.dp)
+                )
+                OutlinedTextField(
+                    value = defaultApiPassword,
+                    onValueChange = { defaultApiPassword = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text(if (isArabic) "كلمة المرور الافتراضية لـ API" else "Default API Password") },
+                    placeholder = { Text(if (savedDefaultApiCredentials != null) (if (isArabic) "محفوظة — اكتب للتغيير" else "Saved — enter to change") else "") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    shape = RoundedCornerShape(10.dp)
+                )
+                Text(
+                    text = if (isArabic) "تُستخدم هذه البيانات تلقائياً للأجهزة التي لا تملك بيانات دخول خاصة. كلمة المرور تُحفظ مشفرة." else "Used automatically when a device has no individual credentials. Password is stored encrypted.",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Button(
+                    onClick = {
+                        if (defaultApiUsername.isNotBlank() && defaultApiPassword.isNotBlank()) {
+                            apiCredentialStore.saveDefault(defaultApiUsername.trim(), defaultApiPassword)
+                            defaultApiPassword = ""
+                            Toast.makeText(context, if (isArabic) "تم حفظ بيانات API الافتراضية" else "Default API credentials saved", Toast.LENGTH_SHORT).show()
+                        } else {
+                            Toast.makeText(context, if (isArabic) "أدخل اسم المستخدم وكلمة المرور لحفظهما" else "Enter username and password to save", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text(if (isArabic) "حفظ بيانات المستخدم الافتراضي" else "Save Default API Credentials") }
             }
         }
 
