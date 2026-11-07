@@ -86,21 +86,19 @@ class RouterOsApiClient(private val context: Context) {
                 val interfaces = runCommand(input, output, "/interface/print")
                 if (interfaces.trap != null) throw IllegalStateException(interfaces.trap)
 
-                val ethernetRows = interfaces.records.filter { row ->
-                    row["type"].equals("ether", ignoreCase = true) ||
-                        row["type"].equals("ethernet", ignoreCase = true)
-                }
-                val ports = ethernetRows.mapIndexed { index, row ->
-                    val name = row["name"]?.takeIf { it.isNotBlank() } ?: "ether-${index + 1}"
-                    val traffic = runCatching {
-                        sendSentence(output, listOf("/interface/monitor-traffic", "=interface=$name", "=once="))
-                        readReply(input)
-                    }.getOrNull()
-                    val trafficRow = traffic?.records?.firstOrNull()
-                    fun longValue(key: String): Long? = row[key]?.toLongOrNull()
-                    fun rateMbps(key: String): Double? =
-                        trafficRow?.get(key)?.toDoubleOrNull()?.div(1_000_000.0)
+                // Read counters for every physical Ethernet/SFP port in one API request.
+                // RouterOS returns the exact interface names used by Winbox; preserve them
+                // and sort lexicographically to match the Winbox interface list.
+                val ethernetRows = interfaces.records
+                    .filter { row ->
+                        row["type"].equals("ether", ignoreCase = true) ||
+                            row["type"].equals("ethernet", ignoreCase = true)
+                    }
+                    .sortedBy { it["name"].orEmpty().lowercase(Locale.ROOT) }
 
+                val ports = ethernetRows.mapIndexed { index, row ->
+                    val name = row["name"]?.takeIf { it.isNotBlank() }
+                        ?: "ether-${index + 1}"
                     val running = row["running"].equals("true", ignoreCase = true)
                     val disabled = row["disabled"].equals("true", ignoreCase = true)
                     EthernetPortSnapshot(
@@ -109,10 +107,10 @@ class RouterOsApiClient(private val context: Context) {
                         adminStatus = if (disabled) 2 else 1,
                         operStatus = if (running) 1 else 2,
                         speedBps = null,
-                        rxOctets = longValue("rx-byte"),
-                        txOctets = longValue("tx-byte"),
-                        rxMbps = rateMbps("rx-bits-per-second"),
-                        txMbps = rateMbps("tx-bits-per-second")
+                        rxOctets = row["rx-byte"]?.toLongOrNull(),
+                        txOctets = row["tx-byte"]?.toLongOrNull(),
+                        rxMbps = null,
+                        txMbps = null
                     )
                 }
                 EthernetMonitoringSnapshot(ports = ports)
