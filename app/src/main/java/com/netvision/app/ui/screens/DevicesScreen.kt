@@ -508,7 +508,10 @@ fun DevicesScreen(
                             }
                     }
 
-                    if (selectedVendor == Manufacturer.MIKROTIK) {
+                    // Show the same MikroTik API settings block in BOTH add and edit flows.
+                    val showMikroTikApiSettings = selectedVendor == Manufacturer.MIKROTIK &&
+                        (showAddDeviceDialog || isEditing)
+                    if (showMikroTikApiSettings) {
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                         Text(
                             if (isArabic) "إعدادات MikroTik API" else "MikroTik API Connection",
