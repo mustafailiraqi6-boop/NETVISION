@@ -248,9 +248,12 @@ class MonitoringViewModel(
                                             port = device.apiPort ?: settings.defaultMikroTikApiPort
                                         ).getOrNull()
                                         if (apiSnapshot != null) {
+                                            // API supplies cumulative byte counters in one response.
+                                            // Calculate live rates from the difference between consecutive polls.
+                                            val withRates = applyPortRates(device.id, apiSnapshot)
                                             snmpMapMutex.withLock {
                                                 val updated = _uiState.value.ethernetPortsByDevice.toMutableMap()
-                                                updated[device.id] = apiSnapshot
+                                                updated[device.id] = withRates
                                                 _uiState.value = _uiState.value.copy(ethernetPortsByDevice = updated)
                                             }
                                             apiSwitchPortsLoaded = true
@@ -365,6 +368,42 @@ class MonitoringViewModel(
         } finally {
             if (_uiState.value.selectedFolderId == folderId) _uiState.value = _uiState.value.copy(isPollingNow = false)
         }
+    }
+
+    /**
+     * Converts RouterOS cumulative byte counters into Mbps using the elapsed time
+     * between successful API snapshots. The first sample remains unavailable.
+     */
+    private fun applyPortRates(
+        deviceId: String,
+        snapshot: EthernetMonitoringSnapshot
+    ): EthernetMonitoringSnapshot {
+        val now = System.currentTimeMillis()
+        val updatedPorts = snapshot.ports.map { port ->
+            val rxKey = "$deviceId:${port.index}:rx"
+            val txKey = "$deviceId:${port.index}:tx"
+            val previousRx = previousPortCounters[rxKey]
+            val previousTx = previousPortCounters[txKey]
+
+            val rxElapsed = previousRx?.let { ((now - it.first).coerceAtLeast(1L)) / 1000.0 }
+            val txElapsed = previousTx?.let { ((now - it.first).coerceAtLeast(1L)) / 1000.0 }
+
+            val rxRate = if (previousRx != null && rxElapsed != null &&
+                port.rxOctets != null && port.rxOctets >= previousRx.second
+            ) {
+                (port.rxOctets - previousRx.second) * 8.0 / rxElapsed / 1_000_000.0
+            } else null
+            val txRate = if (previousTx != null && txElapsed != null &&
+                port.txOctets != null && port.txOctets >= previousTx.second
+            ) {
+                (port.txOctets - previousTx.second) * 8.0 / txElapsed / 1_000_000.0
+            } else null
+
+            port.rxOctets?.let { previousPortCounters[rxKey] = now to it }
+            port.txOctets?.let { previousPortCounters[txKey] = now to it }
+            port.copy(rxMbps = rxRate, txMbps = txRate)
+        }
+        return snapshot.copy(ports = updatedPorts)
     }
 
     override fun onCleared() {
