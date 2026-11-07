@@ -4,6 +4,8 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import com.netvision.app.monitoring.MikrotikStationInfo
+import com.netvision.app.monitoring.EthernetMonitoringSnapshot
+import com.netvision.app.monitoring.EthernetPortSnapshot
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.BufferedInputStream
@@ -51,6 +53,69 @@ class RouterOsApiClient(private val context: Context) {
                 }
 
                 rows.mapNotNull { row -> row.toStationInfo() }
+            }
+        }
+    }
+
+    /**
+     * Reads physical Ethernet interfaces and their live rates for the Switches section.
+     * RouterOS monitor-traffic requires a concrete interface name; "all" is not valid.
+     */
+    suspend fun readEthernetSwitchPorts(
+        ipAddress: String,
+        username: String,
+        password: String,
+        port: Int
+    ): Result<EthernetMonitoringSnapshot> = withContext(Dispatchers.IO) {
+        runCatching {
+            require(port in 1..65535) { "Invalid RouterOS API port" }
+            require(username.isNotBlank() && password.isNotBlank()) { "API credentials are missing" }
+
+            Socket().use { socket ->
+                socket.soTimeout = SOCKET_TIMEOUT_MS
+                findVpnNetwork()?.bindSocket(socket)
+                socket.connect(InetSocketAddress(ipAddress, port), CONNECT_TIMEOUT_MS)
+                val input = BufferedInputStream(socket.getInputStream())
+                val output = BufferedOutputStream(socket.getOutputStream())
+
+                sendSentence(output, listOf("/login", "=name=$username", "=password=$password"))
+                val login = readReply(input)
+                if (login.trap != null) throw IllegalStateException(login.trap)
+                if (!login.done) throw IllegalStateException("RouterOS API login did not complete")
+
+                val interfaces = runCommand(input, output, "/interface/print")
+                if (interfaces.trap != null) throw IllegalStateException(interfaces.trap)
+
+                val ethernetRows = interfaces.records.filter { row ->
+                    row["type"].equals("ether", ignoreCase = true) ||
+                        row["type"].equals("ethernet", ignoreCase = true)
+                }
+                val ports = ethernetRows.mapIndexed { index, row ->
+                    val name = row["name"]?.takeIf { it.isNotBlank() } ?: "ether-${index + 1}"
+                    val traffic = runCatching {
+                        sendSentence(output, listOf("/interface/monitor-traffic", "=interface=$name", "=once="))
+                        readReply(input)
+                    }.getOrNull()
+                    val trafficRow = traffic?.records?.firstOrNull()
+                    fun longValue(key: String): Long? = row[key]?.toLongOrNull()
+                    fun rateMbps(key: String): Double? =
+                        trafficRow?.get(key)?.toDoubleOrNull()?.div(1_000_000.0)
+
+                    val running = row["running"].equals("true", ignoreCase = true)
+                    val disabled = row["disabled"].equals("true", ignoreCase = true)
+                    EthernetPortSnapshot(
+                        index = index + 1,
+                        name = name,
+                        adminStatus = if (disabled) 2 else 1,
+                        operStatus = if (running) 1 else 2,
+                        speedBps = null,
+                        rxOctets = longValue("rx-byte"),
+                        txOctets = longValue("tx-byte"),
+                        rxMbps = rateMbps("rx-bits-per-second"),
+                        txMbps = rateMbps("tx-bits-per-second")
+                    )
+                }
+                EthernetMonitoringSnapshot(ports = ports)
             }
         }
     }
