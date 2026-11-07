@@ -231,8 +231,12 @@ class MonitoringViewModel(
                                     device.name.contains("switch", ignoreCase = true) ||
                                     device.model.contains("CRS", ignoreCase = true) ||
                                     device.model.contains("switch", ignoreCase = true)
-                                val isMikroTikSwitch = isSwitchDevice &&
-                                    device.manufacturer == com.netvision.app.models.Manufacturer.MIKROTIK
+                                val isMikroTikSwitch = isSwitchDevice && (
+                                    device.manufacturer == com.netvision.app.models.Manufacturer.MIKROTIK ||
+                                        device.model.contains("CRS", ignoreCase = true) ||
+                                        device.model.contains("MikroTik", ignoreCase = true) ||
+                                        baseInfo?.sysDescr?.contains("MikroTik", ignoreCase = true) == true
+                                    )
                                 var apiSwitchPortsLoaded = false
                                 if (isMikroTikSwitch) {
                                     val credentials = deviceCredentialStore.get(device.id) ?: deviceCredentialStore.getDefault()
