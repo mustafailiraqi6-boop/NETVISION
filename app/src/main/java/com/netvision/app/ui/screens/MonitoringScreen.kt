@@ -2,6 +2,11 @@ package com.netvision.app.ui.screens
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.animation.animateColor
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -446,6 +451,10 @@ fun DeviceMonitoringCard(
     onViewDetails: () -> Unit
 ) {
     val context = LocalContext.current
+    val settingsRepository = remember(context) { com.netvision.app.settings.SettingsRepository(context) }
+    val appSettings by settingsRepository.settings.collectAsState()
+    val alertLimit = appSettings.connectedDevicesAlertLimit
+    val blinkEnabled = appSettings.connectedDevicesAlertBlinkEnabled
 
     val isOnline = device.status == DeviceStatus.ONLINE
     val statusColor = if (isOnline) StatusGreen else StatusRed
@@ -680,14 +689,43 @@ fun DeviceMonitoringCard(
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             rowValues.forEach { (label, value, colorIndex) ->
                                 val colors = metricPalette[colorIndex]
+                                val connectedCount = value.toIntOrNull()
+                                val isDeviceAlert = label == (if (isArabic) "الأجهزة" else "Clients") &&
+                                    connectedCount != null && connectedCount >= alertLimit
+                                val alertRedBackground = if (isDark) Color(0xFF572B32) else Color(0xFFFFE1E3)
+                                val alertRedForeground = if (isDark) Color(0xFFFF858E) else Color(0xFFB42332)
+                                val transition = rememberInfiniteTransition(label = "device-count-alert")
+                                val animatedAlertBackground by transition.animateColor(
+                                    initialValue = alertRedBackground,
+                                    targetValue = colors.first,
+                                    animationSpec = infiniteRepeatable(tween(850), RepeatMode.Reverse),
+                                    label = "device-count-alert-background"
+                                )
+                                val animatedAlertForeground by transition.animateColor(
+                                    initialValue = alertRedForeground,
+                                    targetValue = colors.second,
+                                    animationSpec = infiniteRepeatable(tween(850), RepeatMode.Reverse),
+                                    label = "device-count-alert-foreground"
+                                )
+                                val tileBackground = when {
+                                    !isDeviceAlert -> colors.first
+                                    blinkEnabled -> animatedAlertBackground
+                                    else -> alertRedBackground
+                                }
+                                val tileForeground = when {
+                                    !isDeviceAlert -> colors.second
+                                    blinkEnabled -> animatedAlertForeground
+                                    else -> alertRedForeground
+                                }
                                 Column(
                                     modifier = Modifier.weight(1f)
-                                        .background(colors.first, RoundedCornerShape(9.dp))
+                                        .then(if (isDeviceAlert) Modifier.border(1.5.dp, alertRedForeground, RoundedCornerShape(9.dp)) else Modifier)
+                                        .background(tileBackground, RoundedCornerShape(9.dp))
                                         .padding(horizontal = 7.dp, vertical = 7.dp),
                                     verticalArrangement = Arrangement.spacedBy(3.dp)
                                 ) {
-                                    Text(label, fontSize = 9.sp, color = colors.second, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                                    Text(value, fontSize = 14.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = colors.second, maxLines = 1)
+                                    Text(label, fontSize = 9.sp, color = tileForeground, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                                    Text(value, fontSize = 14.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = tileForeground, maxLines = 1)
                                 }
                             }
                             if (rowValues.size < 3) repeat(3 - rowValues.size) { Spacer(Modifier.weight(1f)) }
