@@ -65,6 +65,8 @@ class SettingsRepository(context: Context) {
             putInt("snmp_port", newSettings.snmpPort)
             putInt("mikrotik_api_port", newSettings.defaultMikroTikApiPort)
             putInt("refresh_interval_sec", newSettings.monitoringRefreshIntervalSec)
+            putInt("connected_devices_alert_limit", newSettings.connectedDevicesAlertLimit.coerceIn(1, 9999))
+            putBoolean("connected_devices_alert_blink", newSettings.connectedDevicesAlertBlinkEnabled)
             apply()
         }
         _settings.value = newSettings
@@ -89,7 +91,9 @@ class SettingsRepository(context: Context) {
             snmpVersion = prefs.getString("snmp_version", "v2c") ?: "v2c",
             snmpPort = prefs.getInt("snmp_port", 161),
             defaultMikroTikApiPort = prefs.getInt("mikrotik_api_port", 8728).coerceIn(1, 65535),
-            monitoringRefreshIntervalSec = prefs.getInt("refresh_interval_sec", 5)
+            monitoringRefreshIntervalSec = prefs.getInt("refresh_interval_sec", 5),
+            connectedDevicesAlertLimit = prefs.getInt("connected_devices_alert_limit", 12).coerceIn(1, 9999),
+            connectedDevicesAlertBlinkEnabled = prefs.getBoolean("connected_devices_alert_blink", true)
         )
     }
 }
