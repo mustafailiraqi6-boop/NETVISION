@@ -349,6 +349,39 @@ fun SettingsScreen(
             }
         }
 
+        // Connected device count alert preferences
+        item {
+            SettingsGroupCard(
+                title = if (isArabic) "تنبيه عدد الأجهزة المتصلة" else "Connected Devices Alert",
+                icon = Icons.Default.NotificationsActive
+            ) {
+                OutlinedTextField(
+                    value = appSettings.connectedDevicesAlertLimit.toString(),
+                    onValueChange = { raw ->
+                        val limit = raw.toIntOrNull()
+                        if (limit != null && limit in 1..9999) {
+                            viewModel.updateSettings(appSettings.copy(connectedDevicesAlertLimit = limit))
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text(if (isArabic) "حد عدد الأجهزة" else "Connected devices limit") },
+                    supportingText = {
+                        Text(if (isArabic) "يظهر التنبيه عند بلوغ هذا العدد أو تجاوزه." else "Alert appears when this count is reached or exceeded.")
+                    },
+                    singleLine = true,
+                    shape = RoundedCornerShape(10.dp)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                ProtocolToggleRow(
+                    label = if (isArabic) "تفعيل وميض التنبيه الأحمر" else "Enable red alert blinking",
+                    checked = appSettings.connectedDevicesAlertBlinkEnabled,
+                    onCheckedChange = { enabled ->
+                        viewModel.updateSettings(appSettings.copy(connectedDevicesAlertBlinkEnabled = enabled))
+                    }
+                )
+            }
+        }
+
         // Section 2: Localization & Display
         item {
             SettingsGroupCard(
