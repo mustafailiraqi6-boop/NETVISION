@@ -25,5 +25,7 @@ data class AppSettings(
     val snmpVersion: String = "v2c",
     val snmpPort: Int = 161,
     val defaultMikroTikApiPort: Int = 8728,
-    val monitoringRefreshIntervalSec: Int = 5
+    val monitoringRefreshIntervalSec: Int = 5,
+    val connectedDevicesAlertLimit: Int = 12,
+    val connectedDevicesAlertBlinkEnabled: Boolean = true
 )
