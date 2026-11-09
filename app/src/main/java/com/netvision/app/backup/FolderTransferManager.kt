@@ -28,7 +28,7 @@ import javax.crypto.spec.SecretKeySpec
  */
 object FolderTransferManager {
     data class FolderSummary(val id: String, val name: String, val deviceCount: Int)
-    data class ImportSummary(val folders: List<String>, val deviceCount: Int)
+    data class ImportSummary(val folders: List<String>, val deviceCount: Int, val duplicateIpCount: Int = 0)
 
     private const val FORMAT_VERSION = 1
     private const val ITERATIONS = 210_000
@@ -120,11 +120,16 @@ object FolderTransferManager {
         val payload = readPayload(source, password)
         val folders = payload.getJSONArray("folders")
         val devices = payload.getJSONArray("devices")
-        return ImportSummary((0 until folders.length()).map { folders.getJSONObject(it).optString("name") }, devices.length())
+        val db = AppDatabase.getDatabase(context).openHelper.readableDatabase
+        val duplicates = (0 until devices.length()).count { index ->
+            val ip = devices.getJSONObject(index).optString("ipAddress").trim()
+            ip.isNotBlank() && deviceIpExists(db, ip)
+        }
+        return ImportSummary((0 until folders.length()).map { folders.getJSONObject(it).optString("name") }, devices.length(), duplicates)
     }
 
     /** conflictMode: "replace" or "rename". Existing devices with the same IP are skipped. */
-    fun import(context: Context, source: File, password: CharArray, conflictMode: String): ImportSummary {
+    fun import(context: Context, source: File, password: CharArray, conflictMode: String, allowDuplicateIps: Boolean = false): ImportSummary {
         require(conflictMode == "replace" || conflictMode == "rename")
         val payload = readPayload(source, password)
         val folders = payload.getJSONArray("folders")
@@ -161,7 +166,7 @@ object FolderTransferManager {
                     val item = devices.getJSONObject(j)
                     if (item.optString("folderId") != sourceId) continue
                     val ip = item.optString("ipAddress").trim()
-                    if (ip.isBlank() || deviceIpExists(db, ip)) continue
+                    if (ip.isBlank() || (!allowDuplicateIps && deviceIpExists(db, ip))) continue
                     val oldId = item.optString("id")
                     val newDeviceId = "dev-${UUID.randomUUID()}"
                     val values = ContentValues()
