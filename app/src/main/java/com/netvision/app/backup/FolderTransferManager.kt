@@ -1,6 +1,7 @@
 package com.netvision.app.backup
 
 import android.content.Context
+import androidx.sqlite.db.SupportSQLiteDatabase
 import android.database.sqlite.SQLiteDatabase
 import android.content.ContentValues
 import com.netvision.app.database.AppDatabase
@@ -153,7 +154,7 @@ object FolderTransferManager {
                 val folderValues = ContentValues().apply {
                     put("id", newFolderId); put("name", targetName); put("createdAt", System.currentTimeMillis())
                 }
-                db.insertOrThrow("device_folders", null, folderValues)
+                db.insert("device_folders", SQLiteDatabase.CONFLICT_ABORT, folderValues)
                 importedNames += targetName
 
                 for (j in 0 until devices.length()) {
@@ -176,7 +177,7 @@ object FolderTransferManager {
                     }
                     values.put("id", newDeviceId)
                     values.put("folderId", newFolderId)
-                    db.insertOrThrow("devices", null, values)
+                    db.insert("devices", SQLiteDatabase.CONFLICT_ABORT, values)
                     importedDeviceCount++
 
                     val community = item.optString("snmpDeviceCommunity", "")
@@ -193,10 +194,10 @@ object FolderTransferManager {
         return ImportSummary(importedNames, importedDeviceCount)
     }
 
-    private fun findFolderIdByName(db: android.database.sqlite.SQLiteDatabase, name: String): String? =
+    private fun findFolderIdByName(db: SupportSQLiteDatabase, name: String): String? =
         db.query("device_folders", arrayOf("id"), "name = ? COLLATE NOCASE", arrayOf(name), null, null, null).use { if (it.moveToFirst()) it.getString(0) else null }
 
-    private fun deviceIpExists(db: android.database.sqlite.SQLiteDatabase, ip: String): Boolean =
+    private fun deviceIpExists(db: SupportSQLiteDatabase, ip: String): Boolean =
         db.query("devices", arrayOf("id"), "ipAddress = ?", arrayOf(ip), null, null, "1").use { it.moveToFirst() }
 
     private fun readPayload(source: File, password: CharArray): JSONObject {
