@@ -61,6 +61,7 @@ fun SettingsScreen(
     var importPassword by remember { mutableStateOf("") }
     var importSummary by remember { mutableStateOf<FolderTransferManager.ImportSummary?>(null) }
     var importConflictMode by remember { mutableStateOf("rename") }
+    var allowDuplicateImport by remember { mutableStateOf(false) }
     var importError by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(backupFolder) {
         backupItems = backupFolder?.let { BackupManager.listBackups(context, it) }.orEmpty()
@@ -207,6 +208,21 @@ fun SettingsScreen(
                     } else {
                         Text(if (isArabic) "الأبراج: ${importSummary!!.folders.joinToString("، ")}" else "Towers: ${importSummary!!.folders.joinToString(", ")}")
                         Text(if (isArabic) "عدد الأجهزة: ${importSummary!!.deviceCount}" else "Devices: ${importSummary!!.deviceCount}")
+                        if (importSummary!!.duplicateIpCount > 0) {
+                            Text(
+                                if (isArabic) "تنبيه: يوجد ${importSummary!!.duplicateIpCount} جهاز بعنوان IP موجود مسبقاً."
+                                else "Warning: ${importSummary!!.duplicateIpCount} device(s) have an IP already in this app.",
+                                color = MaterialTheme.colorScheme.error
+                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                RadioButton(selected = !allowDuplicateImport, onClick = { allowDuplicateImport = false })
+                                Text(if (isArabic) "تجاهل الأجهزة المكررة" else "Skip duplicate devices")
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                RadioButton(selected = allowDuplicateImport, onClick = { allowDuplicateImport = true })
+                                Text(if (isArabic) "استيرادها رغم تكرار IP" else "Import despite duplicate IP")
+                            }
+                        }
                         Text(if (isArabic) "إذا وجد برج بالاسم نفسه:" else "If a tower with the same name exists:")
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             RadioButton(selected = importConflictMode == "rename", onClick = { importConflictMode = "rename" })
@@ -227,7 +243,7 @@ fun SettingsScreen(
                     scope.launch {
                         runCatching {
                             val temp = File(context.cacheDir, "netvision_tower_import.zip")
-                            FolderTransferManager.import(context, temp, importPassword.toCharArray(), importConflictMode)
+                            FolderTransferManager.import(context, temp, importPassword.toCharArray(), importConflictMode, allowDuplicateImport)
                         }.onSuccess { result ->
                             pendingImportUri = null; importSummary = null
                             Toast.makeText(context, (if (isArabic) "تم استيراد ${result.folders.size} برج و ${result.deviceCount} جهاز" else "Imported ${result.folders.size} towers and ${result.deviceCount} devices"), Toast.LENGTH_LONG).show()
