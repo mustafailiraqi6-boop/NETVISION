@@ -3,6 +3,8 @@ package com.netvision.app.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -146,7 +148,13 @@ fun SettingsScreen(
             onDismissRequest = { if (!transferBusy) showExportDialog = false },
             title = { Text(if (isArabic) "تصدير الأبراج" else "Export towers") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 480.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     Text(if (isArabic) "اختر الأبراج المطلوب تصديرها:" else "Select towers to export:")
                     if (transferFolders.isEmpty()) Text(if (isArabic) "لا توجد أبراج مضافة." else "No towers available.")
                     transferFolders.forEach { folder ->
