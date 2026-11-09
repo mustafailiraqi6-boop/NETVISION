@@ -76,7 +76,7 @@ object FolderTransferManager {
                         item.put("snmpDeviceCommunity", settings.getString("snmp_device_community_$ip", null) ?: JSONObject.NULL)
                     }
                     if (includeApi && item.optString("manufacturer") == "MIKROTIK") {
-                        val credentials = credentialStore.get(item.optString("id"))
+                        val credentials = credentialStore.get(item.optString("id")) ?: credentialStore.getDefault()
                         if (credentials != null) {
                             item.put("apiUsername", credentials.username)
                             item.put("apiPassword", credentials.password)
