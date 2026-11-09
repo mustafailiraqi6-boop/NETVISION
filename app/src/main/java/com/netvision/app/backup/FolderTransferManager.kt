@@ -200,10 +200,10 @@ object FolderTransferManager {
     }
 
     private fun findFolderIdByName(db: SupportSQLiteDatabase, name: String): String? =
-        db.query("device_folders", arrayOf("id"), "name = ? COLLATE NOCASE", arrayOf(name), null, null, null).use { if (it.moveToFirst()) it.getString(0) else null }
+        db.query("SELECT id FROM device_folders WHERE name = ? COLLATE NOCASE LIMIT 1", arrayOf<Any?>(name)).use { if (it.moveToFirst()) it.getString(0) else null }
 
     private fun deviceIpExists(db: SupportSQLiteDatabase, ip: String): Boolean =
-        db.query("devices", arrayOf("id"), "ipAddress = ?", arrayOf(ip), null, null, "1").use { it.moveToFirst() }
+        db.query("SELECT id FROM devices WHERE ipAddress = ? LIMIT 1", arrayOf<Any?>(ip)).use { it.moveToFirst() }
 
     private fun readPayload(source: File, password: CharArray): JSONObject {
         require(password.isNotEmpty()) { "أدخل كلمة مرور الملف" }
