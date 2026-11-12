@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -901,6 +902,7 @@ fun SavedDeviceCardItem(
     onEditClick: () -> Unit,
     onDeleteClick: () -> Unit
 ) {
+    val uriHandler = LocalUriHandler.current
     val statusColor = when (device.status) {
         DeviceStatus.ONLINE -> StatusGreen
         DeviceStatus.OFFLINE -> StatusRed
@@ -1023,7 +1025,15 @@ fun SavedDeviceCardItem(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column {
-                    Text(text = "IP: ${device.ipAddress}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
+                    Text(
+                        text = "IP: ${device.ipAddress}",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.clickable {
+                            val address = device.ipAddress.trim()
+                            if (address.isNotBlank()) uriHandler.openUri("http://$address")
+                        }
+                    )
                     Text(text = "MAC: ${device.macAddress}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
 
