@@ -9,6 +9,7 @@ import com.netvision.app.models.DeviceStatus
 import com.netvision.app.models.NetworkDevice
 import com.netvision.app.models.DeviceType
 import com.netvision.app.monitoring.SnmpDeviceInfo
+import com.netvision.app.monitoring.MimosaTrafficSnapshot
 import com.netvision.app.monitoring.SnmpDiagnosticRecord
 import com.netvision.app.monitoring.SnmpV2Client
 import com.netvision.app.monitoring.EthernetPortMonitor
@@ -55,7 +56,8 @@ data class MonitoringUiState(
     val snmpStatusByDevice: Map<String, SnmpDeviceInfo> = emptyMap(),
     val diagnosticLogs: List<SnmpDiagnosticRecord> = emptyList(),
     val ethernetPortsByDevice: Map<String, EthernetMonitoringSnapshot> = emptyMap(),
-    val wirelessTrafficByDevice: Map<String, WirelessTrafficSnapshot> = emptyMap()
+    val wirelessTrafficByDevice: Map<String, WirelessTrafficSnapshot> = emptyMap(),
+    val mimosaTrafficByDevice: Map<String, MimosaTrafficSnapshot> = emptyMap()
 )
 
 class MonitoringViewModel(
@@ -97,6 +99,7 @@ class MonitoringViewModel(
     private var groupRefreshJob: Job? = null
     private var centralPingJob: Job? = null
     private var wirelessTrafficJob: Job? = null
+    private var mimosaTrafficJob: Job? = null
     private val pollSemaphore = Semaphore(10)
     private val snmpMapMutex = Mutex()
     private val previousPortCounters = mutableMapOf<String, Pair<Long, Long>>()
@@ -107,6 +110,7 @@ class MonitoringViewModel(
     init {
         startCentralPingMonitoring()
         startWirelessTrafficMonitoring()
+        startMimosaTrafficMonitoring()
     }
 
     fun selectDevice(deviceId: String) {
@@ -240,6 +244,55 @@ class MonitoringViewModel(
             }
         }
     }
+    /** Poll live Mimosa wireless traffic for devices in the currently selected tower. */
+    private fun startMimosaTrafficMonitoring() {
+        if (mimosaTrafficJob?.isActive == true) return
+        mimosaTrafficJob = viewModelScope.launch {
+            while (isActive) {
+                val folderId = _uiState.value.selectedFolderId
+                if (folderId != null) {
+                    val devices = savedDevices.value.filter { device ->
+                        device.manufacturer == Manufacturer.MIMOSA &&
+                            device.deviceType in setOf(DeviceType.LINK, DeviceType.SECTOR_AP, DeviceType.ACCESS_POINT) &&
+                            (if (folderId == DeviceFolderEntity.DEFAULT_FOLDER_ID) {
+                                device.folderId.isBlank() || device.folderId == folderId
+                            } else {
+                                device.folderId == folderId
+                            })
+                    }
+                    val settings = settingsRepository.getSettings()
+                    coroutineScope {
+                        devices.map { device ->
+                            async(Dispatchers.IO) {
+                                var traffic: MimosaTrafficSnapshot? = null
+                                val communities = settingsRepository.getCommunitiesForDevice(device.ipAddress)
+                                for (community in communities) {
+                                    val result = SnmpV2Client.queryMimosaTraffic(
+                                        ip = device.ipAddress,
+                                        community = community,
+                                        port = settings.snmpPort,
+                                        version = device.snmpVersion ?: settings.snmpVersion,
+                                        timeoutMs = 900
+                                    )
+                                    if (result.isSuccess) {
+                                        traffic = result.getOrNull()
+                                        break
+                                    }
+                                }
+                                snmpMapMutex.withLock {
+                                    val updated = _uiState.value.mimosaTrafficByDevice.toMutableMap()
+                                    if (traffic != null) updated[device.id] = traffic!! else updated.remove(device.id)
+                                    _uiState.value = _uiState.value.copy(mimosaTrafficByDevice = updated)
+                                }
+                            }
+                        }.awaitAll()
+                    }
+                }
+                delay(2000L)
+            }
+        }
+    }
+
     private suspend fun pollAllDevices(folderId: String? = null) = withContext(Dispatchers.IO) {
         // Wait for Room to emit the saved devices instead of missing the first
         // polling cycle while StateFlow still contains its initial empty list.
@@ -496,5 +549,6 @@ class MonitoringViewModel(
         groupRefreshJob?.cancel()
         centralPingJob?.cancel()
         wirelessTrafficJob?.cancel()
+        mimosaTrafficJob?.cancel()
     }
 }
