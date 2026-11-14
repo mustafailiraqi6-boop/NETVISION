@@ -16,6 +16,8 @@ import com.netvision.app.monitoring.EthernetMonitoringSnapshot
 import com.netvision.app.monitoring.EthernetPortSnapshot
 import com.netvision.app.network.NetworkReachabilityService
 import com.netvision.app.network.RouterOsApiClient
+import com.netvision.app.network.WirelessTrafficSnapshot
+import com.netvision.app.models.Manufacturer
 import com.netvision.app.repository.DeviceRepository
 import com.netvision.app.settings.SettingsRepository
 import kotlinx.coroutines.Dispatchers
@@ -52,7 +54,8 @@ data class MonitoringUiState(
     val isNetworkUnavailable: Boolean = false,
     val snmpStatusByDevice: Map<String, SnmpDeviceInfo> = emptyMap(),
     val diagnosticLogs: List<SnmpDiagnosticRecord> = emptyList(),
-    val ethernetPortsByDevice: Map<String, EthernetMonitoringSnapshot> = emptyMap()
+    val ethernetPortsByDevice: Map<String, EthernetMonitoringSnapshot> = emptyMap(),
+    val wirelessTrafficByDevice: Map<String, WirelessTrafficSnapshot> = emptyMap()
 )
 
 class MonitoringViewModel(
@@ -93,6 +96,7 @@ class MonitoringViewModel(
     private var pollingJob: Job? = null
     private var groupRefreshJob: Job? = null
     private var centralPingJob: Job? = null
+    private var wirelessTrafficJob: Job? = null
     private val pollSemaphore = Semaphore(10)
     private val snmpMapMutex = Mutex()
     private val previousPortCounters = mutableMapOf<String, Pair<Long, Long>>()
@@ -102,6 +106,7 @@ class MonitoringViewModel(
 
     init {
         startCentralPingMonitoring()
+        startWirelessTrafficMonitoring()
     }
 
     fun selectDevice(deviceId: String) {
@@ -193,6 +198,45 @@ class MonitoringViewModel(
         }
     }
 
+    /** Poll only the selected tower's MikroTik wireless links/sectors for live WLAN traffic. */
+    private fun startWirelessTrafficMonitoring() {
+        if (wirelessTrafficJob?.isActive == true) return
+        wirelessTrafficJob = viewModelScope.launch {
+            while (isActive) {
+                val folderId = _uiState.value.selectedFolderId
+                if (folderId != null) {
+                    val devices = savedDevices.value.filter { device ->
+                        device.manufacturer == Manufacturer.MIKROTIK &&
+                            device.deviceType in setOf(DeviceType.LINK, DeviceType.SECTOR_AP, DeviceType.ACCESS_POINT) &&
+                            device.deviceType != DeviceType.SWITCH &&
+                            if (folderId == DeviceFolderEntity.DEFAULT_FOLDER_ID) device.folderId.isBlank() || device.folderId == folderId else device.folderId == folderId
+                    }
+                    val settings = settingsRepository.getSettings()
+                    coroutineScope {
+                        devices.map { device ->
+                            async(Dispatchers.IO) {
+                                val credentials = deviceCredentialStore.get(device.id) ?: deviceCredentialStore.getDefault()
+                                val snapshot = credentials?.let {
+                                    routerOsApiClient.readWirelessTraffic(
+                                        ipAddress = device.ipAddress,
+                                        username = it.username,
+                                        password = it.password,
+                                        port = device.apiPort ?: settings.defaultMikroTikApiPort
+                                    ).getOrNull()
+                                }
+                                snmpMapMutex.withLock {
+                                    val updated = _uiState.value.wirelessTrafficByDevice.toMutableMap()
+                                    if (snapshot != null) updated[device.id] = snapshot else updated.remove(device.id)
+                                    _uiState.value = _uiState.value.copy(wirelessTrafficByDevice = updated)
+                                }
+                            }
+                        }.awaitAll()
+                    }
+                }
+                delay(2000L)
+            }
+        }
+    }
     private suspend fun pollAllDevices(folderId: String? = null) = withContext(Dispatchers.IO) {
         // Wait for Room to emit the saved devices instead of missing the first
         // polling cycle while StateFlow still contains its initial empty list.
@@ -448,5 +492,6 @@ class MonitoringViewModel(
         pollingJob?.cancel()
         groupRefreshJob?.cancel()
         centralPingJob?.cancel()
+        wirelessTrafficJob?.cancel()
     }
 }
