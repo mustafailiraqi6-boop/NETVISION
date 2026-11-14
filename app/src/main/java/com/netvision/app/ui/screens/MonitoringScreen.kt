@@ -2,6 +2,11 @@ package com.netvision.app.ui.screens
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.animation.animateColor
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -35,6 +40,8 @@ import com.netvision.app.models.Manufacturer
 import com.netvision.app.models.NetworkDevice
 import com.netvision.app.monitoring.EthernetMonitoringSnapshot
 import com.netvision.app.monitoring.EthernetPortSnapshot
+import com.netvision.app.monitoring.MimosaTrafficSnapshot
+import com.netvision.app.network.WirelessTrafficSnapshot
 import com.netvision.app.ui.theme.*
 import com.netvision.app.ui.viewmodels.MonitoringViewModel
 import java.text.SimpleDateFormat
@@ -424,6 +431,8 @@ fun MonitoringScreen(
                     isSnmpActive = isSnmpActive,
                     snmpInfo = devSnmp,
                     ethernetSnapshot = uiState.ethernetPortsByDevice[device.id],
+                    wirelessTraffic = uiState.wirelessTrafficByDevice[device.id],
+                    mimosaTraffic = uiState.mimosaTrafficByDevice[device.id],
                     isArabic = isArabic,
                     onClick = { viewModel.selectDevice(device.id) },
                     onViewDetails = { if (device.deviceType == DeviceType.SWITCH || device.name.contains("switch", true) || device.model.contains("CRS", true) || device.model.contains("switch", true)) selectedSwitchId = device.id else onViewDeviceDetails(device.id) }
@@ -441,11 +450,17 @@ fun DeviceMonitoringCard(
     isSnmpActive: Boolean,
     snmpInfo: com.netvision.app.monitoring.SnmpDeviceInfo?,
     ethernetSnapshot: EthernetMonitoringSnapshot?,
+    wirelessTraffic: WirelessTrafficSnapshot?,
+    mimosaTraffic: MimosaTrafficSnapshot?,
     isArabic: Boolean,
     onClick: () -> Unit,
     onViewDetails: () -> Unit
 ) {
     val context = LocalContext.current
+    val settingsRepository = remember(context) { com.netvision.app.settings.SettingsRepository(context) }
+    val appSettings by settingsRepository.settings.collectAsState()
+    val alertLimit = appSettings.connectedDevicesAlertLimit
+    val blinkEnabled = appSettings.connectedDevicesAlertBlinkEnabled
 
     val isOnline = device.status == DeviceStatus.ONLINE
     val statusColor = if (isOnline) StatusGreen else StatusRed
@@ -461,6 +476,8 @@ fun DeviceMonitoringCard(
         snmpInfo?.model?.contains("Ubiquiti", ignoreCase = true) == true ||
         snmpInfo?.sysDescr?.let { it.contains("AirOS", true) || it.contains("UBNT", true) } == true
     val isSwitchCard = device.deviceType == DeviceType.SWITCH || device.name.contains("switch", true) || device.model.contains("CRS", true) || device.model.contains("switch", true)
+    val isMikroTikWirelessDevice = !isSwitchCard && device.manufacturer == Manufacturer.MIKROTIK &&
+        device.deviceType in setOf(DeviceType.LINK, DeviceType.SECTOR_AP, DeviceType.ACCESS_POINT)
     val isMikroTikSector = !isSwitchCard && (device.manufacturer == Manufacturer.MIKROTIK ||
         snmpInfo?.mikrotikCcqPercent != null ||
         snmpInfo?.mikrotikVoltageDecivolts != null)
@@ -680,14 +697,43 @@ fun DeviceMonitoringCard(
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             rowValues.forEach { (label, value, colorIndex) ->
                                 val colors = metricPalette[colorIndex]
+                                val connectedCount = value.toIntOrNull()
+                                val isDeviceAlert = label == (if (isArabic) "الأجهزة" else "Clients") &&
+                                    connectedCount != null && connectedCount >= alertLimit
+                                val alertRedBackground = if (isDark) Color(0xFF572B32) else Color(0xFFFFE1E3)
+                                val alertRedForeground = if (isDark) Color(0xFFFF858E) else Color(0xFFB42332)
+                                val transition = rememberInfiniteTransition(label = "device-count-alert")
+                                val animatedAlertBackground by transition.animateColor(
+                                    initialValue = alertRedBackground,
+                                    targetValue = colors.first,
+                                    animationSpec = infiniteRepeatable(tween(850), RepeatMode.Reverse),
+                                    label = "device-count-alert-background"
+                                )
+                                val animatedAlertForeground by transition.animateColor(
+                                    initialValue = alertRedForeground,
+                                    targetValue = colors.second,
+                                    animationSpec = infiniteRepeatable(tween(850), RepeatMode.Reverse),
+                                    label = "device-count-alert-foreground"
+                                )
+                                val tileBackground = when {
+                                    !isDeviceAlert -> colors.first
+                                    blinkEnabled -> animatedAlertBackground
+                                    else -> alertRedBackground
+                                }
+                                val tileForeground = when {
+                                    !isDeviceAlert -> colors.second
+                                    blinkEnabled -> animatedAlertForeground
+                                    else -> alertRedForeground
+                                }
                                 Column(
                                     modifier = Modifier.weight(1f)
-                                        .background(colors.first, RoundedCornerShape(9.dp))
+                                        .then(if (isDeviceAlert) Modifier.border(1.5.dp, alertRedForeground, RoundedCornerShape(9.dp)) else Modifier)
+                                        .background(tileBackground, RoundedCornerShape(9.dp))
                                         .padding(horizontal = 7.dp, vertical = 7.dp),
                                     verticalArrangement = Arrangement.spacedBy(3.dp)
                                 ) {
-                                    Text(label, fontSize = 9.sp, color = colors.second, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                                    Text(value, fontSize = 14.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = colors.second, maxLines = 1)
+                                    Text(label, fontSize = 9.sp, color = tileForeground, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                                    Text(value, fontSize = 14.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = tileForeground, maxLines = 1)
                                 }
                             }
                             if (rowValues.size < 3) repeat(3 - rowValues.size) { Spacer(Modifier.weight(1f)) }
@@ -702,6 +748,50 @@ fun DeviceMonitoringCard(
                     ) {
                         Text(if (isArabic) "مدة تشغيل السكتر" else "Sector uptime", color = durationForeground, fontSize = 11.sp)
                         Text(snmpInfo.uptimeFormatted ?: "—", color = durationForeground, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, fontSize = 11.sp)
+                    }
+                }
+            }
+
+            if (isMikroTikWirelessDevice) {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.55f))
+                Text(
+                    if (isArabic) "الترافيك – ${wirelessTraffic?.interfaceName ?: "WLAN"}" else "Traffic – ${wirelessTraffic?.interfaceName ?: "WLAN"}",
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 14.sp,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
+                )
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    val txColors = metricPalette[1]
+                    val rxColors = metricPalette[3]
+                    Column(Modifier.weight(1f).background(txColors.first, RoundedCornerShape(10.dp)).padding(horizontal = 11.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                        Text(if (isArabic) "TX إرسال" else "TX Upload", fontSize = 11.sp, color = txColors.second)
+                        Text(wirelessTraffic?.txMbps?.let { String.format(Locale.US, "%.2f Mbps", it) } ?: "—", fontSize = 17.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = txColors.second, maxLines = 1)
+                    }
+                    Column(Modifier.weight(1f).background(rxColors.first, RoundedCornerShape(10.dp)).padding(horizontal = 11.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                        Text(if (isArabic) "RX استقبال" else "RX Download", fontSize = 11.sp, color = rxColors.second)
+                        Text(wirelessTraffic?.rxMbps?.let { String.format(Locale.US, "%.2f Mbps", it) } ?: "—", fontSize = 17.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = rxColors.second, maxLines = 1)
+                    }
+                }
+            }
+
+            if (isMimosaSector) {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.55f))
+                Text(
+                    if (isArabic) "الترافيك – Wireless" else "Traffic – Wireless",
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 14.sp,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
+                )
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    val txColors = metricPalette[1]
+                    val rxColors = metricPalette[3]
+                    Column(Modifier.weight(1f).background(txColors.first, RoundedCornerShape(10.dp)).padding(horizontal = 11.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                        Text(if (isArabic) "TX إرسال" else "TX Upload", fontSize = 11.sp, color = txColors.second)
+                        Text(mimosaTraffic?.txMbps?.let { String.format(Locale.US, "%.2f Mbps", it) } ?: "—", fontSize = 17.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = txColors.second, maxLines = 1)
+                    }
+                    Column(Modifier.weight(1f).background(rxColors.first, RoundedCornerShape(10.dp)).padding(horizontal = 11.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                        Text(if (isArabic) "RX استقبال" else "RX Download", fontSize = 11.sp, color = rxColors.second)
+                        Text(mimosaTraffic?.rxMbps?.let { String.format(Locale.US, "%.2f Mbps", it) } ?: "—", fontSize = 17.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = rxColors.second, maxLines = 1)
                     }
                 }
             }

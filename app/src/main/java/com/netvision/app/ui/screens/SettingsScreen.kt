@@ -3,6 +3,8 @@ package com.netvision.app.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -15,6 +17,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.platform.LocalContext
 import android.widget.Toast
 import com.netvision.app.backup.BackupManager
+import com.netvision.app.backup.FolderTransferManager
+import java.io.File
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,6 +52,19 @@ fun SettingsScreen(
     var backupItems by remember { mutableStateOf<List<BackupManager.BackupInfo>>(emptyList()) }
     var restoreInProgress by remember { mutableStateOf(false) }
     var pendingRestoreUri by remember { mutableStateOf<android.net.Uri?>(null) }
+    var transferFolders by remember { mutableStateOf<List<FolderTransferManager.FolderSummary>>(emptyList()) }
+    val selectedTransferFolders = remember { mutableStateListOf<String>() }
+    var showExportDialog by remember { mutableStateOf(false) }
+    var includeTransferSnmp by remember { mutableStateOf(true) }
+    var includeTransferApi by remember { mutableStateOf(false) }
+    var transferPassword by remember { mutableStateOf("") }
+    var transferBusy by remember { mutableStateOf(false) }
+    var pendingImportUri by remember { mutableStateOf<android.net.Uri?>(null) }
+    var importPassword by remember { mutableStateOf("") }
+    var importSummary by remember { mutableStateOf<FolderTransferManager.ImportSummary?>(null) }
+    var importConflictMode by remember { mutableStateOf("rename") }
+    var allowDuplicateImport by remember { mutableStateOf(false) }
+    var importError by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(backupFolder) {
         backupItems = backupFolder?.let { BackupManager.listBackups(context, it) }.orEmpty()
     }
@@ -56,6 +73,35 @@ fun SettingsScreen(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri ->
         if (uri != null) pendingRestoreUri = uri
+    }
+
+    val transferImportPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri -> if (uri != null) { pendingImportUri = uri; importPassword = ""; importSummary = null; importError = null } }
+
+    val transferExportPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/zip")
+    ) { uri ->
+        if (uri != null) {
+            val ids = selectedTransferFolders.toList()
+            val password = transferPassword.toCharArray()
+            transferBusy = true
+            scope.launch {
+                runCatching {
+                    val temp = File(context.cacheDir, "netvision_tower_export.zip")
+                    FolderTransferManager.export(context, ids, includeTransferSnmp, includeTransferApi, password, temp)
+                    context.contentResolver.openOutputStream(uri, "w")?.use { output -> temp.inputStream().use { it.copyTo(output) } }
+                        ?: error("تعذر حفظ ملف التصدير")
+                    temp.delete()
+                }.onSuccess {
+                    showExportDialog = false
+                    Toast.makeText(context, if (isArabic) "تم تصدير الأبراج بنجاح" else "Towers exported successfully", Toast.LENGTH_LONG).show()
+                }.onFailure { error ->
+                    Toast.makeText(context, (if (isArabic) "فشل التصدير: " else "Export failed: ") + (error.message ?: ""), Toast.LENGTH_LONG).show()
+                }
+                transferBusy = false
+            }
+        }
     }
     val folderPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
@@ -95,6 +141,127 @@ fun SettingsScreen(
                 Toast.makeText(context, (if (isArabic) "فشل النسخ الاحتياطي: " else "Backup failed: ") + (error.message ?: ""), Toast.LENGTH_LONG).show()
             }
         }
+    }
+
+    if (showExportDialog) {
+        AlertDialog(
+            onDismissRequest = { if (!transferBusy) showExportDialog = false },
+            title = { Text(if (isArabic) "تصدير الأبراج" else "Export towers") },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 480.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(if (isArabic) "اختر الأبراج المطلوب تصديرها:" else "Select towers to export:")
+                    if (transferFolders.isEmpty()) Text(if (isArabic) "لا توجد أبراج مضافة." else "No towers available.")
+                    transferFolders.forEach { folder ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(checked = folder.id in selectedTransferFolders, onCheckedChange = { checked ->
+                                if (checked) selectedTransferFolders.add(folder.id) else selectedTransferFolders.remove(folder.id)
+                            })
+                            Column(Modifier.weight(1f)) {
+                                Text(folder.name)
+                                Text("${folder.deviceCount} ${if (isArabic) "جهاز" else "devices"}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
+                    HorizontalDivider()
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = includeTransferSnmp, onCheckedChange = { includeTransferSnmp = it })
+                        Text(if (isArabic) "تضمين إعدادات SNMP" else "Include SNMP settings")
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = includeTransferApi, onCheckedChange = { includeTransferApi = it })
+                        Text(if (isArabic) "تضمين بيانات MikroTik API" else "Include MikroTik API credentials")
+                    }
+                    OutlinedTextField(value = transferPassword, onValueChange = { transferPassword = it }, modifier = Modifier.fillMaxWidth(),
+                        label = { Text(if (isArabic) "كلمة مرور الملف (8 أحرف على الأقل)" else "File password (8+ characters)") },
+                        singleLine = true, visualTransformation = PasswordVisualTransformation())
+                    Text(if (isArabic) "كلمة المرور تحمي بيانات الدخول داخل ملف التصدير." else "The password protects credentials inside the export file.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            },
+            confirmButton = {
+                TextButton(enabled = !transferBusy && selectedTransferFolders.isNotEmpty() && transferPassword.length >= 8, onClick = { transferExportPicker.launch("NETVISION_Towers.zip") }) {
+                    Text(if (isArabic) "حفظ ملف التصدير" else "Save export")
+                }
+            },
+            dismissButton = { TextButton(onClick = { showExportDialog = false }) { Text(if (isArabic) "إلغاء" else "Cancel") } }
+        )
+    }
+
+    pendingImportUri?.let { uri ->
+        AlertDialog(
+            onDismissRequest = { if (!transferBusy) { pendingImportUri = null; importSummary = null } },
+            title = { Text(if (isArabic) "استيراد الأبراج" else "Import towers") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(value = importPassword, onValueChange = { importPassword = it; importSummary = null; importError = null },
+                        modifier = Modifier.fillMaxWidth(), label = { Text(if (isArabic) "كلمة مرور ملف التصدير" else "Export file password") },
+                        singleLine = true, visualTransformation = PasswordVisualTransformation())
+                    if (importSummary == null) {
+                        TextButton(enabled = importPassword.isNotEmpty() && !transferBusy, onClick = {
+                            transferBusy = true
+                            scope.launch {
+                                runCatching {
+                                    val temp = File(context.cacheDir, "netvision_tower_import.zip")
+                                    context.contentResolver.openInputStream(uri)?.use { input -> temp.outputStream().use { input.copyTo(it) } } ?: error("تعذر قراءة الملف")
+                                    FolderTransferManager.inspect(context, temp, importPassword.toCharArray())
+                                }.onSuccess { importSummary = it }.onFailure { importError = it.message ?: "Invalid file" }
+                                transferBusy = false
+                            }
+                        }) { Text(if (isArabic) "فحص الملف ومعاينة المحتويات" else "Check file and preview") }
+                    } else {
+                        Text(if (isArabic) "الأبراج: ${importSummary!!.folders.joinToString("، ")}" else "Towers: ${importSummary!!.folders.joinToString(", ")}")
+                        Text(if (isArabic) "عدد الأجهزة: ${importSummary!!.deviceCount}" else "Devices: ${importSummary!!.deviceCount}")
+                        if (importSummary!!.duplicateIpCount > 0) {
+                            Text(
+                                if (isArabic) "تنبيه: يوجد ${importSummary!!.duplicateIpCount} جهاز بعنوان IP موجود مسبقاً."
+                                else "Warning: ${importSummary!!.duplicateIpCount} device(s) have an IP already in this app.",
+                                color = MaterialTheme.colorScheme.error
+                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                RadioButton(selected = !allowDuplicateImport, onClick = { allowDuplicateImport = false })
+                                Text(if (isArabic) "تجاهل الأجهزة المكررة" else "Skip duplicate devices")
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                RadioButton(selected = allowDuplicateImport, onClick = { allowDuplicateImport = true })
+                                Text(if (isArabic) "استيرادها رغم تكرار IP" else "Import despite duplicate IP")
+                            }
+                        }
+                        Text(if (isArabic) "إذا وجد برج بالاسم نفسه:" else "If a tower with the same name exists:")
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(selected = importConflictMode == "rename", onClick = { importConflictMode = "rename" })
+                            Text(if (isArabic) "تغيير اسم البرج المستورد" else "Rename imported tower")
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(selected = importConflictMode == "replace", onClick = { importConflictMode = "replace" })
+                            Text(if (isArabic) "استبدال البرج الموجود" else "Replace existing tower")
+                        }
+                        Text(if (isArabic) "الأجهزة التي تحمل عنوان IP موجوداً مسبقاً سيتم تخطيها." else "Devices with an IP already present will be skipped.")
+                    }
+                    importError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                }
+            },
+            confirmButton = {
+                if (importSummary != null) TextButton(enabled = !transferBusy, onClick = {
+                    transferBusy = true
+                    scope.launch {
+                        runCatching {
+                            val temp = File(context.cacheDir, "netvision_tower_import.zip")
+                            FolderTransferManager.import(context, temp, importPassword.toCharArray(), importConflictMode, allowDuplicateImport)
+                        }.onSuccess { result ->
+                            pendingImportUri = null; importSummary = null
+                            Toast.makeText(context, (if (isArabic) "تم استيراد ${result.folders.size} برج و ${result.deviceCount} جهاز" else "Imported ${result.folders.size} towers and ${result.deviceCount} devices"), Toast.LENGTH_LONG).show()
+                        }.onFailure { error -> importError = error.message ?: "Import failed" }
+                        transferBusy = false
+                    }
+                }) { Text(if (isArabic) "تأكيد الاستيراد" else "Import") }
+            },
+            dismissButton = { TextButton(onClick = { pendingImportUri = null; importSummary = null }) { Text(if (isArabic) "إلغاء" else "Cancel") } }
+        )
     }
 
     pendingRestoreUri?.let { uri ->
@@ -154,6 +321,11 @@ fun SettingsScreen(
         }
     }
     var snmpPortInput by remember(appSettings.snmpPort) { mutableStateOf(appSettings.snmpPort.toString()) }
+    var mikrotikApiPortInput by remember(appSettings.defaultMikroTikApiPort) { mutableStateOf(appSettings.defaultMikroTikApiPort.toString()) }
+    val apiCredentialStore = remember(context) { com.netvision.app.security.DeviceCredentialStore(context) }
+    val savedDefaultApiCredentials = remember { apiCredentialStore.getDefault() }
+    var defaultApiUsername by remember { mutableStateOf(savedDefaultApiCredentials?.username.orEmpty()) }
+    var defaultApiPassword by remember { mutableStateOf("") }
     var defaultSubnet by remember(appSettings.defaultSubnet) { mutableStateOf(appSettings.defaultSubnet) }
     var scanTimeoutMs by remember(appSettings.scanTimeoutMs) { mutableStateOf(appSettings.scanTimeoutMs.toString()) }
 
@@ -272,6 +444,107 @@ fun SettingsScreen(
                     label = { Text(if (isArabic) "منفذ UDP لبروتوكول SNMP" else "SNMP UDP Port") },
                     singleLine = true,
                     shape = RoundedCornerShape(10.dp)
+                )
+            }
+        }
+
+        // MikroTik RouterOS API default port
+        item {
+            SettingsGroupCard(
+                title = if (isArabic) "إعدادات MikroTik API" else "MikroTik API Settings",
+                icon = Icons.Default.SettingsEthernet
+            ) {
+                Text(
+                    text = if (isArabic) "المنفذ الافتراضي لأجهزة MikroTik الجديدة. يمكن تخصيص منفذ مختلف لكل جهاز عند الإضافة أو التعديل." else "Default port for MikroTik devices. You can override it per device when adding or editing.",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                OutlinedTextField(
+                    value = mikrotikApiPortInput,
+                    onValueChange = { value ->
+                        mikrotikApiPortInput = value.filter { it.isDigit() }.take(5)
+                        mikrotikApiPortInput.toIntOrNull()?.takeIf { it in 1..65535 }?.let {
+                            viewModel.updateDefaultMikroTikApiPort(it.toString())
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text(if (isArabic) "منفذ API الافتراضي (TCP)" else "Default API Port (TCP)") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(10.dp)
+                )
+                Text(
+                    text = if (isArabic) "القيمة الحالية: ${appSettings.defaultMikroTikApiPort}" else "Current default: ${appSettings.defaultMikroTikApiPort}",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = defaultApiUsername,
+                    onValueChange = { defaultApiUsername = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text(if (isArabic) "اسم المستخدم الافتراضي لـ API" else "Default API Username") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(10.dp)
+                )
+                OutlinedTextField(
+                    value = defaultApiPassword,
+                    onValueChange = { defaultApiPassword = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text(if (isArabic) "كلمة المرور الافتراضية لـ API" else "Default API Password") },
+                    placeholder = { Text(if (savedDefaultApiCredentials != null) (if (isArabic) "محفوظة — اكتب للتغيير" else "Saved — enter to change") else "") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    shape = RoundedCornerShape(10.dp)
+                )
+                Text(
+                    text = if (isArabic) "تُستخدم هذه البيانات تلقائياً للأجهزة التي لا تملك بيانات دخول خاصة. كلمة المرور تُحفظ مشفرة." else "Used automatically when a device has no individual credentials. Password is stored encrypted.",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Button(
+                    onClick = {
+                        if (defaultApiUsername.isNotBlank() && defaultApiPassword.isNotBlank()) {
+                            apiCredentialStore.saveDefault(defaultApiUsername.trim(), defaultApiPassword)
+                            defaultApiPassword = ""
+                            Toast.makeText(context, if (isArabic) "تم حفظ بيانات API الافتراضية" else "Default API credentials saved", Toast.LENGTH_SHORT).show()
+                        } else {
+                            Toast.makeText(context, if (isArabic) "أدخل اسم المستخدم وكلمة المرور لحفظهما" else "Enter username and password to save", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text(if (isArabic) "حفظ بيانات المستخدم الافتراضي" else "Save Default API Credentials") }
+            }
+        }
+
+        // Connected device count alert preferences
+        item {
+            SettingsGroupCard(
+                title = if (isArabic) "تنبيه عدد الأجهزة المتصلة" else "Connected Devices Alert",
+                icon = Icons.Default.NotificationsActive
+            ) {
+                OutlinedTextField(
+                    value = appSettings.connectedDevicesAlertLimit.toString(),
+                    onValueChange = { raw ->
+                        val limit = raw.toIntOrNull()
+                        if (limit != null && limit in 1..9999) {
+                            viewModel.updateSettings(appSettings.copy(connectedDevicesAlertLimit = limit))
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text(if (isArabic) "حد عدد الأجهزة" else "Connected devices limit") },
+                    supportingText = {
+                        Text(if (isArabic) "يظهر التنبيه عند بلوغ هذا العدد أو تجاوزه." else "Alert appears when this count is reached or exceeded.")
+                    },
+                    singleLine = true,
+                    shape = RoundedCornerShape(10.dp)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                ProtocolToggleRow(
+                    label = if (isArabic) "تفعيل وميض التنبيه الأحمر" else "Enable red alert blinking",
+                    checked = appSettings.connectedDevicesAlertBlinkEnabled,
+                    onCheckedChange = { enabled ->
+                        viewModel.updateSettings(appSettings.copy(connectedDevicesAlertBlinkEnabled = enabled))
+                    }
                 )
             }
         }
@@ -417,6 +690,30 @@ fun SettingsScreen(
                         viewModel.updateSettings(appSettings.copy(enableSnmpPolling = it))
                     }
                 )
+            }
+        }
+
+        // Selective tower export/import, separate from the full backup workflow.
+        item {
+            SettingsGroupCard(title = if (isArabic) "إدارة الأبراج" else "Tower Management", icon = Icons.Default.FolderOpen) {
+                Text(
+                    if (isArabic) "تصدير أبراج محددة مع أجهزتها وإعداداتها، أو استيرادها إلى جهاز آخر دون استعادة النسخة الكاملة."
+                    else "Export selected towers with their devices and settings, or import them on another device without restoring a full backup.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(8.dp))
+                Button(onClick = {
+                    transferFolders = runCatching { FolderTransferManager.listFolders(context) }.getOrDefault(emptyList())
+                    selectedTransferFolders.clear()
+                    showExportDialog = true
+                }, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Default.Upload, contentDescription = null); Spacer(Modifier.width(8.dp))
+                    Text(if (isArabic) "تصدير الأبراج" else "Export towers")
+                }
+                OutlinedButton(onClick = { transferImportPicker.launch(arrayOf("application/zip", "application/octet-stream")) }, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Default.Download, contentDescription = null); Spacer(Modifier.width(8.dp))
+                    Text(if (isArabic) "استيراد الأبراج" else "Import towers")
+                }
             }
         }
 

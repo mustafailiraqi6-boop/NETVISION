@@ -21,9 +21,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.netvision.app.NetVisionApplication
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import com.netvision.app.database.DeviceFolderEntity
 import com.netvision.app.models.DeviceFolder
 import com.netvision.app.models.DeviceStatus
@@ -128,118 +131,161 @@ fun DevicesScreen(
             }
         }
 
-        // Section 1: Towers System (نظام الأبراج)
+        // Section 1: Tower selector - compact two-column cards
         item {
-            Card(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(12.dp)),
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(16.dp))
+                    .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(16.dp))
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.CellTower, contentDescription = null, tint = CyanAccent, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = if (isArabic) "نظام الأبراج والم مواقع" else "Towers & Location Network",
-                                style = MaterialTheme.typography.titleSmall,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Default.CellTower,
+                            contentDescription = null,
+                            tint = CyanAccent,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
                         Text(
-                            text = if (uiState.selectedFolderId == null) {
-                                if (isArabic) "جميع الأبراج" else "All Towers"
-                            } else {
-                                val current = uiState.folders.find { it.id == uiState.selectedFolderId }
-                                if (current?.id == DeviceFolderEntity.DEFAULT_FOLDER_ID) {
-                                    if (isArabic) "أجهزة غير تابعة لبرج" else "Unassigned Devices"
-                                } else {
-                                    current?.name ?: ""
-                                }
-                            },
-                            fontSize = 11.sp,
-                            color = CyanAccent
+                            text = if (isArabic) "الأبراج والمواقع" else "Towers & Locations",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                     }
+                    Text(
+                        text = if (isArabic) "${uiState.folders.count { it.id != DeviceFolderEntity.DEFAULT_FOLDER_ID }} برج"
+                        else "${uiState.folders.count { it.id != DeviceFolderEntity.DEFAULT_FOLDER_ID }} towers",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
 
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxWidth()
+                val towerOptions = listOf<DeviceFolder?>(null) + uiState.folders
+                towerOptions.chunked(2).forEachIndexed { rowIndex, rowItems ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        // "Show All Devices" Option
-                        item {
-                            FilterChip(
-                                selected = uiState.selectedFolderId == null,
-                                onClick = { viewModel.selectFolder(null) },
-                                label = {
-                                    Text(
-                                        text = "${if (isArabic) "جميع الأبراج" else "All Towers"} (${uiState.totalCount})",
-                                        fontSize = 12.sp
-                                    )
-                                },
-                                leadingIcon = {
-                                    Icon(Icons.Default.CellTower, contentDescription = null, modifier = Modifier.size(16.dp))
-                                }
-                            )
-                        }
-
-                        // Each Tower with device count badge
-                        items(uiState.folders) { folder ->
-                            val isSelected = uiState.selectedFolderId == folder.id
-                            val isDefault = folder.id == DeviceFolderEntity.DEFAULT_FOLDER_ID
-                            val folderDisplayName = if (isDefault) {
-                                if (isArabic) "أجهزة غير تابعة لبرج" else "Unassigned Devices"
+                        rowItems.forEachIndexed { columnIndex, folder ->
+                            val selected = if (folder == null) {
+                                uiState.selectedFolderId == null
                             } else {
-                                folder.name
+                                uiState.selectedFolderId == folder.id
                             }
+                            val isDefault = folder?.id == DeviceFolderEntity.DEFAULT_FOLDER_ID
+                            val title = when {
+                                folder == null -> if (isArabic) "كل الأبراج" else "All towers"
+                                isDefault -> if (isArabic) "بدون برج" else "Unassigned"
+                                else -> folder.name
+                            }
+                            var menuExpanded by remember(folder?.id) { mutableStateOf(false) }
 
-                            FilterChip(
-                                selected = isSelected,
-                                onClick = { viewModel.selectFolder(folder.id) },
-                                label = {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text("$folderDisplayName (${folder.deviceCount})", fontSize = 12.sp)
-                                        if (!isDefault) {
-                                            Spacer(modifier = Modifier.width(4.dp))
+                            Surface(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .heightIn(min = 76.dp)
+                                    .clickable {
+                                        viewModel.selectFolder(folder?.id)
+                                    },
+                                shape = RoundedCornerShape(12.dp),
+                                color = if (selected) CyanAccent.copy(alpha = 0.13f)
+                                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f),
+                                border = BorderStroke(
+                                    if (selected) 1.5.dp else 1.dp,
+                                    if (selected) CyanAccent else MaterialTheme.colorScheme.outlineVariant
+                                )
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 9.dp),
+                                    verticalArrangement = Arrangement.spacedBy(5.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Icon(
+                                            imageVector = when {
+                                                folder == null -> Icons.Default.Dashboard
+                                                isDefault -> Icons.Default.FolderOpen
+                                                else -> Icons.Default.CellTower
+                                            },
+                                            contentDescription = null,
+                                            tint = if (selected) CyanAccent else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(19.dp)
+                                        )
+                                        if (selected) {
                                             Icon(
-                                                imageVector = Icons.Default.Edit,
-                                                contentDescription = "Edit Tower",
-                                                modifier = Modifier
-                                                    .size(12.dp)
-                                                    .clickable { folderToEdit = folder },
-                                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                                Icons.Default.CheckCircle,
+                                                contentDescription = null,
+                                                tint = CyanAccent,
+                                                modifier = Modifier.size(17.dp)
                                             )
-                                            Spacer(modifier = Modifier.width(2.dp))
-                                            Icon(
-                                                imageVector = Icons.Default.Close,
-                                                contentDescription = "Delete Tower",
-                                                modifier = Modifier
-                                                    .size(12.dp)
-                                                    .clickable { folderToDelete = folder },
-                                                tint = StatusRed.copy(alpha = 0.7f)
-                                            )
+                                        } else if (folder != null && !isDefault) {
+                                            Box {
+                                                IconButton(
+                                                    onClick = { menuExpanded = true },
+                                                    modifier = Modifier.size(28.dp)
+                                                ) {
+                                                    Icon(
+                                                        Icons.Default.MoreVert,
+                                                        contentDescription = if (isArabic) "خيارات البرج" else "Tower options",
+                                                        modifier = Modifier.size(18.dp),
+                                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                }
+                                                DropdownMenu(
+                                                    expanded = menuExpanded,
+                                                    onDismissRequest = { menuExpanded = false }
+                                                ) {
+                                                    DropdownMenuItem(
+                                                        text = { Text(if (isArabic) "تعديل الاسم" else "Rename") },
+                                                        leadingIcon = { Icon(Icons.Default.Edit, null) },
+                                                        onClick = {
+                                                            menuExpanded = false
+                                                            folderToEdit = folder
+                                                        }
+                                                    )
+                                                    DropdownMenuItem(
+                                                        text = { Text(if (isArabic) "حذف البرج" else "Delete tower") },
+                                                        leadingIcon = { Icon(Icons.Default.DeleteOutline, null, tint = StatusRed) },
+                                                        onClick = {
+                                                            menuExpanded = false
+                                                            folderToDelete = folder
+                                                        }
+                                                    )
+                                                }
+                                            }
                                         }
                                     }
-                                },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = if (isDefault) Icons.Default.FolderOpen else Icons.Default.CellTower,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(16.dp),
-                                        tint = if (isSelected) CyanAccent else MaterialTheme.colorScheme.onSurfaceVariant
+                                    Text(
+                                        text = title,
+                                        fontSize = 13.sp,
+                                        fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        maxLines = 1
+                                    )
+                                    Text(
+                                        text = if (folder == null) {
+                                            if (isArabic) "${uiState.totalCount} جهاز" else "${uiState.totalCount} devices"
+                                        } else {
+                                            if (isArabic) "${folder.deviceCount} جهاز" else "${folder.deviceCount} devices"
+                                        },
+                                        fontSize = 11.sp,
+                                        color = if (selected) CyanAccent else MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
-                            )
+                            }
                         }
+                        if (rowItems.size == 1) Spacer(Modifier.weight(1f))
                     }
                 }
             }
@@ -431,6 +477,15 @@ fun DevicesScreen(
         var selectedFolder by remember {
             mutableStateOf(existing?.folderId ?: uiState.selectedFolderId ?: DeviceFolderEntity.DEFAULT_FOLDER_ID)
         }
+        val globalApiPort = NetVisionApplication.instance.settingsRepository.getSettings().defaultMikroTikApiPort
+        val apiCredentialStore = remember { com.netvision.app.security.DeviceCredentialStore(NetVisionApplication.instance) }
+        val globalApiCredentials = remember { apiCredentialStore.getDefault() }
+        val deviceApiCredentials = remember(existing?.id) { existing?.let { apiCredentialStore.get(it.id) } }
+        val shownApiCredentials = deviceApiCredentials ?: globalApiCredentials
+        var apiPortInput by remember(existing?.id) { mutableStateOf((existing?.apiPort ?: globalApiPort).toString()) }
+        var apiUsernameInput by remember(existing?.id) { mutableStateOf(shownApiCredentials?.username.orEmpty()) }
+        var apiPasswordInput by remember(existing?.id) { mutableStateOf(shownApiCredentials?.password.orEmpty()) }
+        var editApiCredentials by remember(existing?.id) { mutableStateOf(false) }
 
         AlertDialog(
             onDismissRequest = {
@@ -495,6 +550,92 @@ fun DevicesScreen(
                                     }
                                 }
                             }
+                    }
+
+                    // Show the same MikroTik API settings block in BOTH add and edit flows.
+                    val showMikroTikApiSettings = selectedVendor == Manufacturer.MIKROTIK &&
+                        (showAddDeviceDialog || isEditing)
+                    if (showMikroTikApiSettings) {
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                        Text(
+                            if (isArabic) "إعدادات MikroTik API" else "MikroTik API Connection",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                        ) {
+                            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                                Text(if (isArabic) "البيانات الافتراضية المستخدمة لهذا الجهاز" else "Default credentials used for this device",
+                                    style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurface)
+                                Text(
+                                    (if (isArabic) "المنفذ: " else "Port: ") + (existing?.apiPort ?: globalApiPort) +
+                                        "   •   " + (if (isArabic) "المستخدم: " else "User: ") +
+                                        (shownApiCredentials?.username ?: if (isArabic) "غير محدد" else "Not set") +
+                                        "   •   " + (if (isArabic) "الرمز: " else "Password: ") +
+                                        if (shownApiCredentials != null) "••••••••" else (if (isArabic) "غير محدد" else "Not set"),
+                                    fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    if (isArabic) "تُستخدم بيانات الإعدادات العامة تلقائياً ما لم تخصص بيانات لهذا الجهاز." else "Global settings are used unless you customize this device.",
+                                    fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        OutlinedButton(
+                            onClick = {
+                                if (!editApiCredentials) {
+                                    apiPortInput = (existing?.apiPort ?: globalApiPort).toString()
+                                    apiUsernameInput = shownApiCredentials?.username.orEmpty()
+                                    apiPasswordInput = shownApiCredentials?.password.orEmpty()
+                                }
+                                editApiCredentials = !editApiCredentials
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.Edit, contentDescription = null)
+                            Spacer(Modifier.width(6.dp))
+                            Text(if (editApiCredentials) {
+                                if (isArabic) "إخفاء التعديل واستخدام الافتراضي" else "Cancel customization"
+                            } else {
+                                if (isArabic) "تعديل بيانات API لهذا الجهاز" else "Customize API for this device"
+                            })
+                        }
+                        if (editApiCredentials) {
+                            OutlinedTextField(
+                                value = apiPortInput,
+                                onValueChange = { apiPortInput = it.filter { ch -> ch.isDigit() }.take(5) },
+                                modifier = Modifier.fillMaxWidth(),
+                                label = { Text(if (isArabic) "منفذ API (TCP)" else "API Port (TCP)") },
+                                singleLine = true,
+                                shape = RoundedCornerShape(10.dp)
+                            )
+                            OutlinedTextField(
+                                value = apiUsernameInput,
+                                onValueChange = { apiUsernameInput = it },
+                                modifier = Modifier.fillMaxWidth(),
+                                label = { Text(if (isArabic) "اسم مستخدم API" else "API Username") },
+                                singleLine = true,
+                                shape = RoundedCornerShape(10.dp)
+                            )
+                            OutlinedTextField(
+                                value = apiPasswordInput,
+                                onValueChange = { apiPasswordInput = it },
+                                modifier = Modifier.fillMaxWidth(),
+                                label = { Text(if (isArabic) "كلمة مرور API" else "API Password") },
+                                singleLine = true,
+                                visualTransformation = PasswordVisualTransformation(),
+                                shape = RoundedCornerShape(10.dp)
+                            )
+                            Text(
+                                if (isArabic) "يمكنك تعديل المنفذ أو اسم المستخدم أو كلمة المرور لهذا الجهاز فقط. تُحفظ كلمة المرور مشفرة." else "Changes apply only to this device. Password is stored encrypted.",
+                                fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
 
                     // Field 4: Device Type
@@ -564,7 +705,10 @@ fun DevicesScreen(
                                 ipAddress = ipInput.ifBlank { existing.ipAddress },
                                 manufacturer = selectedVendor,
                                 deviceType = selectedType,
-                                folderId = selectedFolder
+                                folderId = selectedFolder,
+                                apiPort = if (selectedVendor == Manufacturer.MIKROTIK) (if (editApiCredentials) apiPortInput.toIntOrNull()?.takeIf { it in 1..65535 } ?: globalApiPort else existing.apiPort ?: globalApiPort) else null,
+                                apiUsername = if (selectedVendor == Manufacturer.MIKROTIK && editApiCredentials) apiUsernameInput else "",
+                                apiPassword = if (selectedVendor == Manufacturer.MIKROTIK && editApiCredentials) apiPasswordInput else ""
                             )
                         } else {
                             viewModel.addDevice(
@@ -572,7 +716,10 @@ fun DevicesScreen(
                                 ipAddress = ipInput,
                                 manufacturer = selectedVendor,
                                 deviceType = selectedType,
-                                folderId = selectedFolder
+                                folderId = selectedFolder,
+                                apiPort = if (selectedVendor == Manufacturer.MIKROTIK) (if (editApiCredentials) apiPortInput.toIntOrNull()?.takeIf { it in 1..65535 } ?: globalApiPort else globalApiPort) else null,
+                                apiUsername = if (selectedVendor == Manufacturer.MIKROTIK && editApiCredentials) apiUsernameInput else "",
+                                apiPassword = if (selectedVendor == Manufacturer.MIKROTIK && editApiCredentials) apiPasswordInput else ""
                             )
                         }
                         showAddDeviceDialog = false
@@ -755,6 +902,7 @@ fun SavedDeviceCardItem(
     onEditClick: () -> Unit,
     onDeleteClick: () -> Unit
 ) {
+    val uriHandler = LocalUriHandler.current
     val statusColor = when (device.status) {
         DeviceStatus.ONLINE -> StatusGreen
         DeviceStatus.OFFLINE -> StatusRed
@@ -877,7 +1025,15 @@ fun SavedDeviceCardItem(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column {
-                    Text(text = "IP: ${device.ipAddress}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
+                    Text(
+                        text = "IP: ${device.ipAddress}",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.clickable {
+                            val address = device.ipAddress.trim()
+                            if (address.isNotBlank()) uriHandler.openUri("http://$address")
+                        }
+                    )
                     Text(text = "MAC: ${device.macAddress}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
 
