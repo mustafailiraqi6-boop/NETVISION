@@ -40,6 +40,7 @@ import com.netvision.app.models.Manufacturer
 import com.netvision.app.models.NetworkDevice
 import com.netvision.app.monitoring.EthernetMonitoringSnapshot
 import com.netvision.app.monitoring.EthernetPortSnapshot
+import com.netvision.app.monitoring.MimosaTrafficSnapshot
 import com.netvision.app.network.WirelessTrafficSnapshot
 import com.netvision.app.ui.theme.*
 import com.netvision.app.ui.viewmodels.MonitoringViewModel
@@ -431,6 +432,7 @@ fun MonitoringScreen(
                     snmpInfo = devSnmp,
                     ethernetSnapshot = uiState.ethernetPortsByDevice[device.id],
                     wirelessTraffic = uiState.wirelessTrafficByDevice[device.id],
+                    mimosaTraffic = uiState.mimosaTrafficByDevice[device.id],
                     isArabic = isArabic,
                     onClick = { viewModel.selectDevice(device.id) },
                     onViewDetails = { if (device.deviceType == DeviceType.SWITCH || device.name.contains("switch", true) || device.model.contains("CRS", true) || device.model.contains("switch", true)) selectedSwitchId = device.id else onViewDeviceDetails(device.id) }
@@ -449,6 +451,7 @@ fun DeviceMonitoringCard(
     snmpInfo: com.netvision.app.monitoring.SnmpDeviceInfo?,
     ethernetSnapshot: EthernetMonitoringSnapshot?,
     wirelessTraffic: WirelessTrafficSnapshot?,
+    mimosaTraffic: MimosaTrafficSnapshot?,
     isArabic: Boolean,
     onClick: () -> Unit,
     onViewDetails: () -> Unit
@@ -767,6 +770,28 @@ fun DeviceMonitoringCard(
                     Column(Modifier.weight(1f).background(rxColors.first, RoundedCornerShape(10.dp)).padding(horizontal = 11.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                         Text(if (isArabic) "RX استقبال" else "RX Download", fontSize = 11.sp, color = rxColors.second)
                         Text(wirelessTraffic?.rxMbps?.let { String.format(Locale.US, "%.2f Mbps", it) } ?: "—", fontSize = 17.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = rxColors.second, maxLines = 1)
+                    }
+                }
+            }
+
+            if (isMimosaSector) {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.55f))
+                Text(
+                    if (isArabic) "الترافيك – Wireless" else "Traffic – Wireless",
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 14.sp,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
+                )
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    val txColors = metricPalette[1]
+                    val rxColors = metricPalette[3]
+                    Column(Modifier.weight(1f).background(txColors.first, RoundedCornerShape(10.dp)).padding(horizontal = 11.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                        Text(if (isArabic) "TX إرسال" else "TX Upload", fontSize = 11.sp, color = txColors.second)
+                        Text(mimosaTraffic?.txMbps?.let { String.format(Locale.US, "%.2f Mbps", it) } ?: "—", fontSize = 17.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = txColors.second, maxLines = 1)
+                    }
+                    Column(Modifier.weight(1f).background(rxColors.first, RoundedCornerShape(10.dp)).padding(horizontal = 11.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                        Text(if (isArabic) "RX استقبال" else "RX Download", fontSize = 11.sp, color = rxColors.second)
+                        Text(mimosaTraffic?.rxMbps?.let { String.format(Locale.US, "%.2f Mbps", it) } ?: "—", fontSize = 17.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = rxColors.second, maxLines = 1)
                     }
                 }
             }
