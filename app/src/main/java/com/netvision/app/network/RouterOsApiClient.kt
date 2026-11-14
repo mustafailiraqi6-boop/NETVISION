@@ -14,6 +14,13 @@ import java.net.InetSocketAddress
 import java.net.Socket
 import java.util.Locale
 
+data class WirelessTrafficSnapshot(
+    val interfaceName: String,
+    val rxMbps: Double,
+    val txMbps: Double,
+    val sampledAt: Long = System.currentTimeMillis()
+)
+
 /**
  * Minimal RouterOS API client for reading wireless registration-table rows.
  * It uses the active Android VPN network when one is present.
@@ -57,6 +64,40 @@ class RouterOsApiClient(private val context: Context) {
         }
     }
 
+    /** Reads a single live traffic sample from the first running wireless interface. */
+    suspend fun readWirelessTraffic(ipAddress: String, username: String, password: String, port: Int): Result<WirelessTrafficSnapshot> = withContext(Dispatchers.IO) {
+        runCatching {
+            require(port in 1..65535) { "Invalid RouterOS API port" }
+            require(username.isNotBlank() && password.isNotBlank()) { "API credentials are missing" }
+            Socket().use { socket ->
+                socket.soTimeout = SOCKET_TIMEOUT_MS
+                findVpnNetwork()?.bindSocket(socket)
+                socket.connect(InetSocketAddress(ipAddress, port), CONNECT_TIMEOUT_MS)
+                val input = BufferedInputStream(socket.getInputStream())
+                val output = BufferedOutputStream(socket.getOutputStream())
+                sendSentence(output, listOf("/login", "=name=$username", "=password=$password"))
+                val login = readReply(input)
+                if (login.trap != null) throw IllegalStateException(login.trap)
+                if (!login.done) throw IllegalStateException("RouterOS API login did not complete")
+                val interfaces = runCommand(input, output, "/interface/print")
+                if (interfaces.trap != null) throw IllegalStateException(interfaces.trap)
+                val wireless = interfaces.records.firstOrNull { row ->
+                    val type = row["type"].orEmpty()
+                    val name = row["name"].orEmpty()
+                    (type.equals("wlan", true) || type.equals("wifi", true) || name.startsWith("wlan", true) || name.startsWith("wifi", true)) &&
+                        row["running"].equals("true", true) && !row["disabled"].equals("true", true)
+                } ?: throw IllegalStateException("No running wireless interface found")
+                val interfaceName = wireless["name"] ?: throw IllegalStateException("Wireless interface name is unavailable")
+                sendSentence(output, listOf("/interface/monitor-traffic", "=interface=$interfaceName", "=once="))
+                val traffic = readReply(input)
+                if (traffic.trap != null) throw IllegalStateException(traffic.trap)
+                val sample = traffic.records.firstOrNull() ?: throw IllegalStateException("No wireless traffic sample returned")
+                val rxBps = sample["rx-bits-per-second"]?.toDoubleOrNull() ?: throw IllegalStateException("Wireless RX traffic is unavailable")
+                val txBps = sample["tx-bits-per-second"]?.toDoubleOrNull() ?: throw IllegalStateException("Wireless TX traffic is unavailable")
+                WirelessTrafficSnapshot(interfaceName, rxBps / 1_000_000.0, txBps / 1_000_000.0)
+            }
+        }
+    }
     /**
      * Reads physical Ethernet interfaces and their live rates for the Switches section.
      * RouterOS monitor-traffic requires a concrete interface name; "all" is not valid.
