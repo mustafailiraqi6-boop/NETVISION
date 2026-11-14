@@ -208,8 +208,11 @@ class MonitoringViewModel(
                     val devices = savedDevices.value.filter { device ->
                         device.manufacturer == Manufacturer.MIKROTIK &&
                             device.deviceType in setOf(DeviceType.LINK, DeviceType.SECTOR_AP, DeviceType.ACCESS_POINT) &&
-                            device.deviceType != DeviceType.SWITCH &&
-                            if (folderId == DeviceFolderEntity.DEFAULT_FOLDER_ID) device.folderId.isBlank() || device.folderId == folderId else device.folderId == folderId
+                            (if (folderId == DeviceFolderEntity.DEFAULT_FOLDER_ID) {
+                                device.folderId.isBlank() || device.folderId == folderId
+                            } else {
+                                device.folderId == folderId
+                            })
                     }
                     val settings = settingsRepository.getSettings()
                     coroutineScope {
