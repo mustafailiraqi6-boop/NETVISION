@@ -736,27 +736,6 @@ fun DeviceMonitoringCard(
                             if (rowValues.size < 3) repeat(3 - rowValues.size) { Spacer(Modifier.weight(1f)) }
                         }
                     }
-                    if (isMikroTikWirelessDevice) {
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.55f))
-                        Text(
-                            if (isArabic) "الترافيك – ${wirelessTraffic?.interfaceName ?: "WLAN"}" else "Traffic – ${wirelessTraffic?.interfaceName ?: "WLAN"}",
-                            color = MaterialTheme.colorScheme.onSurface,
-                            fontSize = 14.sp,
-                            fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
-                        )
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            val txColors = metricPalette[1]
-                            val rxColors = metricPalette[3]
-                            Column(Modifier.weight(1f).background(txColors.first, RoundedCornerShape(10.dp)).padding(horizontal = 11.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                                Text(if (isArabic) "TX إرسال" else "TX Upload", fontSize = 11.sp, color = txColors.second)
-                                Text(wirelessTraffic?.txMbps?.let { String.format(Locale.US, "%.2f Mbps", it) } ?: "—", fontSize = 17.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = txColors.second, maxLines = 1)
-                            }
-                            Column(Modifier.weight(1f).background(rxColors.first, RoundedCornerShape(10.dp)).padding(horizontal = 11.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                                Text(if (isArabic) "RX استقبال" else "RX Download", fontSize = 11.sp, color = rxColors.second)
-                                Text(wirelessTraffic?.rxMbps?.let { String.format(Locale.US, "%.2f Mbps", it) } ?: "—", fontSize = 17.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = rxColors.second, maxLines = 1)
-                            }
-                        }
-                    }
                     val durationBackground = if (isDark) Color(0xFF34264F) else Color(0xFFEEE8FF)
                     val durationForeground = if (isDark) Color(0xFFD8C6FF) else Color(0xFF6542A6)
                     Row(
@@ -766,6 +745,28 @@ fun DeviceMonitoringCard(
                     ) {
                         Text(if (isArabic) "مدة تشغيل السكتر" else "Sector uptime", color = durationForeground, fontSize = 11.sp)
                         Text(snmpInfo.uptimeFormatted ?: "—", color = durationForeground, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, fontSize = 11.sp)
+                    }
+                }
+            }
+
+            if (isMikroTikWirelessDevice) {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.55f))
+                Text(
+                    if (isArabic) "الترافيك – ${wirelessTraffic?.interfaceName ?: "WLAN"}" else "Traffic – ${wirelessTraffic?.interfaceName ?: "WLAN"}",
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 14.sp,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
+                )
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    val txColors = metricPalette[1]
+                    val rxColors = metricPalette[3]
+                    Column(Modifier.weight(1f).background(txColors.first, RoundedCornerShape(10.dp)).padding(horizontal = 11.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                        Text(if (isArabic) "TX إرسال" else "TX Upload", fontSize = 11.sp, color = txColors.second)
+                        Text(wirelessTraffic?.txMbps?.let { String.format(Locale.US, "%.2f Mbps", it) } ?: "—", fontSize = 17.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = txColors.second, maxLines = 1)
+                    }
+                    Column(Modifier.weight(1f).background(rxColors.first, RoundedCornerShape(10.dp)).padding(horizontal = 11.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                        Text(if (isArabic) "RX استقبال" else "RX Download", fontSize = 11.sp, color = rxColors.second)
+                        Text(wirelessTraffic?.rxMbps?.let { String.format(Locale.US, "%.2f Mbps", it) } ?: "—", fontSize = 17.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = rxColors.second, maxLines = 1)
                     }
                 }
             }
