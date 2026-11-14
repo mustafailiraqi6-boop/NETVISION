@@ -10,6 +10,7 @@ import com.netvision.app.models.NetworkDevice
 import com.netvision.app.models.DeviceType
 import com.netvision.app.monitoring.SnmpDeviceInfo
 import com.netvision.app.monitoring.MimosaTrafficSnapshot
+import com.netvision.app.monitoring.MimosaTrafficCounters
 import com.netvision.app.monitoring.SnmpDiagnosticRecord
 import com.netvision.app.monitoring.SnmpV2Client
 import com.netvision.app.monitoring.EthernetPortMonitor
@@ -103,6 +104,7 @@ class MonitoringViewModel(
     private val pollSemaphore = Semaphore(10)
     private val snmpMapMutex = Mutex()
     private val previousPortCounters = mutableMapOf<String, Pair<Long, Long>>()
+    private val previousMimosaTrafficCounters = mutableMapOf<String, MimosaTrafficCounters>()
     // Require three consecutive failed reachability checks before declaring an online device offline.
     private val consecutiveFailures = ConcurrentHashMap<String, AtomicInteger>()
     private val offlineFailureThreshold = 3
@@ -244,7 +246,7 @@ class MonitoringViewModel(
             }
         }
     }
-    /** Poll live Mimosa wireless traffic for devices in the currently selected tower. */
+    /** Poll live Mimosa wifi0 counters and calculate throughput from consecutive samples. */
     private fun startMimosaTrafficMonitoring() {
         if (mimosaTrafficJob?.isActive == true) return
         mimosaTrafficJob = viewModelScope.launch {
@@ -264,10 +266,10 @@ class MonitoringViewModel(
                     coroutineScope {
                         devices.map { device ->
                             async(Dispatchers.IO) {
-                                var traffic: MimosaTrafficSnapshot? = null
                                 val communities = settingsRepository.getCommunitiesForDevice(device.ipAddress)
+                                var counters: MimosaTrafficCounters? = null
                                 for (community in communities) {
-                                    val result = SnmpV2Client.queryMimosaTraffic(
+                                    val result = SnmpV2Client.queryMimosaTrafficCounters(
                                         ip = device.ipAddress,
                                         community = community,
                                         port = settings.snmpPort,
@@ -275,22 +277,47 @@ class MonitoringViewModel(
                                         timeoutMs = 900
                                     )
                                     if (result.isSuccess) {
-                                        traffic = result.getOrNull()
+                                        counters = result.getOrNull()
                                         break
                                     }
                                 }
-                                snmpMapMutex.withLock {
-                                    val updated = _uiState.value.mimosaTrafficByDevice.toMutableMap()
-                                    if (traffic != null) updated[device.id] = traffic!! else updated.remove(device.id)
-                                    _uiState.value = _uiState.value.copy(mimosaTrafficByDevice = updated)
+
+                                if (counters != null) {
+                                    snmpMapMutex.withLock {
+                                        val current = counters!!
+                                        val previous = previousMimosaTrafficCounters[device.id]
+                                        previousMimosaTrafficCounters[device.id] = current
+
+                                        if (previous != null) {
+                                            val elapsedSeconds =
+                                                ((current.sampledAt - previous.sampledAt).coerceAtLeast(1L)) / 1000.0
+                                            val rxDelta = counter32Delta(current.rxOctets, previous.rxOctets)
+                                            val txDelta = counter32Delta(current.txOctets, previous.txOctets)
+                                            val snapshot = MimosaTrafficSnapshot(
+                                                txMbps = txDelta * 8.0 / elapsedSeconds / 1_000_000.0,
+                                                rxMbps = rxDelta * 8.0 / elapsedSeconds / 1_000_000.0,
+                                                sampledAt = current.sampledAt
+                                            )
+                                            val updated = _uiState.value.mimosaTrafficByDevice.toMutableMap()
+                                            updated[device.id] = snapshot
+                                            _uiState.value = _uiState.value.copy(mimosaTrafficByDevice = updated)
+                                        }
+                                    }
                                 }
                             }
                         }.awaitAll()
                     }
                 }
-                delay(2000L)
+                delay(5000L)
             }
         }
+    }
+
+    /** Calculates a single Counter32 delta, including one wrap at 2^32. */
+    private fun counter32Delta(current: Long, previous: Long): Long {
+        val counter32Range = 4_294_967_296L
+        return if (current >= previous) current - previous
+        else (counter32Range - previous) + current
     }
 
     private suspend fun pollAllDevices(folderId: String? = null) = withContext(Dispatchers.IO) {
