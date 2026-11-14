@@ -88,6 +88,12 @@ data class MikrotikStationInfo(
     val lastActivity: String? = null
 )
 
+data class MimosaTrafficSnapshot(
+    val txMbps: Double,
+    val rxMbps: Double,
+    val sampledAt: Long = System.currentTimeMillis()
+)
+
 data class SnmpDiagnosticRecord(
     val timestamp: Long = System.currentTimeMillis(),
     val targetIp: String,
@@ -183,6 +189,41 @@ object SnmpV2Client {
 
         if (cleanDescr.isNotBlank()) return cleanDescr.take(30)
         return "Unknown Device"
+    }
+
+    /**
+     * Reads Mimosa's wireless traffic-rate MIB values (reported in Kbps).
+     * These are instantaneous rates, not cumulative byte counters.
+     */
+    suspend fun queryMimosaTraffic(
+        ip: String,
+        community: String,
+        port: Int = 161,
+        version: String = "v2c",
+        timeoutMs: Int = 900
+    ): Result<MimosaTrafficSnapshot> = withContext(Dispatchers.IO) {
+        val tx = querySingleOid(
+            ip = ip, community = community, port = port,
+            oidBytes = encodeOidString("1.3.6.1.4.1.43356.2.1.2.7.1.0"),
+            oidName = "mimosaTrafficTx", version = version, timeoutMs = timeoutMs
+        )
+        val rx = querySingleOid(
+            ip = ip, community = community, port = port,
+            oidBytes = encodeOidString("1.3.6.1.4.1.43356.2.1.2.7.2.0"),
+            oidName = "mimosaTrafficRx", version = version, timeoutMs = timeoutMs
+        )
+        val txKbps = tx.longValue
+        val rxKbps = rx.longValue
+        if (!tx.isSuccess || !rx.isSuccess || txKbps == null || rxKbps == null) {
+            Result.failure(IllegalStateException("Mimosa traffic counters unavailable"))
+        } else {
+            Result.success(
+                MimosaTrafficSnapshot(
+                    txMbps = txKbps.coerceAtLeast(0L) / 1000.0,
+                    rxMbps = rxKbps.coerceAtLeast(0L) / 1000.0
+                )
+            )
+        }
     }
 
     suspend fun queryDeviceInfo(
