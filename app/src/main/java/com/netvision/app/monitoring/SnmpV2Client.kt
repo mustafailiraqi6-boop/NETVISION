@@ -94,6 +94,12 @@ data class MimosaTrafficSnapshot(
     val sampledAt: Long = System.currentTimeMillis()
 )
 
+data class MimosaTrafficCounters(
+    val rxOctets: Long,
+    val txOctets: Long,
+    val sampledAt: Long = System.currentTimeMillis()
+)
+
 data class SnmpDiagnosticRecord(
     val timestamp: Long = System.currentTimeMillis(),
     val targetIp: String,
@@ -192,35 +198,36 @@ object SnmpV2Client {
     }
 
     /**
-     * Reads Mimosa's wireless traffic-rate MIB values (reported in Kbps).
-     * These are instantaneous rates, not cumulative byte counters.
+     * Raw IF-MIB Counter32 byte counters for Mimosa's wifi0 interface (ifIndex 5).
+     * Rates are calculated by the caller from consecutive samples.
      */
-    suspend fun queryMimosaTraffic(
+    suspend fun queryMimosaTrafficCounters(
         ip: String,
         community: String,
         port: Int = 161,
         version: String = "v2c",
         timeoutMs: Int = 900
-    ): Result<MimosaTrafficSnapshot> = withContext(Dispatchers.IO) {
-        val tx = querySingleOid(
-            ip = ip, community = community, port = port,
-            oidBytes = encodeOidString("1.3.6.1.4.1.43356.2.1.2.7.1.0"),
-            oidName = "mimosaTrafficTx", version = version, timeoutMs = timeoutMs
-        )
+    ): Result<MimosaTrafficCounters> = withContext(Dispatchers.IO) {
         val rx = querySingleOid(
             ip = ip, community = community, port = port,
-            oidBytes = encodeOidString("1.3.6.1.4.1.43356.2.1.2.7.2.0"),
-            oidName = "mimosaTrafficRx", version = version, timeoutMs = timeoutMs
+            oidBytes = encodeOidString("1.3.6.1.2.1.2.2.1.10.5"),
+            oidName = "ifInOctets.wifi0", version = version, timeoutMs = timeoutMs
         )
-        val txKbps = tx.longValue
-        val rxKbps = rx.longValue
-        if (!tx.isSuccess || !rx.isSuccess || txKbps == null || rxKbps == null) {
-            Result.failure(IllegalStateException("Mimosa traffic counters unavailable"))
+        val tx = querySingleOid(
+            ip = ip, community = community, port = port,
+            oidBytes = encodeOidString("1.3.6.1.2.1.2.2.1.16.5"),
+            oidName = "ifOutOctets.wifi0", version = version, timeoutMs = timeoutMs
+        )
+        val rxOctets = rx.longValue
+        val txOctets = tx.longValue
+        if (!rx.isSuccess || !tx.isSuccess || rxOctets == null || txOctets == null) {
+            Result.failure(IllegalStateException("Mimosa wifi0 IF-MIB counters unavailable"))
         } else {
             Result.success(
-                MimosaTrafficSnapshot(
-                    txMbps = txKbps.coerceAtLeast(0L) / 1000.0,
-                    rxMbps = rxKbps.coerceAtLeast(0L) / 1000.0
+                MimosaTrafficCounters(
+                    rxOctets = rxOctets,
+                    txOctets = txOctets,
+                    sampledAt = System.currentTimeMillis()
                 )
             )
         }
