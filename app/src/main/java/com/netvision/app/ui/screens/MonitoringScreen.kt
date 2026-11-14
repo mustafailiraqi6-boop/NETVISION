@@ -40,6 +40,7 @@ import com.netvision.app.models.Manufacturer
 import com.netvision.app.models.NetworkDevice
 import com.netvision.app.monitoring.EthernetMonitoringSnapshot
 import com.netvision.app.monitoring.EthernetPortSnapshot
+import com.netvision.app.network.WirelessTrafficSnapshot
 import com.netvision.app.ui.theme.*
 import com.netvision.app.ui.viewmodels.MonitoringViewModel
 import java.text.SimpleDateFormat
@@ -429,6 +430,7 @@ fun MonitoringScreen(
                     isSnmpActive = isSnmpActive,
                     snmpInfo = devSnmp,
                     ethernetSnapshot = uiState.ethernetPortsByDevice[device.id],
+                    wirelessTraffic = uiState.wirelessTrafficByDevice[device.id],
                     isArabic = isArabic,
                     onClick = { viewModel.selectDevice(device.id) },
                     onViewDetails = { if (device.deviceType == DeviceType.SWITCH || device.name.contains("switch", true) || device.model.contains("CRS", true) || device.model.contains("switch", true)) selectedSwitchId = device.id else onViewDeviceDetails(device.id) }
@@ -446,6 +448,7 @@ fun DeviceMonitoringCard(
     isSnmpActive: Boolean,
     snmpInfo: com.netvision.app.monitoring.SnmpDeviceInfo?,
     ethernetSnapshot: EthernetMonitoringSnapshot?,
+    wirelessTraffic: WirelessTrafficSnapshot?,
     isArabic: Boolean,
     onClick: () -> Unit,
     onViewDetails: () -> Unit
@@ -470,6 +473,8 @@ fun DeviceMonitoringCard(
         snmpInfo?.model?.contains("Ubiquiti", ignoreCase = true) == true ||
         snmpInfo?.sysDescr?.let { it.contains("AirOS", true) || it.contains("UBNT", true) } == true
     val isSwitchCard = device.deviceType == DeviceType.SWITCH || device.name.contains("switch", true) || device.model.contains("CRS", true) || device.model.contains("switch", true)
+    val isMikroTikWirelessDevice = !isSwitchCard && device.manufacturer == Manufacturer.MIKROTIK &&
+        device.deviceType in setOf(DeviceType.LINK, DeviceType.SECTOR_AP, DeviceType.ACCESS_POINT)
     val isMikroTikSector = !isSwitchCard && (device.manufacturer == Manufacturer.MIKROTIK ||
         snmpInfo?.mikrotikCcqPercent != null ||
         snmpInfo?.mikrotikVoltageDecivolts != null)
@@ -590,6 +595,27 @@ fun DeviceMonitoringCard(
                             }
                         }
                         if (switchMetrics.size < 3) repeat(3 - switchMetrics.size) { Spacer(Modifier.weight(1f)) }
+                    }
+                    if (isMikroTikWirelessDevice) {
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.55f))
+                        Text(
+                            if (isArabic) "الترافيك – ${wirelessTraffic?.interfaceName ?: "WLAN"}" else "Traffic – ${wirelessTraffic?.interfaceName ?: "WLAN"}",
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontSize = 14.sp,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
+                        )
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            val txColors = metricPalette[1]
+                            val rxColors = metricPalette[3]
+                            Column(Modifier.weight(1f).background(txColors.first, RoundedCornerShape(10.dp)).padding(horizontal = 11.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                                Text(if (isArabic) "TX إرسال" else "TX Upload", fontSize = 11.sp, color = txColors.second)
+                                Text(wirelessTraffic?.txMbps?.let { String.format(Locale.US, "%.2f Mbps", it) } ?: "—", fontSize = 17.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = txColors.second, maxLines = 1)
+                            }
+                            Column(Modifier.weight(1f).background(rxColors.first, RoundedCornerShape(10.dp)).padding(horizontal = 11.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                                Text(if (isArabic) "RX استقبال" else "RX Download", fontSize = 11.sp, color = rxColors.second)
+                                Text(wirelessTraffic?.rxMbps?.let { String.format(Locale.US, "%.2f Mbps", it) } ?: "—", fontSize = 17.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = rxColors.second, maxLines = 1)
+                            }
+                        }
                     }
                     val durationBackground = if (isDark) Color(0xFF34264F) else Color(0xFFEEE8FF)
                     val durationForeground = if (isDark) Color(0xFFD8C6FF) else Color(0xFF6542A6)
