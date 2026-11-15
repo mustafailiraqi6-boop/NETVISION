@@ -11,6 +11,9 @@ import com.netvision.app.models.DeviceType
 import com.netvision.app.monitoring.SnmpDeviceInfo
 import com.netvision.app.monitoring.MimosaTrafficSnapshot
 import com.netvision.app.monitoring.MimosaTrafficCounters
+import com.netvision.app.network.UbiquitiAirOsTrafficClient
+import com.netvision.app.network.UbiquitiTrafficCounters
+import com.netvision.app.network.UbiquitiTrafficSnapshot
 import com.netvision.app.monitoring.SnmpDiagnosticRecord
 import com.netvision.app.monitoring.SnmpV2Client
 import com.netvision.app.monitoring.EthernetPortMonitor
@@ -58,7 +61,8 @@ data class MonitoringUiState(
     val diagnosticLogs: List<SnmpDiagnosticRecord> = emptyList(),
     val ethernetPortsByDevice: Map<String, EthernetMonitoringSnapshot> = emptyMap(),
     val wirelessTrafficByDevice: Map<String, WirelessTrafficSnapshot> = emptyMap(),
-    val mimosaTrafficByDevice: Map<String, MimosaTrafficSnapshot> = emptyMap()
+    val mimosaTrafficByDevice: Map<String, MimosaTrafficSnapshot> = emptyMap(),
+    val ubiquitiTrafficByDevice: Map<String, UbiquitiTrafficSnapshot> = emptyMap()
 )
 
 class MonitoringViewModel(
@@ -101,6 +105,9 @@ class MonitoringViewModel(
     private var centralPingJob: Job? = null
     private var wirelessTrafficJob: Job? = null
     private var mimosaTrafficJob: Job? = null
+    private var ubiquitiTrafficJob: Job? = null
+    private val ubiquitiTrafficClient = UbiquitiAirOsTrafficClient()
+    private val previousUbiquitiTrafficCounters = mutableMapOf<String, UbiquitiTrafficCounters>()
     private val pollSemaphore = Semaphore(10)
     private val snmpMapMutex = Mutex()
     private val previousPortCounters = mutableMapOf<String, Pair<Long, Long>>()
@@ -113,6 +120,7 @@ class MonitoringViewModel(
         startCentralPingMonitoring()
         startWirelessTrafficMonitoring()
         startMimosaTrafficMonitoring()
+        startUbiquitiTrafficMonitoring()
     }
 
     fun selectDevice(deviceId: String) {
@@ -314,6 +322,58 @@ class MonitoringViewModel(
     }
 
     /** Calculates a single Counter32 delta, including one wrap at 2^32. */
+    /** Poll airOS WLAN0 counters from ifstats.cgi for the selected tower only. */
+    private fun startUbiquitiTrafficMonitoring() {
+        if (ubiquitiTrafficJob?.isActive == true) return
+        ubiquitiTrafficJob = viewModelScope.launch {
+            while (isActive) {
+                val folderId = _uiState.value.selectedFolderId
+                if (folderId != null) {
+                    val devices = savedDevices.value.filter { device ->
+                        device.manufacturer == Manufacturer.UBIQUITI &&
+                            device.deviceType in setOf(DeviceType.LINK, DeviceType.SECTOR_AP, DeviceType.ACCESS_POINT) &&
+                            (if (folderId == DeviceFolderEntity.DEFAULT_FOLDER_ID) {
+                                device.folderId.isBlank() || device.folderId == folderId
+                            } else device.folderId == folderId)
+                    }
+                    coroutineScope {
+                        devices.map { device ->
+                            async(Dispatchers.IO) {
+                                val credentials = deviceCredentialStore.getUbiquiti(device.id)
+                                    ?: deviceCredentialStore.getDefaultUbiquiti()
+                                val counters = credentials?.let {
+                                    ubiquitiTrafficClient.readWlanCounters(device.ipAddress, it.username, it.password).getOrNull()
+                                }
+                                if (counters != null) {
+                                    snmpMapMutex.withLock {
+                                        val previous = previousUbiquitiTrafficCounters[device.id]
+                                        previousUbiquitiTrafficCounters[device.id] = counters
+                                        if (previous != null && counters.rxBytes >= previous.rxBytes && counters.txBytes >= previous.txBytes) {
+                                            val elapsed = ((counters.sampledAt - previous.sampledAt).coerceAtLeast(1L)) / 1000.0
+                                            val snapshot = UbiquitiTrafficSnapshot(
+                                                txMbps = (counters.txBytes - previous.txBytes) * 8.0 / elapsed / 1_000_000.0,
+                                                rxMbps = (counters.rxBytes - previous.rxBytes) * 8.0 / elapsed / 1_000_000.0,
+                                                sampledAt = counters.sampledAt
+                                            )
+                                            val updated = _uiState.value.ubiquitiTrafficByDevice.toMutableMap()
+                                            updated[device.id] = snapshot
+                                            _uiState.value = _uiState.value.copy(ubiquitiTrafficByDevice = updated)
+                                        } else {
+                                            val updated = _uiState.value.ubiquitiTrafficByDevice.toMutableMap()
+                                            updated.remove(device.id)
+                                            _uiState.value = _uiState.value.copy(ubiquitiTrafficByDevice = updated)
+                                        }
+                                    }
+                                }
+                            }
+                        }.awaitAll()
+                    }
+                }
+                delay(2000L)
+            }
+        }
+    }
+
     private fun counter32Delta(current: Long, previous: Long): Long {
         val counter32Range = 4_294_967_296L
         return if (current >= previous) current - previous
@@ -577,5 +637,6 @@ class MonitoringViewModel(
         centralPingJob?.cancel()
         wirelessTrafficJob?.cancel()
         mimosaTrafficJob?.cancel()
+        ubiquitiTrafficJob?.cancel()
     }
 }
