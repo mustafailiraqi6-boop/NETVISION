@@ -9,6 +9,7 @@
     <application
         android:name=".NetVisionApplication"
         android:allowBackup="true"
+        android:usesCleartextTraffic="true"
         android:icon="@mipmap/ic_launcher"
         android:label="NETVISION"
         android:roundIcon="@mipmap/ic_launcher_round"
