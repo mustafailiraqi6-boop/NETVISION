@@ -24,60 +24,78 @@ class UbiquitiAirOsTrafficClient {
             require(ipAddress.isNotBlank() && username.isNotBlank() && password.isNotBlank())
             val base = "http://$ipAddress"
             var cookie = cookiesByDevice[ipAddress]
+
+            // Some airOS builds return a login page with HTTP 200 instead of a redirect.
+            // Treat a non-JSON response as an expired/missing session and authenticate once.
             var response = getStats(base, cookie)
-            cookie = cookiesByDevice[base] ?: cookie
-            if (response.first == 302 || response.first == 401 || response.first == 403 || response.first !in 200..299) {
+            var counters = parseWlanCounters(response.second)
+            if (response.first !in 200..299 || counters == null) {
                 cookie = login(base, username, password, cookie)
                 cookiesByDevice[ipAddress] = cookie
                 response = getStats(base, cookie)
-                cookiesByDevice[ipAddress] = cookie
+                counters = parseWlanCounters(response.second)
             }
+
             check(response.first in 200..299) { "airOS HTTP ${response.first}" }
-            val json = JSONObject(response.second)
-            val interfaces = json.optJSONArray("interfaces") ?: error("airOS interfaces missing")
-            var rx: Long? = null
-            var tx: Long? = null
-            for (i in 0 until interfaces.length()) {
-                val item = interfaces.optJSONObject(i) ?: continue
-                if (!item.optString("ifname").equals("ath0", ignoreCase = true)) continue
-                val stats = item.optJSONObject("stats") ?: continue
-                rx = stats.optString("rx_bytes").toLongOrNull()
-                tx = stats.optString("tx_bytes").toLongOrNull()
-                break
-            }
-            UbiquitiTrafficCounters(rx ?: error("WLAN0 RX counter unavailable"), tx ?: error("WLAN0 TX counter unavailable"))
+            counters ?: error("airOS WLAN0 counters missing or response was not valid JSON")
         }
+
+    private fun parseWlanCounters(body: String): UbiquitiTrafficCounters? = runCatching {
+        val json = JSONObject(body)
+        val interfaces = json.optJSONArray("interfaces") ?: return null
+        for (i in 0 until interfaces.length()) {
+            val item = interfaces.optJSONObject(i) ?: continue
+            if (!item.optString("ifname").equals("ath0", ignoreCase = true)) continue
+            val stats = item.optJSONObject("stats") ?: continue
+            val rx = stats.optString("rx_bytes").toLongOrNull() ?: continue
+            val tx = stats.optString("tx_bytes").toLongOrNull() ?: continue
+            return UbiquitiTrafficCounters(rxBytes = rx, txBytes = tx)
+        }
+        null
+    }.getOrNull()
 
     private fun getStats(base: String, cookie: String?): Pair<Int, String> {
         val connection = (URL("$base/ifstats.cgi?").openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
-            connectTimeout = 3500
-            readTimeout = 3500
+            connectTimeout = 5000
+            readTimeout = 5000
             instanceFollowRedirects = false
+            setRequestProperty("Accept", "application/json, */*")
+            setRequestProperty("Connection", "close")
             cookie?.let { setRequestProperty("Cookie", it) }
         }
         return try {
             val code = connection.responseCode
-            val body = (if (code in 200..299) connection.inputStream else connection.errorStream)
-                ?.bufferedReader()?.use { it.readText() }.orEmpty()
-            val setCookie = connection.getHeaderField("Set-Cookie")
-            if (!setCookie.isNullOrBlank()) cookiesByDevice[base] = setCookie.substringBefore(";")
+            val stream = if (code in 200..299) connection.inputStream else connection.errorStream
+            val body = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+            val responseCookies = extractCookies(connection)
+            if (responseCookies.isNotBlank()) {
+                cookiesByDevice[base.removePrefix("http://")] = responseCookies
+            }
             code to body
-        } finally { connection.disconnect() }
+        } finally {
+            connection.disconnect()
+        }
     }
 
     private fun login(base: String, username: String, password: String, existingCookie: String?): String {
         val boundary = "----NetVision${UUID.randomUUID().toString().replace("-", "")}"
         val connection = (URL("$base/login.cgi").openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
-            connectTimeout = 3500
-            readTimeout = 3500
+            connectTimeout = 5000
+            readTimeout = 5000
             doOutput = true
             instanceFollowRedirects = false
             setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
+            setRequestProperty("Connection", "close")
             existingCookie?.let { setRequestProperty("Cookie", it) }
         }
-        val fields = linkedMapOf("uri" to "/ifstats.cgi", "username" to username, "password" to password, "submit" to "Login", "lang_changed" to "0")
+        val fields = linkedMapOf(
+            "uri" to "/ifstats.cgi",
+            "username" to username,
+            "password" to password,
+            "submit" to "Login"
+        )
         try {
             connection.outputStream.bufferedWriter(Charsets.UTF_8).use { writer ->
                 fields.forEach { (name, value) ->
@@ -88,12 +106,37 @@ class UbiquitiAirOsTrafficClient {
                 writer.append("--$boundary--\r\n")
             }
             val code = connection.responseCode
-            val cookie = connection.getHeaderField("Set-Cookie")?.substringBefore(";")
-            val existing = existingCookie.orEmpty()
-            val merged = cookie?.takeIf { it.isNotBlank() } ?: existing
-            check(merged.isNotBlank() && (code in 200..399)) { "airOS login failed (HTTP $code)" }
+            val responseCookies = extractCookies(connection)
+            val merged = mergeCookies(existingCookie, responseCookies)
+            check(code in 200..399 && merged.isNotBlank()) {
+                "airOS login failed (HTTP $code)"
+            }
+            cookiesByDevice[base.removePrefix("http://")] = merged
             return merged
-        } finally { connection.disconnect() }
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    private fun extractCookies(connection: HttpURLConnection): String =
+        connection.headerFields.entries
+            .filter { it.key.equals("Set-Cookie", ignoreCase = true) }
+            .flatMap { it.value.orEmpty() }
+            .mapNotNull { header -> header.substringBefore(";").trim().takeIf { it.contains("=") } }
+            .distinct()
+            .joinToString("; ")
+
+    private fun mergeCookies(existing: String?, received: String): String {
+        val values = linkedMapOf<String, String>()
+        existing.orEmpty().split(";").map(String::trim).filter(String::isNotEmpty).forEach { cookie ->
+            val name = cookie.substringBefore("=").trim()
+            if (name.isNotEmpty()) values[name] = cookie.substringAfter("=", "").let { "$name=$it" }
+        }
+        received.split(";").map(String::trim).filter(String::isNotEmpty).forEach { cookie ->
+            val name = cookie.substringBefore("=").trim()
+            if (name.isNotEmpty()) values[name] = cookie.substringAfter("=", "").let { "$name=$it" }
+        }
+        return values.values.joinToString("; ")
     }
 }
 
