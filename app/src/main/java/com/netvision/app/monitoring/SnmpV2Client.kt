@@ -64,7 +64,6 @@ data class UbiquitiStationInfo(
     val deviceName: String? = null,
     val signalDbm: Int? = null,
     val noiseDbm: Int? = null,
-    val distance: Int? = null,
     val ccqPercent: Int? = null,
     val airMaxQualityPercent: Int? = null,
     val airMaxCapacityPercent: Int? = null,
@@ -81,7 +80,24 @@ data class MikrotikStationInfo(
     val signalDbm: Int? = null,
     val txRateMbps: Double? = null,
     val rxRateMbps: Double? = null,
-    val connectionTime: String? = null
+    val connectionTime: String? = null,
+    val txSignalDbm: Int? = null,
+    val rxSignalDbm: Int? = null,
+    val txCcqPercent: Int? = null,
+    val rxCcqPercent: Int? = null,
+    val lastActivity: String? = null
+)
+
+data class MimosaTrafficSnapshot(
+    val txMbps: Double,
+    val rxMbps: Double,
+    val sampledAt: Long = System.currentTimeMillis()
+)
+
+data class MimosaTrafficCounters(
+    val rxOctets: Long,
+    val txOctets: Long,
+    val sampledAt: Long = System.currentTimeMillis()
 )
 
 data class SnmpDiagnosticRecord(
@@ -179,6 +195,42 @@ object SnmpV2Client {
 
         if (cleanDescr.isNotBlank()) return cleanDescr.take(30)
         return "Unknown Device"
+    }
+
+    /**
+     * Raw IF-MIB Counter32 byte counters for Mimosa's wifi0 interface (ifIndex 5).
+     * Rates are calculated by the caller from consecutive samples.
+     */
+    suspend fun queryMimosaTrafficCounters(
+        ip: String,
+        community: String,
+        port: Int = 161,
+        version: String = "v2c",
+        timeoutMs: Int = 900
+    ): Result<MimosaTrafficCounters> = withContext(Dispatchers.IO) {
+        val rx = querySingleOid(
+            ip = ip, community = community, port = port,
+            oidBytes = encodeOidString("1.3.6.1.2.1.2.2.1.10.5"),
+            oidName = "ifInOctets.wifi0", version = version, timeoutMs = timeoutMs
+        )
+        val tx = querySingleOid(
+            ip = ip, community = community, port = port,
+            oidBytes = encodeOidString("1.3.6.1.2.1.2.2.1.16.5"),
+            oidName = "ifOutOctets.wifi0", version = version, timeoutMs = timeoutMs
+        )
+        val rxOctets = rx.longValue
+        val txOctets = tx.longValue
+        if (!rx.isSuccess || !tx.isSuccess || rxOctets == null || txOctets == null) {
+            Result.failure(IllegalStateException("Mimosa wifi0 IF-MIB counters unavailable"))
+        } else {
+            Result.success(
+                MimosaTrafficCounters(
+                    rxOctets = rxOctets,
+                    txOctets = txOctets,
+                    sampledAt = System.currentTimeMillis()
+                )
+            )
+        }
     }
 
     suspend fun queryDeviceInfo(
@@ -531,7 +583,6 @@ object SnmpV2Client {
             var name: String? = null,
             var signal: Int? = null,
             var noise: Int? = null,
-            var distance: Int? = null,
             var ccq: Int? = null,
             var quality: Int? = null,
             var capacity: Int? = null,
@@ -585,7 +636,6 @@ object SnmpV2Client {
                                     2 -> row.name = parsed.stringValue?.takeIf { it.isNotBlank() }
                                     3 -> row.signal = parsed.intValue
                                     4 -> row.noise = parsed.intValue
-                                    5 -> row.distance = parsed.intValue
                                     6 -> row.ccq = parsed.intValue
                                     8 -> row.quality = parsed.intValue
                                     9 -> row.capacity = parsed.intValue
@@ -614,7 +664,6 @@ object SnmpV2Client {
                 deviceName = row.name,
                 signalDbm = row.signal,
                 noiseDbm = row.noise,
-                distance = row.distance,
                 ccqPercent = row.ccq,
                 airMaxQualityPercent = row.quality,
                 airMaxCapacityPercent = row.capacity,

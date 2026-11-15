@@ -10,7 +10,9 @@ import com.netvision.app.models.NetworkRange
 import com.netvision.app.network.CidrUtils
 import com.netvision.app.network.RemoteNetworkScanner
 import com.netvision.app.repository.DeviceRepository
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -60,6 +62,8 @@ class ScannerViewModel(
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = emptyList()
         )
+
+    private val credentialStore = NetVisionApplication.instance.deviceCredentialStore
 
     private val _uiState = MutableStateFlow(ScannerUiState())
     val uiState: StateFlow<ScannerUiState> = _uiState.asStateFlow()
@@ -198,10 +202,22 @@ class ScannerViewModel(
         _uiState.value = _uiState.value.copy(isScanning = false)
     }
 
-    fun addDeviceToMonitoring(device: NetworkDevice, folderId: String = DeviceFolderEntity.DEFAULT_FOLDER_ID) {
+    fun addDeviceToMonitoring(
+        device: NetworkDevice,
+        folderId: String = DeviceFolderEntity.DEFAULT_FOLDER_ID,
+        apiUsername: String = "",
+        apiPassword: String = ""
+    ) {
         viewModelScope.launch {
             val deviceWithFolder = device.copy(folderId = folderId)
             repository.saveDevice(deviceWithFolder)
+            if (deviceWithFolder.manufacturer == com.netvision.app.models.Manufacturer.MIKROTIK &&
+                apiUsername.isNotBlank() && apiPassword.isNotBlank()
+            ) {
+                withContext(Dispatchers.IO) {
+                    credentialStore.save(deviceWithFolder.id, apiUsername.trim(), apiPassword)
+                }
+            }
             val updated = _uiState.value.addedDeviceIds.toMutableSet()
             updated.add(device.id)
             updated.add(device.ipAddress)

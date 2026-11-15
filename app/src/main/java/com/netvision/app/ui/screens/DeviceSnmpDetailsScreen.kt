@@ -182,7 +182,6 @@ private fun UbiquitiStationCard(station: UbiquitiStationInfo, isArabic: Boolean)
                 MetricTile("TX", rateMbps(station.txRate), Color(0xFFDDF6FA), Color(0xFF0E7490), Modifier.weight(1f))
                 MetricTile("RX", rateMbps(station.rxRate), Color(0xFFE5F0FF), Color(0xFF2563EB), Modifier.weight(1f))
                 MetricTile("CCQ", station.ccqPercent?.let { "$it%" } ?: "—", Color(0xFFDCFCE7), Color(0xFF15803D), Modifier.weight(1f))
-                MetricTile(if (isArabic) "المسافة" else "Distance", station.distance?.let { "$it m" } ?: "—", Color(0xFFFFF2D9), Color(0xFFB7791F), Modifier.weight(1f))
             }
             Row(
                 Modifier.fillMaxWidth().background(if (MaterialTheme.colorScheme.background.luminance() < 0.5f) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(10.dp)).padding(11.dp),
@@ -200,34 +199,70 @@ private fun UbiquitiStationCard(station: UbiquitiStationInfo, isArabic: Boolean)
 private fun MikrotikStationCard(station: MikrotikStationInfo, isArabic: Boolean) {
     val clipboard = LocalClipboardManager.current
     val stationName = station.deviceName?.takeIf { it.isNotBlank() }
-        ?: if (isArabic) "اسم المحطة غير متاح" else "Station name unavailable"
+        ?: if (isArabic) "اسم المحطة غير متاح" else "Radio name unavailable"
+
     fun rate(value: Double?): String = value?.let {
         val formatted = if (it % 1.0 == 0.0) it.toLong().toString() else String.format(Locale.US, "%.1f", it)
         "$formatted Mbps"
     } ?: "—"
+    fun signal(value: Int?): String = value?.let { "$it dBm" } ?: "—"
+    fun ccq(value: Int?): String = value?.let { "$it%" } ?: "—"
 
-    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+    Card(
+        Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(
+            Modifier.fillMaxWidth().padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(11.dp)
+        ) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Text(stationName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                 Surface(color = StatusGreen.copy(alpha = 0.13f), shape = RoundedCornerShape(8.dp)) {
                     Text(if (isArabic) "متصل" else "Online", color = StatusGreen, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp))
                 }
             }
-            Text(station.signalDbm?.let { "$it dBm" } ?: "—", color = StatusGreen, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(station.macAddress, modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
                 IconButton(onClick = { clipboard.setText(AnnotatedString(station.macAddress)) }) {
                     Icon(Icons.Default.ContentCopy, contentDescription = if (isArabic) "نسخ MAC" else "Copy MAC", tint = TealAccent)
                 }
             }
+
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                MetricTile("TX Signal", signal(station.txSignalDbm ?: station.signalDbm), Color(0xFFDDF6FA), Color(0xFF0E7490), Modifier.weight(1f))
+                MetricTile("RX Signal", signal(station.rxSignalDbm ?: station.signalDbm), Color(0xFFE5F0FF), Color(0xFF2563EB), Modifier.weight(1f))
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                MetricTile("TX CCQ", ccq(station.txCcqPercent), Color(0xFFDCFCE7), Color(0xFF15803D), Modifier.weight(1f))
+                MetricTile("RX CCQ", ccq(station.rxCcqPercent), Color(0xFFEDE9FE), Color(0xFF6D28D9), Modifier.weight(1f))
+            }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 MetricTile("TX", rate(station.txRateMbps), Color(0xFFDDF6FA), Color(0xFF0E7490), Modifier.weight(1f))
                 MetricTile("RX", rate(station.rxRateMbps), Color(0xFFE5F0FF), Color(0xFF2563EB), Modifier.weight(1f))
             }
-            Row(Modifier.fillMaxWidth().background(if (MaterialTheme.colorScheme.background.luminance() < 0.5f) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(10.dp)).padding(11.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(if (isArabic) "مدة الاتصال" else "Connection time", color = if (MaterialTheme.colorScheme.background.luminance() < 0.5f) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onPrimaryContainer, fontSize = 12.sp)
-                Text(station.connectionTime ?: "—", color = if (MaterialTheme.colorScheme.background.luminance() < 0.5f) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onPrimaryContainer, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+
+            Row(
+                Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(10.dp)).padding(11.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(if (isArabic) "مدة الاتصال" else "Uptime", color = MaterialTheme.colorScheme.onPrimaryContainer, fontSize = 12.sp)
+                Text(station.connectionTime ?: "—", color = MaterialTheme.colorScheme.onPrimaryContainer, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+            }
+            Row(
+                Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(10.dp)).padding(11.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(if (isArabic) "آخر نشاط" else "Last Activity", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                Text(station.lastActivity ?: "—", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold, fontSize = 12.sp)
             }
         }
     }

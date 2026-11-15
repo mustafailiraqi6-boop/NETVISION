@@ -21,9 +21,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.netvision.app.NetVisionApplication
 import com.netvision.app.database.DeviceFolderEntity
 import com.netvision.app.models.DeviceFolder
 import com.netvision.app.models.DeviceType
@@ -388,6 +390,13 @@ fun ScannerScreen(
         var selectedFolderId by remember(target.id) { mutableStateOf(DeviceFolderEntity.DEFAULT_FOLDER_ID) }
         var selectedManufacturer by remember(target.id) { mutableStateOf(target.manufacturer) }
         var selectedDeviceType by remember(target.id) { mutableStateOf(target.deviceType) }
+        val globalApiPort = NetVisionApplication.instance.settingsRepository.getSettings().defaultMikroTikApiPort
+        val apiCredentialStore = remember { NetVisionApplication.instance.deviceCredentialStore }
+        val globalApiCredentials = remember { apiCredentialStore.getDefault() }
+        var apiPortInput by remember(target.id) { mutableStateOf(globalApiPort.toString()) }
+        var apiUsernameInput by remember(target.id) { mutableStateOf(globalApiCredentials?.username.orEmpty()) }
+        var apiPasswordInput by remember(target.id) { mutableStateOf(globalApiCredentials?.password.orEmpty()) }
+        var editApiCredentials by remember(target.id) { mutableStateOf(false) }
 
         AlertDialog(
             onDismissRequest = { deviceToAdd = null },
@@ -442,6 +451,96 @@ fun ScannerScreen(
                                     }
                                 }
                             }
+                    }
+
+                    // MikroTik API configuration for devices added from Scanner.
+                    if (selectedManufacturer == Manufacturer.MIKROTIK) {
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                        Text(
+                            if (isArabic) "إعدادات MikroTik API" else "MikroTik API Connection",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                        ) {
+                            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                                Text(
+                                    if (isArabic) "البيانات الافتراضية المستخدمة لهذا الجهاز" else "Default credentials used for this device",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    (if (isArabic) "المنفذ: " else "Port: ") + globalApiPort +
+                                        "   •   " + (if (isArabic) "المستخدم: " else "User: ") +
+                                        (globalApiCredentials?.username ?: if (isArabic) "غير محدد" else "Not set") +
+                                        "   •   " + (if (isArabic) "الرمز: " else "Password: ") +
+                                        if (globalApiCredentials != null) "••••••••" else (if (isArabic) "غير محدد" else "Not set"),
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    if (isArabic) "تُستخدم بيانات الإعدادات العامة تلقائياً ما لم تخصص بيانات لهذا الجهاز." else "Global settings are used unless you customize this device.",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        OutlinedButton(
+                            onClick = {
+                                if (!editApiCredentials) {
+                                    apiPortInput = globalApiPort.toString()
+                                    apiUsernameInput = globalApiCredentials?.username.orEmpty()
+                                    apiPasswordInput = globalApiCredentials?.password.orEmpty()
+                                }
+                                editApiCredentials = !editApiCredentials
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.Edit, contentDescription = null)
+                            Spacer(Modifier.width(6.dp))
+                            Text(if (editApiCredentials) {
+                                if (isArabic) "إخفاء التعديل واستخدام الافتراضي" else "Cancel customization"
+                            } else {
+                                if (isArabic) "تعديل بيانات API لهذا الجهاز" else "Customize API for this device"
+                            })
+                        }
+                        if (editApiCredentials) {
+                            OutlinedTextField(
+                                value = apiPortInput,
+                                onValueChange = { apiPortInput = it.filter { ch -> ch.isDigit() }.take(5) },
+                                modifier = Modifier.fillMaxWidth(),
+                                label = { Text(if (isArabic) "منفذ API (TCP)" else "API Port (TCP)") },
+                                singleLine = true,
+                                shape = RoundedCornerShape(10.dp)
+                            )
+                            OutlinedTextField(
+                                value = apiUsernameInput,
+                                onValueChange = { apiUsernameInput = it },
+                                modifier = Modifier.fillMaxWidth(),
+                                label = { Text(if (isArabic) "اسم مستخدم API" else "API Username") },
+                                singleLine = true,
+                                shape = RoundedCornerShape(10.dp)
+                            )
+                            OutlinedTextField(
+                                value = apiPasswordInput,
+                                onValueChange = { apiPasswordInput = it },
+                                modifier = Modifier.fillMaxWidth(),
+                                label = { Text(if (isArabic) "كلمة مرور API" else "API Password") },
+                                singleLine = true,
+                                visualTransformation = PasswordVisualTransformation(),
+                                shape = RoundedCornerShape(10.dp)
+                            )
+                            Text(
+                                if (isArabic) "يمكنك تخصيص المنفذ واسم المستخدم وكلمة المرور لهذا الجهاز فقط. تُحفظ كلمة المرور مشفرة." else "Customize the port and credentials for this device only. Password is stored encrypted.",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
 
                     Text(
@@ -514,9 +613,14 @@ fun ScannerScreen(
                         viewModel.addDeviceToMonitoring(
                             target.copy(
                                 manufacturer = selectedManufacturer,
-                                deviceType = selectedDeviceType
+                                deviceType = selectedDeviceType,
+                                apiPort = if (selectedManufacturer == Manufacturer.MIKROTIK) {
+                                    if (editApiCredentials) apiPortInput.toIntOrNull()?.takeIf { it in 1..65535 } ?: globalApiPort else globalApiPort
+                                } else null
                             ),
-                            selectedFolderId
+                            selectedFolderId,
+                            apiUsername = if (selectedManufacturer == Manufacturer.MIKROTIK && editApiCredentials) apiUsernameInput else "",
+                            apiPassword = if (selectedManufacturer == Manufacturer.MIKROTIK && editApiCredentials) apiPasswordInput else ""
                         )
                         deviceToAdd = null
                     },
