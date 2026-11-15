@@ -54,12 +54,41 @@ class DeviceCredentialStore(context: Context) {
     }
 
     fun saveDefault(username: String, password: String) = save(DEFAULT_CREDENTIALS_ID, username, password)
-
     fun getDefault(): DeviceApiCredentials? = get(DEFAULT_CREDENTIALS_ID)
-
     fun deleteDefault() = delete(DEFAULT_CREDENTIALS_ID)
 
+    fun saveUbiquiti(deviceId: String, username: String, password: String) = saveEncrypted(ubiquitiKeyFor(deviceId), username, password)
+    fun getUbiquiti(deviceId: String): DeviceApiCredentials? = getEncrypted(ubiquitiKeyFor(deviceId))
+    fun deleteUbiquiti(deviceId: String) { preferences.edit().remove(ubiquitiKeyFor(deviceId)).apply() }
+    fun saveDefaultUbiquiti(username: String, password: String) = saveUbiquiti(DEFAULT_UBIQUITI_ID, username, password)
+    fun getDefaultUbiquiti(): DeviceApiCredentials? = getUbiquiti(DEFAULT_UBIQUITI_ID)
+    fun deleteDefaultUbiquiti() = deleteUbiquiti(DEFAULT_UBIQUITI_ID)
+
+    private fun saveEncrypted(key: String, username: String, password: String) {
+        require(username.isNotBlank() && password.isNotBlank())
+        val plain = (username + "\u0000" + password).toByteArray(StandardCharsets.UTF_8)
+        val cipher = Cipher.getInstance(TRANSFORMATION)
+        cipher.init(Cipher.ENCRYPT_MODE, getOrCreateKey())
+        preferences.edit().putString(key, Base64.encodeToString(cipher.iv + cipher.doFinal(plain), Base64.NO_WRAP)).apply()
+    }
+
+    private fun getEncrypted(key: String): DeviceApiCredentials? {
+        val encoded = preferences.getString(key, null) ?: return null
+        return runCatching {
+            val packed = Base64.decode(encoded, Base64.NO_WRAP)
+            require(packed.size > GCM_IV_LENGTH_BYTES)
+            val iv = packed.copyOfRange(0, GCM_IV_LENGTH_BYTES)
+            val cipher = Cipher.getInstance(TRANSFORMATION)
+            cipher.init(Cipher.DECRYPT_MODE, getOrCreateKey(), GCMParameterSpec(GCM_TAG_LENGTH_BITS, iv))
+            val plain = String(cipher.doFinal(packed.copyOfRange(GCM_IV_LENGTH_BYTES, packed.size)), StandardCharsets.UTF_8)
+            val separator = plain.indexOf('\u0000')
+            require(separator > 0 && separator < plain.lastIndex)
+            DeviceApiCredentials(plain.substring(0, separator), plain.substring(separator + 1))
+        }.getOrNull()
+    }
+
     private fun keyFor(deviceId: String) = "mikrotik_api_$deviceId"
+    private fun ubiquitiKeyFor(deviceId: String) = "ubiquiti_airos_$deviceId"
 
     private fun getOrCreateKey(): SecretKey {
         val keyStore = KeyStore.getInstance(ANDROID_KEY_STORE).apply { load(null) }
@@ -81,6 +110,7 @@ class DeviceCredentialStore(context: Context) {
 
     companion object {
         private const val DEFAULT_CREDENTIALS_ID = "__default__"
+        private const val DEFAULT_UBIQUITI_ID = "__ubiquiti_default__"
         private const val ANDROID_KEY_STORE = "AndroidKeyStore"
         private const val KEY_ALIAS = "netvision_mikrotik_api_credentials_v1"
         private const val TRANSFORMATION = "AES/GCM/NoPadding"
