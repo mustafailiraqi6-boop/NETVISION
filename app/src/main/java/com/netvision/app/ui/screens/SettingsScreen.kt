@@ -326,6 +326,9 @@ fun SettingsScreen(
     val savedDefaultApiCredentials = remember { apiCredentialStore.getDefault() }
     var defaultApiUsername by remember { mutableStateOf(savedDefaultApiCredentials?.username.orEmpty()) }
     var defaultApiPassword by remember { mutableStateOf("") }
+    val savedDefaultUbiquitiCredentials = remember { apiCredentialStore.getDefaultUbiquiti() }
+    var defaultUbiquitiUsername by remember { mutableStateOf(savedDefaultUbiquitiCredentials?.username.orEmpty()) }
+    var defaultUbiquitiPassword by remember { mutableStateOf("") }
     var defaultSubnet by remember(appSettings.defaultSubnet) { mutableStateOf(appSettings.defaultSubnet) }
     var scanTimeoutMs by remember(appSettings.scanTimeoutMs) { mutableStateOf(appSettings.scanTimeoutMs.toString()) }
 
@@ -513,6 +516,34 @@ fun SettingsScreen(
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) { Text(if (isArabic) "حفظ بيانات المستخدم الافتراضي" else "Save Default API Credentials") }
+            }
+        }
+
+        // Ubiquiti airOS traffic credentials
+        item {
+            SettingsGroupCard(
+                title = if (isArabic) "بيانات دخول Ubiquiti airOS" else "Ubiquiti airOS Credentials",
+                icon = Icons.Default.Router
+            ) {
+                Text(if (isArabic) "تُستخدم لقراءة ترافيك WLAN0 من ifstats.cgi، ويمكن تخصيص بيانات مختلفة لكل جهاز." else "Used to read WLAN0 traffic from ifstats.cgi; individual devices can override these credentials.",
+                    fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                OutlinedTextField(value = defaultUbiquitiUsername, onValueChange = { defaultUbiquitiUsername = it },
+                    modifier = Modifier.fillMaxWidth(), label = { Text(if (isArabic) "اسم المستخدم الافتراضي" else "Default Username") }, singleLine = true)
+                OutlinedTextField(value = defaultUbiquitiPassword, onValueChange = { defaultUbiquitiPassword = it },
+                    modifier = Modifier.fillMaxWidth(), label = { Text(if (isArabic) "كلمة المرور الافتراضية" else "Default Password") },
+                    placeholder = { Text(if (savedDefaultUbiquitiCredentials != null) (if (isArabic) "محفوظة — اكتب للتغيير" else "Saved — enter to change") else "") },
+                    singleLine = true, visualTransformation = PasswordVisualTransformation())
+                Text(if (isArabic) "كلمة المرور مشفرة باستخدام Android Keystore." else "Password is encrypted using Android Keystore.",
+                    fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Button(onClick = {
+                    if (defaultUbiquitiUsername.isNotBlank() && defaultUbiquitiPassword.isNotBlank()) {
+                        apiCredentialStore.saveDefaultUbiquiti(defaultUbiquitiUsername.trim(), defaultUbiquitiPassword)
+                        defaultUbiquitiPassword = ""
+                        Toast.makeText(context, if (isArabic) "تم حفظ بيانات Ubiquiti" else "Ubiquiti credentials saved", Toast.LENGTH_SHORT).show()
+                    } else Toast.makeText(context, if (isArabic) "أدخل اسم المستخدم وكلمة المرور" else "Enter username and password", Toast.LENGTH_SHORT).show()
+                }, modifier = Modifier.fillMaxWidth()) {
+                    Text(if (isArabic) "حفظ بيانات Ubiquiti" else "Save Ubiquiti Credentials")
+                }
             }
         }
 
