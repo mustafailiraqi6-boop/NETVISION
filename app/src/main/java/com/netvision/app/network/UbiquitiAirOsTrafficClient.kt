@@ -25,10 +25,12 @@ class UbiquitiAirOsTrafficClient {
             val base = "http://$ipAddress"
             var cookie = cookiesByDevice[ipAddress]
             var response = getStats(base, cookie)
+            cookie = cookiesByDevice[base] ?: cookie
             if (response.first == 302 || response.first == 401 || response.first == 403 || response.first !in 200..299) {
                 cookie = login(base, username, password, cookie)
                 cookiesByDevice[ipAddress] = cookie
                 response = getStats(base, cookie)
+                cookiesByDevice[ipAddress] = cookie
             }
             check(response.first in 200..299) { "airOS HTTP ${response.first}" }
             val json = JSONObject(response.second)
