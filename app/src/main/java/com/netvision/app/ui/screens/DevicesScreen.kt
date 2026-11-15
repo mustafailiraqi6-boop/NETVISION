@@ -486,6 +486,11 @@ fun DevicesScreen(
         var apiUsernameInput by remember(existing?.id) { mutableStateOf(shownApiCredentials?.username.orEmpty()) }
         var apiPasswordInput by remember(existing?.id) { mutableStateOf(shownApiCredentials?.password.orEmpty()) }
         var editApiCredentials by remember(existing?.id) { mutableStateOf(false) }
+        val globalUbiquitiCredentials = remember { apiCredentialStore.getDefaultUbiquiti() }
+        val deviceUbiquitiCredentials = remember(existing?.id) { existing?.let { apiCredentialStore.getUbiquiti(it.id) } }
+        var editUbiquitiCredentials by remember(existing?.id) { mutableStateOf(deviceUbiquitiCredentials != null) }
+        var ubiquitiUsernameInput by remember(existing?.id) { mutableStateOf(deviceUbiquitiCredentials?.username.orEmpty()) }
+        var ubiquitiPasswordInput by remember(existing?.id) { mutableStateOf(deviceUbiquitiCredentials?.password.orEmpty()) }
 
         AlertDialog(
             onDismissRequest = {
@@ -638,6 +643,30 @@ fun DevicesScreen(
                         }
                     }
 
+                    if (selectedVendor == Manufacturer.UBIQUITI) {
+                        HorizontalDivider()
+                        Text(if (isArabic) "بيانات دخول Ubiquiti airOS" else "Ubiquiti airOS Credentials",
+                            style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                        Text(
+                            if (deviceUbiquitiCredentials != null) { if (isArabic) "هذا الجهاز يستخدم بيانات مخصصة." else "This device has custom credentials." }
+                            else if (globalUbiquitiCredentials != null) { if (isArabic) "سيستخدم بيانات الدخول العامة تلقائياً." else "Global credentials will be used automatically." }
+                            else { if (isArabic) "لم تُحدد بيانات دخول عامة." else "No global credentials configured." },
+                            fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(checked = editUbiquitiCredentials, onCheckedChange = { editUbiquitiCredentials = it })
+                            Text(if (isArabic) "تخصيص بيانات دخول لهذا الجهاز" else "Override credentials for this device")
+                        }
+                        if (editUbiquitiCredentials) {
+                            OutlinedTextField(value = ubiquitiUsernameInput, onValueChange = { ubiquitiUsernameInput = it },
+                                modifier = Modifier.fillMaxWidth(), label = { Text(if (isArabic) "اسم المستخدم" else "Username") }, singleLine = true)
+                            OutlinedTextField(value = ubiquitiPasswordInput, onValueChange = { ubiquitiPasswordInput = it },
+                                modifier = Modifier.fillMaxWidth(), label = { Text(if (isArabic) "كلمة المرور" else "Password") },
+                                singleLine = true, visualTransformation = PasswordVisualTransformation())
+                        }
+                        Text(if (isArabic) "عند إلغاء التخصيص يرجع الجهاز للبيانات العامة. التخزين مشفر." else "Disabling override restores global credentials. Stored encrypted.",
+                            fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+
                     // Field 4: Device Type
                     Text(if (isArabic) "نوع الجهاز" else "Device type",
                         style = MaterialTheme.typography.titleMedium, fontSize = 18.sp,
@@ -708,7 +737,10 @@ fun DevicesScreen(
                                 folderId = selectedFolder,
                                 apiPort = if (selectedVendor == Manufacturer.MIKROTIK) (if (editApiCredentials) apiPortInput.toIntOrNull()?.takeIf { it in 1..65535 } ?: globalApiPort else existing.apiPort ?: globalApiPort) else null,
                                 apiUsername = if (selectedVendor == Manufacturer.MIKROTIK && editApiCredentials) apiUsernameInput else "",
-                                apiPassword = if (selectedVendor == Manufacturer.MIKROTIK && editApiCredentials) apiPasswordInput else ""
+                                apiPassword = if (selectedVendor == Manufacturer.MIKROTIK && editApiCredentials) apiPasswordInput else "",
+                                ubiquitiUsername = if (selectedVendor == Manufacturer.UBIQUITI && editUbiquitiCredentials) ubiquitiUsernameInput else "",
+                                ubiquitiPassword = if (selectedVendor == Manufacturer.UBIQUITI && editUbiquitiCredentials) ubiquitiPasswordInput else "",
+                                useUbiquitiOverride = selectedVendor == Manufacturer.UBIQUITI && editUbiquitiCredentials
                             )
                         } else {
                             viewModel.addDevice(
@@ -719,7 +751,10 @@ fun DevicesScreen(
                                 folderId = selectedFolder,
                                 apiPort = if (selectedVendor == Manufacturer.MIKROTIK) (if (editApiCredentials) apiPortInput.toIntOrNull()?.takeIf { it in 1..65535 } ?: globalApiPort else globalApiPort) else null,
                                 apiUsername = if (selectedVendor == Manufacturer.MIKROTIK && editApiCredentials) apiUsernameInput else "",
-                                apiPassword = if (selectedVendor == Manufacturer.MIKROTIK && editApiCredentials) apiPasswordInput else ""
+                                apiPassword = if (selectedVendor == Manufacturer.MIKROTIK && editApiCredentials) apiPasswordInput else "",
+                                ubiquitiUsername = if (selectedVendor == Manufacturer.UBIQUITI && editUbiquitiCredentials) ubiquitiUsernameInput else "",
+                                ubiquitiPassword = if (selectedVendor == Manufacturer.UBIQUITI && editUbiquitiCredentials) ubiquitiPasswordInput else "",
+                                useUbiquitiOverride = selectedVendor == Manufacturer.UBIQUITI && editUbiquitiCredentials
                             )
                         }
                         showAddDeviceDialog = false
