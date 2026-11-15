@@ -433,6 +433,7 @@ fun MonitoringScreen(
                     ethernetSnapshot = uiState.ethernetPortsByDevice[device.id],
                     wirelessTraffic = uiState.wirelessTrafficByDevice[device.id],
                     mimosaTraffic = uiState.mimosaTrafficByDevice[device.id],
+                    ubiquitiTraffic = uiState.ubiquitiTrafficByDevice[device.id],
                     isArabic = isArabic,
                     onClick = { viewModel.selectDevice(device.id) },
                     onViewDetails = { if (device.deviceType == DeviceType.SWITCH || device.name.contains("switch", true) || device.model.contains("CRS", true) || device.model.contains("switch", true)) selectedSwitchId = device.id else onViewDeviceDetails(device.id) }
@@ -452,6 +453,7 @@ fun DeviceMonitoringCard(
     ethernetSnapshot: EthernetMonitoringSnapshot?,
     wirelessTraffic: WirelessTrafficSnapshot?,
     mimosaTraffic: MimosaTrafficSnapshot?,
+    ubiquitiTraffic: UbiquitiTrafficSnapshot?,
     isArabic: Boolean,
     onClick: () -> Unit,
     onViewDetails: () -> Unit
@@ -770,6 +772,28 @@ fun DeviceMonitoringCard(
                     Column(Modifier.weight(1f).background(rxColors.first, RoundedCornerShape(10.dp)).padding(horizontal = 11.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                         Text(if (isArabic) "RX استقبال" else "RX Download", fontSize = 11.sp, color = rxColors.second)
                         Text(wirelessTraffic?.rxMbps?.let { String.format(Locale.US, "%.2f Mbps", it) } ?: "—", fontSize = 17.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = rxColors.second, maxLines = 1)
+                    }
+                }
+            }
+
+            if (isUbiquitiSector && !isSwitchCard) {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.55f))
+                Text(
+                    if (isArabic) "الترافيك – WLAN0" else "Traffic – WLAN0",
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 14.sp,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
+                )
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    val txColors = metricPalette[1]
+                    val rxColors = metricPalette[3]
+                    Column(Modifier.weight(1f).background(txColors.first, RoundedCornerShape(10.dp)).padding(horizontal = 11.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                        Text(if (isArabic) "TX إرسال" else "TX Upload", fontSize = 11.sp, color = txColors.second)
+                        Text(ubiquitiTraffic?.txMbps?.let { String.format(Locale.US, "%.2f Mbps", it) } ?: "—", fontSize = 17.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = txColors.second, maxLines = 1)
+                    }
+                    Column(Modifier.weight(1f).background(rxColors.first, RoundedCornerShape(10.dp)).padding(horizontal = 11.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                        Text(if (isArabic) "RX استقبال" else "RX Download", fontSize = 11.sp, color = rxColors.second)
+                        Text(ubiquitiTraffic?.rxMbps?.let { String.format(Locale.US, "%.2f Mbps", it) } ?: "—", fontSize = 17.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = rxColors.second, maxLines = 1)
                     }
                 }
             }
