@@ -42,6 +42,7 @@ import com.netvision.app.monitoring.EthernetMonitoringSnapshot
 import com.netvision.app.monitoring.EthernetPortSnapshot
 import com.netvision.app.monitoring.MimosaTrafficSnapshot
 import com.netvision.app.network.WirelessTrafficSnapshot
+import com.netvision.app.network.UbiquitiTrafficSnapshot
 import com.netvision.app.ui.theme.*
 import com.netvision.app.ui.viewmodels.MonitoringViewModel
 import java.text.SimpleDateFormat
