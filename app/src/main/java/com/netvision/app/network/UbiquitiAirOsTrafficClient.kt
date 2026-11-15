@@ -94,3 +94,10 @@ class UbiquitiAirOsTrafficClient {
         } finally { connection.disconnect() }
     }
 }
+
+/** Calculated live throughput for the airOS WLAN0 interface. */
+data class UbiquitiTrafficSnapshot(
+    val txMbps: Double,
+    val rxMbps: Double,
+    val sampledAt: Long = System.currentTimeMillis()
+)
