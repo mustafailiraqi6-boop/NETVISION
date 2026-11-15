@@ -90,7 +90,7 @@ class UbiquitiAirOsTrafficClient {
             val code = connection.responseCode
             val cookie = connection.getHeaderField("Set-Cookie")?.substringBefore(";")
             val existing = existingCookie.orEmpty()
-            val merged = listOfNotNull(existing.takeIf { it.isNotBlank() }, cookie?.takeIf { it.isNotBlank() }).distinct().joinToString("; ")
+            val merged = cookie?.takeIf { it.isNotBlank() } ?: existing
             check(merged.isNotBlank() && (code in 200..399)) { "airOS login failed (HTTP $code)" }
             return merged
         } finally { connection.disconnect() }
