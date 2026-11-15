@@ -153,12 +153,18 @@ class DevicesViewModel(
         folderId: String,
         apiPort: Int? = null,
         apiUsername: String = "",
-        apiPassword: String = ""
+        apiPassword: String = "",
+        ubiquitiUsername: String = "",
+        ubiquitiPassword: String = "",
+        useUbiquitiOverride: Boolean = false
     ) {
         viewModelScope.launch {
             val saved = repository.addManualDevice(name, ipAddress, manufacturer, deviceType, folderId, apiPort)
             if (manufacturer == Manufacturer.MIKROTIK && apiUsername.isNotBlank() && apiPassword.isNotBlank()) {
                 withContext(Dispatchers.IO) { credentialStore.save(saved.id, apiUsername.trim(), apiPassword) }
+            }
+            if (manufacturer == Manufacturer.UBIQUITI && useUbiquitiOverride && ubiquitiUsername.isNotBlank() && ubiquitiPassword.isNotBlank()) {
+                withContext(Dispatchers.IO) { credentialStore.saveUbiquiti(saved.id, ubiquitiUsername.trim(), ubiquitiPassword) }
             }
         }
     }
@@ -172,7 +178,10 @@ class DevicesViewModel(
         folderId: String,
         apiPort: Int? = null,
         apiUsername: String = "",
-        apiPassword: String = ""
+        apiPassword: String = "",
+        ubiquitiUsername: String = "",
+        ubiquitiPassword: String = "",
+        useUbiquitiOverride: Boolean = false
     ) {
         viewModelScope.launch {
             repository.updateDeviceFull(deviceId, name, ipAddress, manufacturer, deviceType, folderId, apiPort)
@@ -183,13 +192,20 @@ class DevicesViewModel(
             } else {
                 withContext(Dispatchers.IO) { credentialStore.delete(deviceId) }
             }
+            if (manufacturer == Manufacturer.UBIQUITI && useUbiquitiOverride) {
+                if (ubiquitiUsername.isNotBlank() && ubiquitiPassword.isNotBlank()) {
+                    withContext(Dispatchers.IO) { credentialStore.saveUbiquiti(deviceId, ubiquitiUsername.trim(), ubiquitiPassword) }
+                }
+            } else {
+                withContext(Dispatchers.IO) { credentialStore.deleteUbiquiti(deviceId) }
+            }
         }
     }
 
     fun deleteDevice(device: NetworkDevice) {
         viewModelScope.launch {
             repository.deleteDevice(device)
-            withContext(Dispatchers.IO) { credentialStore.delete(device.id) }
+            withContext(Dispatchers.IO) { credentialStore.delete(device.id); credentialStore.deleteUbiquiti(device.id) }
         }
     }
 }
